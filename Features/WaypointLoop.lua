@@ -261,15 +261,15 @@ return {
 				Loop.EmptySince = nil
 			end
 
-			local ZoneIndex = PlaceConfig.WAYPOINT_ZONES[Loop.Goal]
-			AICCombatUtils.S.ActiveZoneIndex = ZoneIndex
-
-			if not ZoneHasTargets(PlaceConfig, ZoneIndex, now) and Loop.Goal ~= Loop.Index then
+			if Loop.Goal ~= Loop.Index then
 				AICCombatUtils.S.ActiveZoneIndex = nil
 				AICCombat.S.ClosestTarget = nil
 				StepTo(PlaceConfig, Loop.Index + (Loop.Goal > Loop.Index and 1 or -1), Humanoid, RootPart, now)
 				return "move"
 			end
+
+			local ZoneIndex = PlaceConfig.WAYPOINT_ZONES[Loop.Goal]
+			AICCombatUtils.S.ActiveZoneIndex = ZoneIndex
 
 			if ZoneHasTargets(PlaceConfig, ZoneIndex, now) then
 				Loop.EmptySince = nil
