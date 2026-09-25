@@ -300,7 +300,28 @@ return {
                 --// PlayerStats is already resolved above in this same handler.
                 local UseConsumable = Replicated:FindFirstChild("UseConsumable", true)
 
-                AICCombat.RetreatFromGoblins(EnemyUsingSkill)
+                local RetreatMoved = AICCombat.RetreatFromGoblins(EnemyUsingSkill)
+
+                --// With no mob close enough to flee from, the retreat stands still
+                --// to heal wherever it happens to be. Outside the farm zone that
+                --// meant waiting there until health came back, which can be a very
+                --// long time without a potion. Heal back inside the zone instead,
+                --// once the waypoint route (if any) has been walked.
+                local RouteDone = not PlaceConfig
+                    or type(PlaceConfig.WAYPOINTS) ~= "table"
+                    or #PlaceConfig.WAYPOINTS == 0
+                    or (tonumber(CONFIG.CURRENT_WAYPOINT_TARGET) or 1) > #PlaceConfig.WAYPOINTS
+
+                if not RetreatMoved
+                    and not EnemyUsingSkill
+                    and RouteDone
+                    and FeatureState.ReturnToFarmZone.Enabled
+                    and not FeatureState.IgnoreFarmZone.Enabled
+                    and (not AICCombatUtils.IsInsideFarmArea(RootPart.Position)
+                        or AICCombatUtils.IsInsideFarmDeadzone(RootPart.Position))
+                then
+                    AICFeature.MoveBackToFarmZone()
+                end
 
                 local LastConsumed = PlayerStats and PlayerStats:FindFirstChild("LastConsumed")
                 local WantsConsume = UseConsumable
@@ -599,12 +620,12 @@ return {
                         return
                     end
 
+                    --// Locked but not in engage range yet. The approach above has
+                    --// already issued this frame's MoveTo; stopping here with
+                    --// Move(zero) cancelled it, so a target more than
+                    --// COMBAT_ENGAGE_MAX_DISTANCE away was never walked to and the
+                    --// character just stood still.
                     if not AICCombat.IsCombatTargetValid(AICCombat.S.ClosestTarget) then
-                        if FaceOrientation then
-                            FaceOrientation.Enabled = false
-                        end
-                        Humanoid.AutoRotate = true
-                        Humanoid:Move(Vector3.zero)
                         return
                     end
 
