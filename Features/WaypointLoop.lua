@@ -333,6 +333,13 @@ return {
                 local ZoneIndex = (table.find(ZoneOptions, Value) or 1) - 1
 
                 Current.WAYPOINT_ZONES = AICConfig.NormalizeZonePairs(Current.WAYPOINT_ZONES, #Current.WAYPOINTS, #Current.FARM_ZONES)
+
+                --// Nothing changed: do not save or rebuild. Rebuilding recreates
+                --// this dropdown, which is how the startup freeze looped.
+                if Current.WAYPOINT_ZONES[SelectedPairWaypoint] == ZoneIndex then
+                    return
+                end
+
                 Current.WAYPOINT_ZONES[SelectedPairWaypoint] = ZoneIndex
                 AICFeature.ResetWaypointLoop()
                 AICProfile.SaveActiveProfile()

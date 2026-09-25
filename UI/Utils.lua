@@ -1848,11 +1848,11 @@ function Library.SectionMethods:AddTextbox(name: string, default: string?, callb
 
     component.TextBox = box
 
-    function component:Set(value: string)
+    function component:Set(value: string, fireCallback: boolean?)
         self.Value = value
         box.Text = value
 
-        if self.Callback then
+        if self.Callback and fireCallback ~= false then
             self.Callback(value)
         end
     end
@@ -2125,13 +2125,16 @@ function Library.SectionMethods:AddDropdown(
         end
     end
 
-    function component:Set(value: string)
+    --// Pass false as the second argument to update the shown value without
+    --// running the callback, the same as Toggle and Slider. Callers already
+    --// passed false expecting that; ignoring it caused callback loops.
+    function component:Set(value: string, fireCallback: boolean?)
         self.Value = value
         valueLabel.Text = value
 
         RefreshSelection()
 
-        if self.Callback then
+        if self.Callback and fireCallback ~= false then
             self.Callback(value)
         end
     end
