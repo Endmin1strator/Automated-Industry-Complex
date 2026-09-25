@@ -29,6 +29,7 @@ return {
         local PatrolState = Context.PatrolState
         local NotifyAction = Context.NotifyAction
         local AICPlaceConfig = Runtime:GetPlaceConfig()
+        local DEBUG_COLORS = Context.DEBUG_COLORS
         local BasePlaceConfig = Runtime:GetBasePlaceConfig()
         local InputBindableFunction = Runtime:GetInputBindableFunction()
         local FaceOrientation = Runtime:GetFaceOrientation()

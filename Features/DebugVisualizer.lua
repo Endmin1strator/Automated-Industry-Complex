@@ -24,6 +24,7 @@ return {
         local UIRef = Context.UIRef
         local UI = Context.UI
         local FeatureState = Context.Feature
+        local DEBUG_COLORS = Context.DEBUG_COLORS
         local PatrolState = Context.PatrolState
         local NotifyAction = Context.NotifyAction
         local Module = Context.AICDebug
@@ -112,7 +113,7 @@ return {
             Billboard.MaxDistance = 180
             Billboard.Size = UDim2.fromScale(4.2, 1.25)
             Billboard.StudsOffsetWorldSpace = Vector3.new(0, 2.0, 0)
-            Billboard.Enabled = Feature.DebugRadiusLabels.Enabled
+            Billboard.Enabled = FeatureState.DebugRadiusLabels.Enabled
             Billboard.Parent = Marker
         
             local Container = Instance.new("Frame")
@@ -444,7 +445,7 @@ return {
             FarmZonesFolder.Name = "FarmZones"
             FarmZonesFolder.Parent = ZoneContainer
         
-            if Feature.DebugFarmZones.Enabled then
+            if FeatureState.DebugFarmZones.Enabled then
                 for Index, Zone in ipairs(PlaceConfig.FARM_ZONES or {}) do
                     local ZoneFolder = AICDebug.CreateDebugZone(
                         "FarmZone_" .. Index,
@@ -465,7 +466,7 @@ return {
             DeadzonesFolder.Name = "Deadzones"
             DeadzonesFolder.Parent = ZoneContainer
         
-            if Feature.DebugDeadzones.Enabled then
+            if FeatureState.DebugDeadzones.Enabled then
                 for Index, Zone in ipairs(PlaceConfig.DEADZONES or {}) do
                     local ZoneFolder = AICDebug.CreateDebugZone(
                         "Deadzone_" .. Index,
@@ -488,7 +489,7 @@ return {
         end
         function AICDebug.UpdateDebugVisualizer()
         local PlaceConfig = Runtime:GetPlaceConfig()
-            if not PlaceConfig or not Feature.DebugVisualizer.Enabled then
+            if not PlaceConfig or not FeatureState.DebugVisualizer.Enabled then
                 AICDebug.SetDebugVisualizerVisible(false)
                 return
             end
@@ -496,7 +497,7 @@ return {
             AICDebug.GetDebugAdorneeParent()
         
             --// Rebuild waypoints if the place configuration changed.
-            local WaypointCount = Feature.DebugWaypoints.Enabled and #PlaceConfig.WAYPOINTS or 0
+            local WaypointCount = FeatureState.DebugWaypoints.Enabled and #PlaceConfig.WAYPOINTS or 0
             local WaypointParts = {}
         
             for Index, Position in ipairs(PlaceConfig.WAYPOINTS) do
@@ -528,7 +529,7 @@ return {
                 table.clear(AICDebug.S.DebugWaypointData)
                 AICDebug.S.DebugWaypointSignature = nil
         
-                if Feature.DebugWaypoints.Enabled then
+                if FeatureState.DebugWaypoints.Enabled then
                     for Index, Position in ipairs(PlaceConfig.WAYPOINTS) do
                         AICDebug.CreateDebugWaypoint(Index, Position)
                     end

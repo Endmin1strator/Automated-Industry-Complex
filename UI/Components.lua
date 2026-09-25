@@ -32,7 +32,7 @@ return {
             return Component
         end
         function AICUI.SetFeatureComponent(Name, Value)
-            local Data = Feature[Name]
+            local Data = FeatureState[Name]
         
             if Data and Data.Button then
                 Data.Button:Set(Value, false)
@@ -107,21 +107,21 @@ return {
             end
         
             AICUI.SetFeatureComponent("AutoFarm", AICFeature.S.Enabled)
-            AICUI.SetFeatureComponent("AutoBlock", Feature.AutoBlock.Enabled)
-            AICUI.SetFeatureComponent("SafeCombat", Feature.SafeCombat.Enabled)
-            AICUI.SetFeatureComponent("AutoSkill", Feature.AutoSkill.Enabled)
-            AICUI.SetFeatureComponent("AutoFind", Feature.AutoFind.Enabled)
-            AICUI.SetFeatureComponent("IgnoreFarmZone", Feature.IgnoreFarmZone.Enabled)
-            AICUI.SetFeatureComponent("AutoPatrol", Feature.AutoPatrol.Enabled)
-            AICUI.SetFeatureComponent("ReturnToFarmZone", Feature.ReturnToFarmZone.Enabled)
-            AICUI.SetFeatureComponent("ResetOnBoostOut", Feature.ResetOnBoostOut.Enabled)
-            if Feature.DebugWaypoints.Button then Feature.DebugWaypoints.Button:Set(Feature.DebugWaypoints.Enabled, false) end
-            if Feature.DebugFarmZones.Button then Feature.DebugFarmZones.Button:Set(Feature.DebugFarmZones.Enabled, false) end
-            if Feature.DebugDeadzones.Button then Feature.DebugDeadzones.Button:Set(Feature.DebugDeadzones.Enabled, false) end
-            if Feature.DebugRadiusLabels.Button then Feature.DebugRadiusLabels.Button:Set(Feature.DebugRadiusLabels.Enabled, false) end
+            AICUI.SetFeatureComponent("AutoBlock", FeatureState.AutoBlock.Enabled)
+            AICUI.SetFeatureComponent("SafeCombat", FeatureState.SafeCombat.Enabled)
+            AICUI.SetFeatureComponent("AutoSkill", FeatureState.AutoSkill.Enabled)
+            AICUI.SetFeatureComponent("AutoFind", FeatureState.AutoFind.Enabled)
+            AICUI.SetFeatureComponent("IgnoreFarmZone", FeatureState.IgnoreFarmZone.Enabled)
+            AICUI.SetFeatureComponent("AutoPatrol", FeatureState.AutoPatrol.Enabled)
+            AICUI.SetFeatureComponent("ReturnToFarmZone", FeatureState.ReturnToFarmZone.Enabled)
+            AICUI.SetFeatureComponent("ResetOnBoostOut", FeatureState.ResetOnBoostOut.Enabled)
+            if FeatureState.DebugWaypoints.Button then FeatureState.DebugWaypoints.Button:Set(FeatureState.DebugWaypoints.Enabled, false) end
+            if FeatureState.DebugFarmZones.Button then FeatureState.DebugFarmZones.Button:Set(FeatureState.DebugFarmZones.Enabled, false) end
+            if FeatureState.DebugDeadzones.Button then FeatureState.DebugDeadzones.Button:Set(FeatureState.DebugDeadzones.Enabled, false) end
+            if FeatureState.DebugRadiusLabels.Button then FeatureState.DebugRadiusLabels.Button:Set(FeatureState.DebugRadiusLabels.Enabled, false) end
         end
         function AICUI.updateButton()
-            Feature.AutoFarm.Enabled = AICFeature.S.Enabled
+            FeatureState.AutoFarm.Enabled = AICFeature.S.Enabled
             AICUI.SetFeatureComponent("AutoFarm", AICFeature.S.Enabled)
         end
         function AICUI.FormatVector3(Position)

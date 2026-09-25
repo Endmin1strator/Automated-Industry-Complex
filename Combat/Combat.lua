@@ -30,7 +30,7 @@ return {
         local Module = Context.AICCombat
         function AICCombat.FaceGoblin(Goblin)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
-        local FaceOrientation = Runtime:GetFaceOrientation()
+            local FaceOrientation = Runtime:GetFaceOrientation()
             if not RootPart or not Goblin then
                 return
             end
@@ -197,7 +197,7 @@ return {
         end
         function AICCombat.FaceCombatTarget(TargetMob)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
-        local FaceOrientation = Runtime:GetFaceOrientation()
+            local FaceOrientation = Runtime:GetFaceOrientation()
             if not RootPart or not TargetMob then
                 return
             end
@@ -284,7 +284,7 @@ return {
                 AICCombat.FaceCombatTarget(TargetMob)
             end
         
-            if Feature.AutoSkill.Enabled
+            if FeatureState.AutoSkill.Enabled
                 and Distance <= CONFIG.COMBAT_SKILL_RANGE
                 and PlayerHP >= CONFIG.COMBAT_SKILL_MIN_HP_PERCENT
                 and not EnemySkill

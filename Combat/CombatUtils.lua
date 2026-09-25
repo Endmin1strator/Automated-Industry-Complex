@@ -130,7 +130,7 @@ return {
         end
         function AICCombatUtils.IsInsideFarmArea(Position)
             local PlaceConfig = Runtime:GetPlaceConfig()
-            if Feature.IgnoreFarmZone.Enabled or not PlaceConfig then
+            if FeatureState.IgnoreFarmZone.Enabled or not PlaceConfig then
                 return true
             end
         
@@ -222,7 +222,7 @@ return {
         function AICCombatUtils.IsPathThroughDeadzone(TargetPosition)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
         local PlaceConfig = Runtime:GetPlaceConfig()
-            if Feature.IgnoreFarmZone.Enabled then
+            if FeatureState.IgnoreFarmZone.Enabled then
                 return false
             end
         

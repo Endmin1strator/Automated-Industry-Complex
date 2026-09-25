@@ -1066,7 +1066,7 @@ return {
                     return false
                 end
         
-                if not Feature.IgnoreFarmZone.Enabled
+                if not FeatureState.IgnoreFarmZone.Enabled
                     and AICCombatUtils.IsInsideFarmDeadzone(Position)
                 then
                     AICCombat.ResetTargetPath()
