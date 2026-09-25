@@ -1,41 +1,42 @@
--- WaypointLoop:
--- Walk the waypoint route from WP1 to the last waypoint.
+-- WaypointLoop: after the waypoint route is walked, farm only the farm zones
+-- paired with a waypoint, walking the route between them.
 --
--- Every waypoint paired with a farm zone is checked when reached:
---   * targets found -> fight until the zone is clear;
---   * no targets    -> continue to the next waypoint.
---
--- The first farm zone that actually gets fought is remembered.
--- After reaching the last waypoint:
---   * if a paired zone has targets, fight it;
---   * if all paired zones are empty, walk backwards to the first farm zone
---     that was previously fought and wait there for respawn;
---   * if no farm zone has ever been fought, return to the first paired zone
---     and wait there.
---
--- After a fight is finished, the route continues forward again.
-
+-- Each waypoint may be paired with one farm zone, and each farm zone may have
+-- its own target list (empty = the Enemy Priority list). Once the route
+-- reaches its last waypoint the character walks to the nearest paired
+-- waypoint and fights in that zone, one zone at a time:
+--   * with a single paired zone it stays there for good, waiting inside the
+--     zone while nothing is alive;
+--   * with two or more, once a zone is cleared it walks on to the next
+--     paired zone (route order, wrapping around; a zone already seen to have
+--     targets goes first), e.g. zones on #33 and #39 alternate 33 > 39 > 33.
+-- The walk only uses the waypoints between paired ones: it never heads back
+-- past the first or last paired waypoint.
 return {
 	Name = "WaypointLoop",
 	IsFeature = true,
 	Dependencies = {"Runtime", "ProfileManager", "Components", "Targeting", "Waypoints", "Farmzone"},
 
 	Start = function(Context)
-		local Runtime        = Context.Runtime
-		local Players        = Context.Services.Players
-		local CONFIG         = Context.CONFIG
-		local FeatureState   = Context.Feature
-		local AICConfig      = Context.AICConfig
-		local AICProfile     = Context.AICProfile
-		local AICCombat      = Context.AICCombat
+		local Runtime = Context.Runtime
+		local Players = Context.Services.Players
+		local CONFIG = Context.CONFIG
+		local FeatureState = Context.Feature
+		local AICConfig = Context.AICConfig
+		local AICProfile = Context.AICProfile
+		local AICCombat = Context.AICCombat
 		local AICCombatUtils = Context.AICCombatUtils
-		local AICFeature     = Context.AICFeature
-		local AICUI          = Context.AICUI
-		local NotifyAction   = Context.NotifyAction
-		local UIRef          = Context.UIRef
+		local AICFeature = Context.AICFeature
+		local AICUI = Context.AICUI
+		local AICDebug = Context.AICDebug
+		local UIRef = Context.UIRef
+		local NotifyAction = Context.NotifyAction
 
+		--// How often zones are rescanned for targets.
 		local ZONE_SCAN_INTERVAL = 0.25
-		local ZONE_CLEAR_GRACE   = 1.5
+		--// How long a zone must stay empty before it counts as cleared, so a
+		--// scan that misses a mob for a moment does not send us away.
+		local ZONE_CLEAR_GRACE = 1.5
 
 		local Feature = {
 			Name = "WaypointLoop",
@@ -43,36 +44,17 @@ return {
 		}
 
 		AICFeature.S.Loop = {
-			--// Current waypoint.
-			--// 0 means the character has not reached WP1 yet.
-			Index = 0,
-
-			--// ROUTE   = walking forward through waypoints.
-			--// FIGHT   = fighting/waiting at a paired farm zone.
-			--// RETURN  = walking backwards to the first farm zone.
-			Mode = "ROUTE",
-
-			--// Farm zone currently being handled.
-			FarmWaypoint = nil,
-			FarmZone = nil,
-
-			--// First farm zone that actually had a target and was fought.
-			FirstFarmWaypoint = nil,
-			FirstFarmZone = nil,
-
-			--// Used when deciding whether a zone has really cleared.
+			--// Waypoint the character is at, or nil before the route ends.
+			Index = nil,
+			--// Paired waypoint being walked to or fought at.
+			Goal = nil,
+			--// When the goal zone was first seen empty, or nil.
 			EmptySince = nil,
-
-			--// Zone scan cache.
 			ScanTime = 0,
 			ScanResult = {},
 		}
 
 		local Loop = AICFeature.S.Loop
-
-		------------------------------------------------------------------------
-		--// Farm Zone target list
-		------------------------------------------------------------------------
 
 		local function ZoneTargetNames(Zone)
 			if type(Zone.Targets) == "table" and #Zone.Targets > 0 then
@@ -82,18 +64,12 @@ return {
 			return CONFIG.TARGET_ENTITY_PRIORITY or {}
 		end
 
-		------------------------------------------------------------------------
-		--// Waypoints paired with valid Farm Zones.
-		------------------------------------------------------------------------
-
+		--// Waypoints paired with an existing farm zone, in route order.
 		local function PairedWaypoints(PlaceConfig)
 			local List = {}
 
 			for WaypointIndex, ZoneIndex in ipairs(PlaceConfig.WAYPOINT_ZONES or {}) do
-				if ZoneIndex > 0
-					and PlaceConfig.WAYPOINTS[WaypointIndex]
-					and PlaceConfig.FARM_ZONES[ZoneIndex]
-				then
+				if ZoneIndex > 0 and PlaceConfig.WAYPOINTS[WaypointIndex] and PlaceConfig.FARM_ZONES[ZoneIndex] then
 					table.insert(List, WaypointIndex)
 				end
 			end
@@ -101,10 +77,7 @@ return {
 			return List
 		end
 
-		------------------------------------------------------------------------
-		--// Check whether the specified Farm Zone currently contains a target.
-		------------------------------------------------------------------------
-
+		--// True when a living target of this zone's list stands inside it.
 		local function ScanZone(Zone)
 			local Names = ZoneTargetNames(Zone)
 
@@ -143,10 +116,6 @@ return {
 		end
 
 		local function ZoneHasTargets(PlaceConfig, ZoneIndex, now)
-			if not ZoneIndex or ZoneIndex <= 0 then
-				return false
-			end
-
 			if now - Loop.ScanTime >= ZONE_SCAN_INTERVAL then
 				Loop.ScanTime = now
 				table.clear(Loop.ScanResult)
@@ -160,68 +129,50 @@ return {
 			return Loop.ScanResult[ZoneIndex]
 		end
 
-		local function ResetZoneScan()
-			Loop.ScanTime = 0
-			table.clear(Loop.ScanResult)
-		end
+		--// First goal once the route ends: the nearest paired waypoint (by
+		--// route distance), preferring one whose zone already shows targets.
+		local function FirstGoal(PlaceConfig, Paired, now)
+			local Best, BestScore = nil, math.huge
 
-		------------------------------------------------------------------------
-		--// Remember the first Farm Zone that actually had a target.
-		------------------------------------------------------------------------
-
-		local function RememberFirstFarmZone(WaypointIndex, ZoneIndex)
-			if Loop.FirstFarmWaypoint then
-				return
-			end
-
-			Loop.FirstFarmWaypoint = WaypointIndex
-			Loop.FirstFarmZone = ZoneIndex
-		end
-
-		------------------------------------------------------------------------
-		--// Find the first paired Farm Zone in waypoint order.
-		------------------------------------------------------------------------
-
-		local function FindFirstPairedWaypoint(PlaceConfig, Paired)
-			return Paired[1], Paired[1] and PlaceConfig.WAYPOINT_ZONES[Paired[1]]
-		end
-
-		------------------------------------------------------------------------
-		--// Find a paired Farm Zone that currently has a target.
-		--
-		--// Used only after reaching the final waypoint.
-		--// Route order is preserved.
-		------------------------------------------------------------------------
-
-		local function FindActiveFarmZone(PlaceConfig, Paired, now)
 			for _, WaypointIndex in ipairs(Paired) do
-				local ZoneIndex = PlaceConfig.WAYPOINT_ZONES[WaypointIndex]
+				local Score = math.abs(WaypointIndex - Loop.Index)
 
-				if ZoneHasTargets(PlaceConfig, ZoneIndex, now) then
-					return WaypointIndex, ZoneIndex
+				if not ZoneHasTargets(PlaceConfig, PlaceConfig.WAYPOINT_ZONES[WaypointIndex], now) then
+					Score += #PlaceConfig.WAYPOINTS
+				end
+
+				if Score < BestScore then
+					Best, BestScore = WaypointIndex, Score
 				end
 			end
 
-			return nil, nil
+			return Best
 		end
 
-		------------------------------------------------------------------------
-		--// Start fighting a paired Farm Zone.
-		------------------------------------------------------------------------
+		--// Next paired waypoint after the cleared Goal, in route order and
+		--// wrapping around. Waypoints paired with the goal's own zone are
+		--// skipped, and a zone already seen to have targets is preferred.
+		--// nil when every paired waypoint belongs to the goal's zone.
+		local function NextGoal(PlaceConfig, Paired, Goal, now)
+			local Position = table.find(Paired, Goal) or 0
+			local GoalZone = PlaceConfig.WAYPOINT_ZONES[Goal]
+			local FirstOther = nil
 
-		local function EnterFarmZone(WaypointIndex, ZoneIndex)
-			Loop.FarmWaypoint = WaypointIndex
-			Loop.FarmZone = ZoneIndex
-			Loop.Mode = "FIGHT"
-			Loop.EmptySince = nil
+			for Step = 1, #Paired - 1 do
+				local WaypointIndex = Paired[(Position + Step - 1) % #Paired + 1]
+				local ZoneIndex = PlaceConfig.WAYPOINT_ZONES[WaypointIndex]
 
-			AICCombatUtils.S.ActiveZoneIndex = ZoneIndex
-			AICCombat.S.ClosestTarget = nil
+				if ZoneIndex ~= GoalZone then
+					if ZoneHasTargets(PlaceConfig, ZoneIndex, now) then
+						return WaypointIndex
+					end
+
+					FirstOther = FirstOther or WaypointIndex
+				end
+			end
+
+			return FirstOther
 		end
-
-		------------------------------------------------------------------------
-		--// Stand still while waiting/fighting inside a Farm Zone.
-		------------------------------------------------------------------------
 
 		local function StandStill(Humanoid)
 			local FaceOrientation = Runtime:GetFaceOrientation()
@@ -234,24 +185,15 @@ return {
 			Humanoid:Move(Vector3.zero)
 		end
 
-		------------------------------------------------------------------------
-		--// Walk to a neighbouring waypoint.
-		------------------------------------------------------------------------
-
+		--// Walks to the neighbouring waypoint NextIndex; on arrival that becomes
+		--// the current waypoint, and its wait time (if any) is honoured.
 		local function StepTo(PlaceConfig, NextIndex, Humanoid, RootPart, now)
 			local Target = PlaceConfig.WAYPOINTS[NextIndex]
-
-			if not Target then
-				return
-			end
-
 			local Offset = Target - RootPart.Position
 			local Horizontal = Vector3.new(Offset.X, 0, Offset.Z).Magnitude
 			local Reach = tonumber(PlaceConfig.REACH_DISTANCE) or 5
 
-			if Horizontal <= Reach
-				and math.abs(Offset.Y) <= math.max(Reach, CONFIG.JUMP_HEIGHT + 2)
-			then
+			if Horizontal <= Reach and math.abs(Offset.Y) <= math.max(Reach, CONFIG.JUMP_HEIGHT + 2) then
 				Loop.Index = NextIndex
 
 				local Wait = tonumber(PlaceConfig.WAYPOINT_WAITS and PlaceConfig.WAYPOINT_WAITS[NextIndex]) or 0
@@ -275,32 +217,18 @@ return {
 			AICCombatUtils.DoJumpIfObstacle(Target)
 		end
 
-		------------------------------------------------------------------------
-		--// Reset Waypoint Loop.
-		------------------------------------------------------------------------
-
 		function AICFeature.ResetWaypointLoop()
-			Loop.Index = 0
-			Loop.Mode = "ROUTE"
-
-			Loop.FarmWaypoint = nil
-			Loop.FarmZone = nil
-
-			Loop.FirstFarmWaypoint = nil
-			Loop.FirstFarmZone = nil
-
+			Loop.Index = nil
+			Loop.Goal = nil
 			Loop.EmptySince = nil
-
-			ResetZoneScan()
-
+			table.clear(Loop.ScanResult)
 			AICCombatUtils.S.ActiveZoneIndex = nil
-			AICCombat.S.ClosestTarget = nil
 		end
 
-		------------------------------------------------------------------------
-		--// Waypoint Loop
-		------------------------------------------------------------------------
-
+		--// Called by the farm loop once the route has been walked.
+		--//   nil     the loop does not apply; farm as before
+		--//   "fight" fight (or wait) inside the active paired zone
+		--//   "move"  the loop moved the character this frame
 		function AICFeature.WaypointLoopStep(now)
 			local PlaceConfig = Runtime:GetPlaceConfig()
 			local _, Humanoid, RootPart = Runtime:GetCharacter()
@@ -315,263 +243,61 @@ return {
 				or #PlaceConfig.WAYPOINTS == 0
 				or #Paired == 0
 			then
-				if Loop.Index ~= 0 then
+				if Loop.Index then
 					AICFeature.ResetWaypointLoop()
 				end
 
 				return nil
 			end
 
-			------------------------------------------------------------------------
-			--// ROUTE
-			--
-			--// Walk WP1 -> WP2 -> ... -> last WP.
-			--// Every paired waypoint is checked before moving onward.
-			------------------------------------------------------------------------
-
-			if Loop.Mode == "ROUTE" then
-				AICCombatUtils.S.ActiveZoneIndex = nil
-				AICCombat.S.ClosestTarget = nil
-
-				------------------------------------------------------------------------
-				--// Start by actually reaching WP1.
-				------------------------------------------------------------------------
-
-				if Loop.Index == 0 then
-					StepTo(PlaceConfig, 1, Humanoid, RootPart, now)
-					return "move"
-				end
-
-				local CurrentWaypoint = Loop.Index
-				local ZoneIndex = PlaceConfig.WAYPOINT_ZONES[CurrentWaypoint]
-
-				------------------------------------------------------------------------
-				--// This waypoint is paired with a Farm Zone.
-				--// Check the Farm Zone BEFORE moving to the next waypoint.
-				------------------------------------------------------------------------
-
-				if ZoneIndex
-					and ZoneIndex > 0
-					and PlaceConfig.FARM_ZONES[ZoneIndex]
-				then
-					if ZoneHasTargets(PlaceConfig, ZoneIndex, now) then
-						RememberFirstFarmZone(CurrentWaypoint, ZoneIndex)
-						EnterFarmZone(CurrentWaypoint, ZoneIndex)
-
-						return "fight"
-					end
-				end
-
-				------------------------------------------------------------------------
-				--// Reached the final waypoint.
-				------------------------------------------------------------------------
-
-				if CurrentWaypoint >= #PlaceConfig.WAYPOINTS then
-					local ActiveWaypoint, ActiveZone = FindActiveFarmZone(PlaceConfig, Paired, now)
-
-					------------------------------------------------------------------------
-					--// If any paired zone currently has a mob, go there.
-					------------------------------------------------------------------------
-
-					if ActiveWaypoint then
-						RememberFirstFarmZone(ActiveWaypoint, ActiveZone)
-						Loop.Mode = "RETURN"
-						Loop.FarmWaypoint = ActiveWaypoint
-						Loop.FarmZone = ActiveZone
-						Loop.EmptySince = nil
-
-						return "move"
-					end
-
-					------------------------------------------------------------------------
-					--// Every paired Farm Zone is empty.
-					--
-					--// Return to the first zone that was actually fought.
-					--// If nothing has ever been fought, use the first paired zone.
-					------------------------------------------------------------------------
-
-					local ReturnWaypoint = Loop.FirstFarmWaypoint
-					local ReturnZone = Loop.FirstFarmZone
-
-					if not ReturnWaypoint then
-						ReturnWaypoint, ReturnZone = FindFirstPairedWaypoint(PlaceConfig, Paired)
-					end
-
-					if ReturnWaypoint then
-						Loop.Mode = "RETURN"
-						Loop.FarmWaypoint = ReturnWaypoint
-						Loop.FarmZone = ReturnZone
-						Loop.EmptySince = nil
-
-						return "move"
-					end
-
-					return "fight"
-				end
-
-				------------------------------------------------------------------------
-				--// Continue forward one waypoint.
-				------------------------------------------------------------------------
-
-				StepTo(PlaceConfig, CurrentWaypoint + 1, Humanoid, RootPart, now)
-
-				return "move"
+			if not Loop.Index or not PlaceConfig.WAYPOINTS[Loop.Index] then
+				Loop.Index = #PlaceConfig.WAYPOINTS
+				Loop.Goal = nil
 			end
 
-			------------------------------------------------------------------------
-			--// RETURN
-			--
-			--// Walk backwards through the actual waypoints to the selected
-			--// Farm Zone.
-			------------------------------------------------------------------------
-
-			if Loop.Mode == "RETURN" then
-				local TargetWaypoint = Loop.FarmWaypoint
-				local TargetZone = Loop.FarmZone
-
-				if not TargetWaypoint
-					or not TargetZone
-					or not PlaceConfig.WAYPOINTS[TargetWaypoint]
-					or not PlaceConfig.FARM_ZONES[TargetZone]
-				then
-					Loop.Mode = "ROUTE"
-					Loop.FarmWaypoint = nil
-					Loop.FarmZone = nil
-					Loop.EmptySince = nil
-
-					ResetZoneScan()
-
-					return "move"
-				end
-
-				------------------------------------------------------------------------
-				--// Reached the Farm Zone's paired waypoint.
-				------------------------------------------------------------------------
-
-				if Loop.Index == TargetWaypoint then
-					EnterFarmZone(TargetWaypoint, TargetZone)
-
-					return "fight"
-				end
-
-				AICCombatUtils.S.ActiveZoneIndex = nil
-				AICCombat.S.ClosestTarget = nil
-
-				------------------------------------------------------------------------
-				--// Move backwards one waypoint.
-				------------------------------------------------------------------------
-
-				local PreviousWaypoint = math.max(1, Loop.Index - 1)
-
-				StepTo(PlaceConfig, PreviousWaypoint, Humanoid, RootPart, now)
-
-				return "move"
-			end
-
-			------------------------------------------------------------------------
-			--// FIGHT
-			--
-			--// Stay at this Farm Zone until it is genuinely clear.
-			------------------------------------------------------------------------
-
-			if Loop.Mode == "FIGHT" then
-				local FarmWaypoint = Loop.FarmWaypoint
-				local ZoneIndex = Loop.FarmZone
-
-				if not FarmWaypoint
-					or not ZoneIndex
-					or not PlaceConfig.WAYPOINTS[FarmWaypoint]
-					or not PlaceConfig.FARM_ZONES[ZoneIndex]
-				then
-					Loop.Mode = "ROUTE"
-					Loop.FarmWaypoint = nil
-					Loop.FarmZone = nil
-					Loop.EmptySince = nil
-
-					ResetZoneScan()
-
-					AICCombatUtils.S.ActiveZoneIndex = nil
-					AICCombat.S.ClosestTarget = nil
-
-					return "move"
-				end
-
-				AICCombatUtils.S.ActiveZoneIndex = ZoneIndex
-
-				------------------------------------------------------------------------
-				--// Mob exists -> keep fighting.
-				------------------------------------------------------------------------
-
-				if ZoneHasTargets(PlaceConfig, ZoneIndex, now) then
-					Loop.EmptySince = nil
-					return "fight"
-				end
-
-				------------------------------------------------------------------------
-				--// No mob.
-				------------------------------------------------------------------------
-
-				Loop.EmptySince = Loop.EmptySince or now
-
-				------------------------------------------------------------------------
-				--// If this is a return-to-zone with no mob, we still wait here.
-				--// Once a mob appears, combat resumes normally.
-				------------------------------------------------------------------------
-
-				if Loop.Index == FarmWaypoint
-					and not Loop.FirstFarmWaypoint
-				then
-					return "fight"
-				end
-
-				if now - Loop.EmptySince < ZONE_CLEAR_GRACE then
-					return "fight"
-				end
-
-				------------------------------------------------------------------------
-				--// Zone has genuinely cleared.
-				------------------------------------------------------------------------
-
-				Loop.Mode = "ROUTE"
+			--// No goal yet, or its pair was removed: pick from where we stand.
+			if not Loop.Goal or not table.find(Paired, Loop.Goal) then
+				Loop.Goal = FirstGoal(PlaceConfig, Paired, now)
 				Loop.EmptySince = nil
+			end
 
+			if Loop.Goal ~= Loop.Index then
 				AICCombatUtils.S.ActiveZoneIndex = nil
 				AICCombat.S.ClosestTarget = nil
-
-				ResetZoneScan()
-
-				------------------------------------------------------------------------
-				--// If this Farm Zone was the first one we ever fought,
-				--// FirstFarmWaypoint remains saved for the next full route.
-				------------------------------------------------------------------------
-
+				StepTo(PlaceConfig, Loop.Index + (Loop.Goal > Loop.Index and 1 or -1), Humanoid, RootPart, now)
 				return "move"
 			end
 
-			------------------------------------------------------------------------
-			--// Safety fallback.
-			------------------------------------------------------------------------
+			local ZoneIndex = PlaceConfig.WAYPOINT_ZONES[Loop.Goal]
+			AICCombatUtils.S.ActiveZoneIndex = ZoneIndex
 
-			Loop.Mode = "ROUTE"
-			Loop.FarmWaypoint = nil
-			Loop.FarmZone = nil
-			Loop.EmptySince = nil
+			if ZoneHasTargets(PlaceConfig, ZoneIndex, now) then
+				Loop.EmptySince = nil
+				return "fight"
+			end
 
-			ResetZoneScan()
+			Loop.EmptySince = Loop.EmptySince or now
 
-			AICCombatUtils.S.ActiveZoneIndex = nil
-			AICCombat.S.ClosestTarget = nil
+			--// Zone cleared: head for the next paired zone. With a single
+			--// zone there is nowhere else to go, so keep waiting inside it.
+			if now - Loop.EmptySince >= ZONE_CLEAR_GRACE then
+				local Next = NextGoal(PlaceConfig, Paired, Loop.Goal, now)
 
-			return "move"
+				if Next then
+					Loop.Goal = Next
+					Loop.EmptySince = nil
+				end
+			end
+
+			return "fight"
 		end
 
 		function Feature:Update()
 		end
 
 		------------------------------------------------------------------------
-		--// UI: waypoint pairing
+		--// UI: waypoint pairing (Waypoints section) and zone targets (Farmzone)
 		------------------------------------------------------------------------
-
 		local SelectedPairWaypoint = 1
 
 		local function DestroyDropdown(Dropdown)
@@ -594,7 +320,7 @@ return {
 
 			local PlaceConfig = Runtime:GetPlaceConfig()
 			local WaypointOptions = {}
-			local ZoneOptions = {"None"}
+			local ZoneOptions = { "None" }
 
 			for Index in ipairs(PlaceConfig.WAYPOINTS) do
 				table.insert(WaypointOptions, "Waypoint #" .. Index)
@@ -605,7 +331,7 @@ return {
 			end
 
 			if #WaypointOptions == 0 then
-				WaypointOptions = {"No Waypoints"}
+				WaypointOptions = { "No Waypoints" }
 			end
 
 			SelectedPairWaypoint = math.clamp(SelectedPairWaypoint, 1, math.max(1, #PlaceConfig.WAYPOINTS))
@@ -639,40 +365,28 @@ return {
 
 				local ZoneIndex = (table.find(ZoneOptions, Value) or 1) - 1
 
-				Current.WAYPOINT_ZONES = AICConfig.NormalizeZonePairs(
-					Current.WAYPOINT_ZONES,
-					#Current.WAYPOINTS,
-					#Current.FARM_ZONES
-				)
+				Current.WAYPOINT_ZONES = AICConfig.NormalizeZonePairs(Current.WAYPOINT_ZONES, #Current.WAYPOINTS, #Current.FARM_ZONES)
 
+				--// Nothing changed: do not save or rebuild. Rebuilding recreates
+				--// this dropdown, which is how the startup freeze looped.
 				if Current.WAYPOINT_ZONES[SelectedPairWaypoint] == ZoneIndex then
 					return
 				end
 
 				Current.WAYPOINT_ZONES[SelectedPairWaypoint] = ZoneIndex
-
 				AICFeature.ResetWaypointLoop()
 				AICProfile.SaveActiveProfile()
 				AICUI.RefreshWaypointList()
-
-				AICUI.SetProfileStatus(
-					"WAYPOINT #" .. SelectedPairWaypoint .. " -> " .. ZoneOptionLabel(ZoneIndex):upper()
-				)
+				AICUI.SetProfileStatus("WAYPOINT #" .. SelectedPairWaypoint .. " -> " .. ZoneOptionLabel(ZoneIndex):upper())
 			end)
 
 			if PlaceConfig.WAYPOINTS[SelectedPairWaypoint] then
 				UIRef.PairWaypointPicker:Set(WaypointOptions[SelectedPairWaypoint], false)
-				UIRef.PairZonePicker:Set(
-					ZoneOptionLabel(PlaceConfig.WAYPOINT_ZONES[SelectedPairWaypoint] or 0),
-					false
-				)
+				UIRef.PairZonePicker:Set(ZoneOptionLabel(PlaceConfig.WAYPOINT_ZONES[SelectedPairWaypoint] or 0), false)
 			end
 		end
 
-		------------------------------------------------------------------------
-		--// Farm Zone Target UI
-		------------------------------------------------------------------------
-
+		--// Targets of the farm zone picked in "Edit Farm Zone".
 		local function SelectedZone()
 			local PlaceConfig = Runtime:GetPlaceConfig()
 			return PlaceConfig.FARM_ZONES[AICProfile.S.SelectedFarmZoneIndex]
@@ -686,9 +400,9 @@ return {
 			end
 
 			local Zone = SelectedZone()
-
 			UIRef.ZoneTargetsComponent:SetPriority(table.clone(Zone and Zone.Targets or {}))
 
+			--// Choices: everything detected nearby plus the Enemy Priority list.
 			local Options = {}
 
 			for _, Name in ipairs(AICCombat.GetDetectedEnemyEntities()) do
@@ -708,7 +422,7 @@ return {
 			end
 
 			if #Options == 0 then
-				Options = {"No detected enemies"}
+				Options = { "No detected enemies" }
 			end
 
 			DestroyDropdown(UIRef.ZoneTargetDropdown)
@@ -737,10 +451,6 @@ return {
 			end)
 		end
 
-		------------------------------------------------------------------------
-		--// Waypoint Loop UI
-		------------------------------------------------------------------------
-
 		if UIRef.WaypointSection then
 			FeatureState.WaypointLoop.Button = UIRef.WaypointSection:AddToggle(
 				"Waypoint Loop",
@@ -755,13 +465,11 @@ return {
 			AICUI.RefreshWaypointPairPickers()
 		end
 
-		------------------------------------------------------------------------
-		--// Farm Zone Targets UI
-		------------------------------------------------------------------------
-
 		if UIRef.FarmzoneSection then
 			UIRef.ZoneTargetsComponent = UIRef.FarmzoneSection:AddPriority("Zone Targets", {})
 
+			--// The list mirrors the selected zone's Targets; every edit is
+			--// written back to the zone and saved.
 			local Component = UIRef.ZoneTargetsComponent
 			local OriginalRemove = Component.Remove
 			local OriginalMoveUp = Component.MoveUp
@@ -789,24 +497,19 @@ return {
 
 			function Component:Remove(Value)
 				if not Guard() then return false end
-
 				local Changed = OriginalRemove(self, Value)
-
 				Commit(self)
-
 				return Changed
 			end
 
 			function Component:MoveUp(Value)
 				if not Guard() then return end
-
 				OriginalMoveUp(self, Value)
 				Commit(self)
 			end
 
 			function Component:MoveDown(Value)
 				if not Guard() then return end
-
 				OriginalMoveDown(self, Value)
 				Commit(self)
 			end
