@@ -51,22 +51,37 @@ return {
         
         
             local Origin = RootPart.Position
-        
+            local Fallback = nil
+
             for Index = 1, CONFIG.DEADZONE_ESCAPE_DIRECTIONS do
                 local Angle = (Index / CONFIG.DEADZONE_ESCAPE_DIRECTIONS) * math.pi * 2
-        
+
                 local Direction = Vector3.new(
                     math.cos(Angle),
                     0,
                     math.sin(Angle)
                 )
-        
+
                 local Candidate = Origin + Direction * CONFIG.DEADZONE_ESCAPE_DISTANCE
-        
+
                 if AICCombatUtils.IsEscapePathClear(Candidate) then
-                    AICFeature.S.DeadzoneEscapePosition = Candidate
-                    return Candidate
+                    --// Prefer a spot that is back on farm ground. Escaping out of
+                    --// the farm zone just hands the character to Return To Farm
+                    --// Zone, which can walk it straight back in.
+                    if AICCombatUtils.IsInsideFarmArea(Candidate)
+                        and not AICCombatUtils.IsInsideFarmDeadzone(Candidate)
+                    then
+                        AICFeature.S.DeadzoneEscapePosition = Candidate
+                        return Candidate
+                    end
+
+                    Fallback = Fallback or Candidate
                 end
+            end
+
+            if Fallback then
+                AICFeature.S.DeadzoneEscapePosition = Fallback
+                return Fallback
             end
         
             return nil

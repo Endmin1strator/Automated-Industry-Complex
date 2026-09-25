@@ -248,9 +248,27 @@ return {
         --// Lives outside the tabs so the panel can be dragged or popped out.
         UIRef.PinPanel = UI:AddPin("Pinned Items")
 
+        --// Pins are global: restore them from their own file before any
+        --// profile loads, and write every change back there.
+        local StoredPinned = AICProfile.ReadPinnedState()
+
+        if StoredPinned then
+            AICProfile.S.HasGlobalPinnedState = true
+            CONFIG.PINNED_STATE = StoredPinned
+            UIRef.PinPanel:SetState(StoredPinned)
+        end
+
         UIRef.PinPanel.OnChanged = function()
+            CONFIG.PINNED_STATE = UIRef.PinPanel:GetState()
+            AICProfile.QueuePinnedSave()
             AICProfile.QueueProfileSave()
         end
+
+        UIRef.PinnedSection = UIRef.StatusTab:AddSection("Pinned Items")
+        UIRef.PinnedSection:AddButton("Reset Pinned Items Position", function()
+            UIRef.PinPanel:ResetPosition()
+            NotifyAction("Pinned Items", "Position reset")
+        end)
 
         task.spawn(function()
             local PlayerStats = Player:WaitForChild("PlayerStats", 30)

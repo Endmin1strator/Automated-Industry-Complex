@@ -497,7 +497,11 @@ return {
         
                     local TargetPosition = RootPart.Position + Direction * Distance
         
+                    --// Deadzones were not checked here, so a health retreat could
+                    --// run straight into one.
                     if AICCombatUtils.IsInsideFarmArea(TargetPosition)
+                        and not AICCombatUtils.IsInsideFarmDeadzone(TargetPosition)
+                        and not AICCombatUtils.IsPathThroughDeadzone(TargetPosition)
                         and AICCombatUtils.IsPathClear(TargetPosition)
                     then
                         local Score = Direction:Dot(RetreatDirection)
@@ -824,10 +828,29 @@ return {
         
             if now - AICCombat.S.RetreatNoPositionSince < (tonumber(CONFIG.RETREAT_NO_POSITION_TIMEOUT) or 1.5) then
                 local Away = AICCombat.GetRawAwayDirection()
-        
+
+                --// The raw direction has no validation, so it used to walk (and
+                --// jump) straight out of the farm zone or into a deadzone. Keep
+                --// it only while the spot it lands on is still allowed ground,
+                --// shortening the step before giving up on it.
+                local RawTarget = nil
+
                 if Away then
+                    for _, Scale in ipairs({ 1, 0.5 }) do
+                        local Candidate = RootPart.Position + Away * CONFIG.SKILL_DODGE_FALLBACK_DISTANCE * Scale
+
+                        if AICCombatUtils.IsInsideFarmArea(Candidate)
+                            and not AICCombatUtils.IsInsideFarmDeadzone(Candidate)
+                            and not AICCombatUtils.IsPathThroughDeadzone(Candidate)
+                        then
+                            RawTarget = Candidate
+                            break
+                        end
+                    end
+                end
+
+                if RawTarget then
                     Humanoid.AutoRotate = false
-                    local RawTarget = RootPart.Position + Away * CONFIG.SKILL_DODGE_FALLBACK_DISTANCE
                     Humanoid:MoveTo(RawTarget)
                     AICCombatUtils.DoJumpIfObstacle(RawTarget)
                     return true

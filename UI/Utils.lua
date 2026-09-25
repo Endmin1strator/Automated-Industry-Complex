@@ -771,7 +771,44 @@ end
 --// Draggable
 --//==============================================================
 
-function Library:_MakeDraggable(handle: GuiObject, target: GuiObject)
+--// Pulls a GuiObject back inside its parent if any edge is past the parent's
+--// bounds. Worked out from Position, AnchorPoint and AbsoluteSize rather than
+--// AbsolutePosition, which can lag a frame behind a Position change.
+local function ClampToParent(target: GuiObject)
+    local parent = target.Parent
+
+    if not parent or not parent:IsA("GuiBase2d") then
+        return
+    end
+
+    local bounds = parent.AbsoluteSize
+    local size = target.AbsoluteSize
+
+    if bounds.X <= 0 or bounds.Y <= 0 then
+        return
+    end
+
+    local position = target.Position
+    local anchor = target.AnchorPoint
+    local left = bounds.X * position.X.Scale + position.X.Offset - anchor.X * size.X
+    local top = bounds.Y * position.Y.Scale + position.Y.Offset - anchor.Y * size.Y
+
+    local clampedLeft = math.clamp(left, 0, math.max(0, bounds.X - size.X))
+    local clampedTop = math.clamp(top, 0, math.max(0, bounds.Y - size.Y))
+
+    if clampedLeft ~= left or clampedTop ~= top then
+        target.Position = UDim2.new(
+            position.X.Scale,
+            position.X.Offset + (clampedLeft - left),
+            position.Y.Scale,
+            position.Y.Offset + (clampedTop - top)
+        )
+    end
+end
+
+Library._ClampToParent = ClampToParent
+
+function Library:_MakeDraggable(handle: GuiObject, target: GuiObject, keepOnScreen: boolean?)
     local dragging = false
     local dragStart: Vector2
     local startPosition: UDim2
@@ -818,6 +855,10 @@ function Library:_MakeDraggable(handle: GuiObject, target: GuiObject)
             startPosition.Y.Scale,
             startPosition.Y.Offset + delta.Y
         )
+
+        if keepOnScreen then
+            ClampToParent(target)
+        end
     end)
 end
 
@@ -3350,6 +3391,18 @@ function Library:AddPin(name: string?)
 
         panel.AnchorPoint = Vector2.new(0, 0)
         panel.Position = UDim2.fromOffset(tonumber(x), tonumber(y))
+
+        --// A saved position can come from a larger screen or another device.
+        ClampToParent(panel)
+    end
+
+    --// Docks the panel back to its default spot at the right edge.
+    function component:ResetPosition()
+        self:SetFloating(false)
+
+        if self.OnChanged then
+            task.spawn(self.OnChanged, self)
+        end
     end
 
     function component:GetState()
@@ -3391,8 +3444,25 @@ function Library:AddPin(name: string?)
     end)
 
     --// Dragging works in both modes, and dragging while attached pops it out,
-    --// which is the gesture someone will reach for first.
-    self:_MakeDraggable(header, panel)
+    --// which is the gesture someone will reach for first. It is kept on
+    --// screen so it cannot be dragged somewhere it can no longer be grabbed.
+    self:_MakeDraggable(header, panel, true)
+
+    --// Rotating a device or resizing the window can leave a floating panel
+    --// off screen, so it is pulled back whenever the bounds change.
+    self:_Connect(self.ScreenGui:GetPropertyChangedSignal("AbsoluteSize"), function()
+        if component.Floating then
+            ClampToParent(panel)
+        end
+    end)
+
+    --// The panel grows as items are pinned, which can push its bottom edge
+    --// past the screen.
+    self:_Connect(panel:GetPropertyChangedSignal("AbsoluteSize"), function()
+        if component.Floating then
+            ClampToParent(panel)
+        end
+    end)
 
     self:_Connect(header.InputBegan, function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -3401,6 +3471,22 @@ function Library:AddPin(name: string?)
             if not component.Floating then
                 component:SetFloating(true)
             end
+
+            --// Report the drag once it ends, so the new spot is saved.
+            local endConnection
+
+            endConnection = input.Changed:Connect(function()
+                if input.UserInputState ~= Enum.UserInputState.End then
+                    return
+                end
+
+                endConnection:Disconnect()
+                ClampToParent(panel)
+
+                if component.OnChanged then
+                    task.spawn(component.OnChanged, component)
+                end
+            end)
         end
     end)
 

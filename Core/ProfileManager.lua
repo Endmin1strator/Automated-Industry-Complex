@@ -20,6 +20,8 @@ return {
 
         local PROFILE_FOLDER = "AutoFarmProfiles"
         local PROFILE_FILE = PROFILE_FOLDER .. "/" .. tostring(game.PlaceId) .. ".json"
+        --// Not keyed by PlaceId: pinned items follow the player between places.
+        local PINNED_FILE = PROFILE_FOLDER .. "/PinnedItems.json"
 
         --// Short keys for feature toggles in exported/imported profile text.
         --// Must match AFV2 so saves move between the two builds.
@@ -42,6 +44,8 @@ return {
         AICProfile.S.ProfileData = nil
         AICProfile.S.SelectedFarmZoneIndex = 1
         AICProfile.S.SelectedDeadzoneIndex = 1
+        AICProfile.S.HasGlobalPinnedState = false
+        AICProfile.S.PinnedSaveQueued = false
 
         function AICProfile.CanUseFileStorage()
             return type(readfile) == "function"
@@ -200,6 +204,84 @@ return {
             end
 
             return true
+        end
+
+        function AICProfile.NormalizePinnedState(State)
+            if type(State) ~= "table" then
+                return {}
+            end
+
+            return {
+                Items = type(State.Items) == "table" and State.Items or {},
+                Floating = State.Floating == true,
+                X = tonumber(State.X),
+                Y = tonumber(State.Y),
+            }
+        end
+
+        function AICProfile.ReadPinnedState()
+            if not AICProfile.CanUseFileStorage() then
+                return nil
+            end
+
+            local CheckSuccess, Exists = pcall(isfile, PINNED_FILE)
+
+            if not CheckSuccess or not Exists then
+                return nil
+            end
+
+            local Success, Decoded = pcall(function()
+                return HttpService:JSONDecode(readfile(PINNED_FILE))
+            end)
+
+            if not Success or type(Decoded) ~= "table" then
+                warn("AutoFarm pinned items read failed:", Decoded)
+                return nil
+            end
+
+            return AICProfile.NormalizePinnedState(Decoded)
+        end
+
+        function AICProfile.WritePinnedState(State)
+            if not AICProfile.CanUseFileStorage() then
+                return false
+            end
+
+            AICProfile.EnsureProfileFolder()
+
+            local Success, Raw = pcall(function()
+                return HttpService:JSONEncode(AICProfile.NormalizePinnedState(State))
+            end)
+
+            if not Success then
+                warn("AutoFarm pinned items encode failed:", Raw)
+                return false
+            end
+
+            local WriteSuccess, WriteError = pcall(writefile, PINNED_FILE, Raw)
+
+            if not WriteSuccess then
+                warn("AutoFarm pinned items save failed:", WriteError)
+                return false
+            end
+
+            AICProfile.S.HasGlobalPinnedState = true
+            return true
+        end
+
+        --// Dragging the panel reports a change per move, so writes are
+        --// debounced the same way profile saves are.
+        function AICProfile.QueuePinnedSave()
+            if AICProfile.S.PinnedSaveQueued then
+                return
+            end
+
+            AICProfile.S.PinnedSaveQueued = true
+
+            task.delay(CONFIG.PROFILE_SAVE_DEBOUNCE, function()
+                AICProfile.S.PinnedSaveQueued = false
+                AICProfile.WritePinnedState(CONFIG.PINNED_STATE)
+            end)
         end
 
         function AICProfile.CaptureFeatureState()
@@ -595,17 +677,14 @@ return {
                 90
             )
 
+            --// Pinned items are shared across every PlaceId and live in their
+            --// own file. A profile's copy is only used to seed that file once,
+            --// for saves made before pins were global.
             local StoredPinned = Data.SETTINGS and Data.SETTINGS.PINNED_STATE
 
-            if type(StoredPinned) == "table" then
-                CONFIG.PINNED_STATE = {
-                    Items = type(StoredPinned.Items) == "table" and StoredPinned.Items or {},
-                    Floating = StoredPinned.Floating == true,
-                    X = tonumber(StoredPinned.X),
-                    Y = tonumber(StoredPinned.Y),
-                }
-            else
-                CONFIG.PINNED_STATE = {}
+            if not AICProfile.S.HasGlobalPinnedState and type(StoredPinned) == "table" then
+                CONFIG.PINNED_STATE = AICProfile.NormalizePinnedState(StoredPinned)
+                AICProfile.WritePinnedState(CONFIG.PINNED_STATE)
             end
 
             local StoredWhitelist = Data.SETTINGS and Data.SETTINGS.BLOCK_WHITELIST
@@ -777,7 +856,7 @@ return {
             CONFIG.TARGET_HP_MODE = "Disabled"
             CONFIG.BLOCK_WHITELIST = {}
             CONFIG.EXECUTE_CHARGE_HP_PERCENT = 0
-            CONFIG.PINNED_STATE = {}
+            --// PINNED_STATE is global, not part of the place defaults.
 
             AICCombat.ResetTargetReposition()
             AICFeature.S.DeadzoneEscapePosition = nil

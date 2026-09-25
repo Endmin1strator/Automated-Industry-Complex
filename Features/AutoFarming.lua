@@ -537,7 +537,11 @@ return {
 
             --// Combat
             --// Never enter combat while a configured waypoint route is still active.
-            local WaypointRouteFinished = not HasWaypoints
+            --// Auto Find skips the route entirely, so for it the route never
+            --// "finishes"; without this it acquired a target and then only ever
+            --// pressed Interact instead of attacking.
+            local WaypointRouteFinished = FeatureState.AutoFind.Enabled
+                or not HasWaypoints
                 or (tonumber(CONFIG.CURRENT_WAYPOINT_TARGET) or 1) > #PlaceConfig.WAYPOINTS
 
             if WaypointRouteFinished
