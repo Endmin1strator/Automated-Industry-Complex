@@ -710,9 +710,13 @@ return {
         end
         function AICCombat.RetreatFromGoblins(IsEnemySkill)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
-        local FaceOrientation = Runtime:GetFaceOrientation()
+            local FaceOrientation = Runtime:GetFaceOrientation()
             local RetreatPosition = nil
             local now = os.clock()
+
+            if not Humanoid or not RootPart then
+                return false
+            end
         
             --// Normal retreat only triggers movement/jump when a mob is within
             --// the configured nearby distance. Enemy skill retreat is different:
@@ -799,7 +803,7 @@ return {
                     RetreatPosition.Z - RootPosition.Z
                 )
         
-                if RetreatDirection.Magnitude > 0.01 then
+                if FaceOrientation and RetreatDirection.Magnitude > 0.01 then
                     FaceOrientation.CFrame = CFrame.lookAt(
                         RootPosition,
                         RootPosition + RetreatDirection.Unit
@@ -1259,7 +1263,7 @@ return {
         --// ============================================================
         function AICCombat.MoveToGoblin(Goblin)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
-        local FaceOrientation = Runtime:GetFaceOrientation()
+            local FaceOrientation = Runtime:GetFaceOrientation()
             local now = os.clock()
             if not Goblin or not RootPart then
                 return

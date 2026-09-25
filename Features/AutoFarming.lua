@@ -58,7 +58,9 @@ return {
                 FaceOrientation.RigidityEnabled = false
                 FaceOrientation.Responsiveness = 25
                 FaceOrientation.MaxTorque = math.huge
-                FaceOrientation.Enabled = false
+                if FaceOrientation then
+                    FaceOrientation.Enabled = false
+                end
                 FaceOrientation.Parent = RootPart
                 Runtime:SetFaceOrientation(FaceOrientation)
             end
@@ -138,6 +140,8 @@ return {
             end
         end
         function Feature:Update(dt)
+            -- Keep walkspeed / position UI in sync every frame (was RenderUpdate)
+            Feature:RenderUpdate(dt)
 
             local now = os.clock()
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
@@ -174,9 +178,15 @@ return {
                 AICUI.updatePlayTime()
                 AICUI.updateEventCurrency()
 
-                UIRef.WayPointLabel.Text = "WAYPOINTS:  ".. CONFIG.CURRENT_WAYPOINT_TARGET .. "/" .. (PlaceConfig and #PlaceConfig.WAYPOINTS or 0)
-                UIRef.WalkSpeedLabel.Text = "WALKSPEED:  " .. tostring(math.floor(Humanoid.WalkSpeed + 0.5))
-                UIRef.DeathLabel.Text = "DEATH:  " .. tostring(AICFeature.S.DEATH_COUNT)
+                if UIRef.WayPointLabel then
+                    UIRef.WayPointLabel.Text = "WAYPOINTS:  ".. CONFIG.CURRENT_WAYPOINT_TARGET .. "/" .. (PlaceConfig and #PlaceConfig.WAYPOINTS or 0)
+                end
+                if UIRef.WalkSpeedLabel then
+                    UIRef.WalkSpeedLabel.Text = "WALKSPEED:  " .. tostring(math.floor(Humanoid.WalkSpeed + 0.5))
+                end
+                if UIRef.DeathLabel then
+                    UIRef.DeathLabel.Text = "DEATH:  " .. tostring(AICFeature.S.DEATH_COUNT)
+                end
             end
 
             if FeatureState.DebugVisualizer.Enabled then
@@ -194,7 +204,9 @@ return {
             end
 
             if not AICFeature.S.Enabled then
-                FaceOrientation.Enabled = false
+                if FaceOrientation then
+                    FaceOrientation.Enabled = false
+                end
                 Humanoid.AutoRotate = true
                 Humanoid:Move(Vector3.zero)
                 return
@@ -402,7 +414,9 @@ return {
                     end
 
                     if target then
-                        FaceOrientation.Enabled = false
+                        if FaceOrientation then
+                            FaceOrientation.Enabled = false
+                        end
                         Humanoid.AutoRotate = true
                         Humanoid:MoveTo(target)
                     end
@@ -451,7 +465,9 @@ return {
                         else
                             PatrolState.PatrolPosition = nil
                             AICFeature.S.FarmReturnPosition = nil
-                            FaceOrientation.Enabled = false
+                            if FaceOrientation then
+                                FaceOrientation.Enabled = false
+                            end
                             Humanoid.AutoRotate = true
                             Humanoid:Move(Vector3.zero)
                         end
@@ -491,7 +507,9 @@ return {
                     else
                         PatrolState.PatrolPosition = nil
                         AICFeature.S.FarmReturnPosition = nil
-                        FaceOrientation.Enabled = false
+                        if FaceOrientation then
+                            FaceOrientation.Enabled = false
+                        end
                         Humanoid.AutoRotate = true
                         Humanoid:Move(Vector3.zero)
                     end
@@ -531,7 +549,9 @@ return {
                     end
 
                     if not AICCombat.IsCombatTargetValid(AICCombat.S.ClosestTarget) then
-                        FaceOrientation.Enabled = false
+                        if FaceOrientation then
+                            FaceOrientation.Enabled = false
+                        end
                         Humanoid.AutoRotate = true
                         Humanoid:Move(Vector3.zero)
                         return

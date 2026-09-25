@@ -14,7 +14,10 @@ return {
         local HttpService        = game:GetService("HttpService")
         
         local Player    = Players.LocalPlayer
-        local PlayerGui = Player:WaitForChild("PlayerGui", 10)
+        local PlayerGui = Player:WaitForChild("PlayerGui", 30)
+        if not PlayerGui then
+            error("[AIC] PlayerGui not found — cannot start AutoFarm UI")
+        end
         
         --==============================================================
         --// LAYERS
@@ -861,7 +864,20 @@ return {
         --// Real stuck detection: barely moving while actively trying to move.
         --// Two consecutive samples prevent a single frame against a corner
         --// from counting as stuck.
+        local Runtime = {}
+
         function Runtime:GetCharacter()
+            -- Refresh from Player if character was destroyed or never set
+            if not Character or not Character.Parent then
+                Character = Player.Character
+                Humanoid = Character and Character:FindFirstChildOfClass("Humanoid") or nil
+                RootPart = Character and Character:FindFirstChild("HumanoidRootPart") or nil
+            elseif not Humanoid or not Humanoid.Parent then
+                Humanoid = Character:FindFirstChildOfClass("Humanoid")
+            end
+            if Character and Character.Parent and (not RootPart or not RootPart.Parent) then
+                RootPart = Character:FindFirstChild("HumanoidRootPart")
+            end
             return Character, Humanoid, RootPart
         end
 
@@ -930,6 +946,13 @@ return {
         Context.UIRef = UIRef
         Context.NotifyAction = NotifyAction
         Context.PatrolState = PatrolState
+        -- Seed character handles so GetCharacter works before first updateCharacter()
+        Character = Player.Character
+        if Character then
+            Humanoid = Character:FindFirstChildOfClass("Humanoid")
+            RootPart = Character:FindFirstChild("HumanoidRootPart")
+        end
+
         Context.Runtime = Runtime
         Context.DEBUG_COLORS = DEBUG_COLORS
 

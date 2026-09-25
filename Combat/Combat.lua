@@ -53,6 +53,10 @@ return {
             if Direction.Magnitude <= 0.01 then
                 return
             end
+
+            if not FaceOrientation then
+                return
+            end
         
             FaceOrientation.CFrame = CFrame.lookAt(
                 RootPosition,

@@ -301,7 +301,9 @@ return {
             local _, Amount = AICUI.GetItem(InventoryValue, AICUI.S.TargetCurrency)
         
             AICUI.S.EventCurrency = Amount
-            UIRef.EventCurrencyLabel.Text = "EVENT CURRENCY  " .. tostring(AICUI.S.EventCurrency)
+            if UIRef.EventCurrencyLabel then
+                UIRef.EventCurrencyLabel.Text = "EVENT CURRENCY  " .. tostring(AICUI.S.EventCurrency)
+            end
         end
         function AICUI.updatePlayTime()
             local ServerAge = math.floor(workspace.DistributedGameTime)
@@ -310,13 +312,17 @@ return {
             local Minutes = math.floor((ServerAge % 3600) / 60)
             local Seconds = ServerAge % 60
         
-            UIRef.ServerAgeLabel.Text = "PLAY TIME      " .. string.format("%02d:%02d:%02d", Hours, Minutes, Seconds)
+            if UIRef.ServerAgeLabel then
+                UIRef.ServerAgeLabel.Text = "PLAY TIME      " .. string.format("%02d:%02d:%02d", Hours, Minutes, Seconds)
+            end
         end
         function AICUI.updatePosition()
-        local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            if not UIRef.PositionLabel then
+                return
+            end
             if RootPart then
                 local Position = RootPart.Position
-        
                 UIRef.PositionLabel.Text = string.format(
                     "POSITION       %.1f, %.1f, %.1f",
                     Position.X,
