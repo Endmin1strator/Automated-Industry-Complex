@@ -48,11 +48,56 @@ local REMOTE_MODULES = {
     "UI/Components.lua",
 }
 
+--// Modules that are not specs. UI/Utils is the UI library that Runtime
+--// loads itself.
+local NON_SPEC_MODULES = {
+    ["UI/Utils.lua"] = true,
+}
+
+--// Start order. Dependencies still start first, but modules are otherwise
+--// started in this order instead of pairs() order, so the controls each
+--// module adds always appear in the same place in the window.
+local START_ORDER = {
+    "Runtime",
+    "SaveConfig",
+    "ProfileManager",
+    "Components",
+    "CombatUtils",
+    "EnemyPriority",
+    "Targeting",
+    "Navigation",
+    "Combat",
+    "AutoFarming",
+    "AutoBlock",
+    "SafeCombat",
+    "AutoSkill",
+    "AutoFind",
+    "IgnoreFarmZone",
+    "AutoPatrol",
+    "ReturnToFarmZone",
+    "ResetOnBoostOut",
+    "ResetStats",
+    "DebugVisualizer",
+    "AutoHeal",
+    "AutoRefill",
+    "AntiAFK",
+    "AutoCraft",
+    "ProfileSettings",
+    "Waypoints",
+    "Farmzone",
+    "Deadzone",
+    "Bootstrap",
+    "Heartbeat",
+}
+
 local function collect(Container, Prefix, Output)
     for _, Child in ipairs(Container:GetChildren()) do
         if Child:IsA("Folder") then
             collect(Child, Prefix .. Child.Name .. "/", Output)
-        elseif Child:IsA("ModuleScript") and Child ~= script then
+        elseif Child:IsA("ModuleScript")
+            and Child ~= script
+            and not NON_SPEC_MODULES[Prefix .. Child.Name .. ".lua"]
+        then
             Output[Prefix .. Child.Name .. ".lua"] = Child
         end
     end
@@ -134,8 +179,43 @@ local function start(Name)
     return Module
 end
 
+for _, Name in ipairs(START_ORDER) do
+    if Specs[Name] then
+        start(Name)
+    end
+end
+
+--// Anything not listed above, in a stable order.
+local Remaining = {}
 for Name in pairs(Specs) do
+    if not Started[Name] then
+        table.insert(Remaining, Name)
+    end
+end
+table.sort(Remaining)
+for _, Name in ipairs(Remaining) do
     start(Name)
+end
+
+--// Controls that AFV2 places after every feature toggle (the health sliders
+--// and the Debug Visualizer toggle). Built here so they land below the
+--// toggles instead of wherever their module happened to start.
+for _, Name in ipairs(START_ORDER) do
+    local Module = Context.Modules[Name]
+
+    if type(Module) == "table" and type(Module.BuildLateUI) == "function" then
+        Module:BuildLateUI()
+    end
+end
+
+--// Runs once every control exists. ProfileSettings restores the last used
+--// profile here, which touches controls owned by several other modules.
+for _, Name in ipairs(START_ORDER) do
+    local Module = Context.Modules[Name]
+
+    if type(Module) == "table" and type(Module.Finalize) == "function" then
+        Module:Finalize()
+    end
 end
 
 Context.Heartbeat:Start(Context.Features)

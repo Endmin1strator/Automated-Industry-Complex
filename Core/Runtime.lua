@@ -932,7 +932,6 @@ return {
         Context.Player = Player
         Context.PlayerGui = PlayerGui
         Context.CONFIG = CONFIG
-        Context.PLACE_CONFIG = PlaceConfig
         Context.AICConfig = AICConfig
         Context.AICProfile = AICProfile
         Context.AICCombatUtils = AICCombatUtils
@@ -953,9 +952,20 @@ return {
             RootPart = Character:FindFirstChild("HumanoidRootPart")
         end
 
+        --// Resolve the place config here, before any other module starts.
+        --// ProfileManager, Farmzone, Waypoints and AutoBlock read it while
+        --// they build, so it cannot wait for Bootstrap.
+        PlaceConfig = AICConfig.NormalizePlaceConfig(AICConfig.IsValidPlace(game.PlaceId) or {})
+        BasePlaceConfig = AICConfig.NormalizePlaceConfig(AICConfig.IsValidPlace(game.PlaceId) or {})
+        CONFIG.TARGET_ENTITY_PRIORITY = PlaceConfig.DEFAULT_TARGET_PRIORITY or {}
+        Context.PLACE_CONFIG = PlaceConfig
+
         Context.Runtime = Runtime
         Context.DEBUG_COLORS = DEBUG_COLORS
 
-        return Context
+        --// Init stores whatever Start returns as Context.Runtime, so this has
+        --// to be the Runtime object. Returning Context replaced Runtime with
+        --// Context and every Runtime:GetX() call failed.
+        return Runtime
     end,
 }

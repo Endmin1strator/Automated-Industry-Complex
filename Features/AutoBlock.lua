@@ -2,7 +2,7 @@
 return {
     Name = "AutoBlock",
     IsFeature = true,
-    Dependencies = {"Runtime", "ProfileManager", "Components"},
+    Dependencies = {"Runtime", "SaveConfig", "ProfileManager", "Components"},
 
     Start = function(Context)
         local Runtime = Context.Runtime
@@ -337,22 +337,9 @@ return {
         end
 
         function AutoBlock:Update()
-            if not self.Enabled then
-                return
-            end
-
-            for _, OtherPlayer in Players:GetPlayers() do
-                if OtherPlayer ~= Player and not self:IsWhitelisted(OtherPlayer.UserId) then
-                    if not self:IsBlocked(OtherPlayer.UserId) then
-                        self:PromptBlockPlayer(OtherPlayer)
-                        return
-                    end
-
-                    AICFeature.S.BlockCache[OtherPlayer.UserId] = nil
-                    self:TeleportToPlace()
-                    return
-                end
-            end
+            --// The player check runs inside the AutoFarming loop, after the
+            --// Auto Farm and retreat gates, as it did in AFV2. Running it here
+            --// too prompted twice and teleported with Auto Farm switched off.
         end
 
         AutoBlock:CreateUI()

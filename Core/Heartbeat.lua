@@ -10,9 +10,8 @@ return {
 
         function Heartbeat:Start(Features)
             local RunService =
-                Context.Runtime
-                and Context.Runtime.Services
-                and Context.Runtime.Services.RunService
+                Context.Services
+                and Context.Services.RunService
                 or game:GetService("RunService")
 
             if self.Connection then

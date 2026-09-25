@@ -11,6 +11,7 @@ return {
         local AICCombat = Context.AICCombat
         local AICProfile = Context.AICProfile
         local AICUI = Context.AICUI
+        local PatrolState = Context.PatrolState
 
         local Feature = {
             Name = "IgnoreFarmZone",
@@ -54,6 +55,8 @@ return {
                     table.clear(AICCombat.S.CombatGroupCache)
                     AICCombat.ResetTargetReposition()
                     AICFeature.S.DeadzoneEscapePosition = nil
+                    PatrolState.PatrolPosition = nil
+                    PatrolState.LastPatrolCalculateTime = 0
                     AICFeature.S.FarmReturnPosition = nil
                     AICFeature.S.LastFarmReturnCalculateTime = 0
                     AICCombat.UpdateValidMobs()

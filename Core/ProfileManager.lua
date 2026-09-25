@@ -21,6 +21,22 @@ return {
         local PROFILE_FOLDER = "AutoFarmProfiles"
         local PROFILE_FILE = PROFILE_FOLDER .. "/" .. tostring(game.PlaceId) .. ".json"
 
+        --// Short keys for feature toggles in exported/imported profile text.
+        --// Must match AFV2 so saves move between the two builds.
+        local COMPACT_FEATURE_KEYS = {
+            AutoFarm = "a",
+            AutoBlock = "b",
+            SafeCombat = "c",
+            AutoFind = "d",
+            IgnoreFarmZone = "e",
+            AutoPatrol = "f",
+            ReturnToFarmZone = "g",
+            AutoSkill = "h",
+            ResetOnBoostOut = "i",
+            ResetStats = "j",
+            DebugVisualizer = "k",
+        }
+
         AICProfile.S.ActiveProfileName = nil
         AICProfile.S.ProfileSaveQueued = false
         AICProfile.S.ProfileData = nil
@@ -236,7 +252,7 @@ return {
         end
 
         function AICProfile.CaptureCurrentProfile(Name)
-            local FarmConfig = AICConfig.NormalizePlaceConfig(PlaceConfig)
+            local FarmConfig = AICConfig.NormalizePlaceConfig(Runtime:GetPlaceConfig())
 
             return {
                 Name = Name or AICProfile.S.ActiveProfileName or "",
@@ -351,7 +367,7 @@ return {
             local Compact = {
                 n = Full.Name,
                 p = Full.PlaceId,
-                c = AICProfile.BuildCompactConfig(BasePlaceConfig, PlaceConfig),
+                c = AICProfile.BuildCompactConfig(BasePlaceConfig, Runtime:GetPlaceConfig()),
                 s = Full.SETTINGS,
             }
 

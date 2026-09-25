@@ -548,7 +548,8 @@ return {
         --// Runtime exposes shared state only. Feature/UI composition is handled by Bootstrap.
 
         local Runtime = {}
-        function Module:CreateUI()
+        --// Called by Init after AutoFarming's sliders, matching AFV2's order.
+        function Module:BuildLateUI()
             if UIRef.FeatureSection then
                 FeatureState.DebugVisualizer.Button = UIRef.FeatureSection:AddToggle(
                     "Debug Visualizer",
@@ -566,7 +567,9 @@ return {
                     end
                 )
             end
+        end
 
+        function Module:CreateUI()
             if UIRef.DebugSection then
                 FeatureState.DebugWaypoints.Button = UIRef.DebugSection:AddToggle(
                     "Debug Waypoints",

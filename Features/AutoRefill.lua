@@ -33,7 +33,6 @@ return {
             IsFeature = true,
         }
         function Feature.AutoRefillBooster()
-            local Character, Humanoid, RootPart = Runtime:GetCharacter()
             task.spawn(function()
                 local PlayerStats = Player:FindFirstChild("PlayerStats")
                 if not PlayerStats then
@@ -53,7 +52,11 @@ return {
                     if Value.Value ~= 0 then
                         return
                     end
-        
+
+                    --// Resolved at fire time. The connection outlives respawns,
+                    --// so a Humanoid captured at setup would be the dead one.
+                    local _, Humanoid = Runtime:GetCharacter()
+
                     if Humanoid then
                         Humanoid.Health = 0
                     end
@@ -87,7 +90,8 @@ return {
         AICFeature.AutoRefillBooster = function(...) return Feature.AutoRefillBooster(...) end
 
         function Feature:Update()
-            Feature.AutoRefillBooster()
+            --// Bootstrap connects AutoRefillBooster once. Calling it here added
+            --// two new connections on every Heartbeat.
         end
 
         return Feature

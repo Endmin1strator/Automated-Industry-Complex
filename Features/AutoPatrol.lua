@@ -590,11 +590,20 @@ return {
 
         function Feature:CreateUI()
             if UIRef.FeatureSection and UIRef.FeatureSection.AddToggle then
+                self.Enabled = FeatureState.AutoPatrol.Enabled == true
                 self.Button = UIRef.FeatureSection:AddToggle(
                     "Auto Patrol",
                     self.Enabled,
                     function(Value)
                         self:SetEnabled(Value)
+
+                        PatrolState.PatrolPosition = nil
+                        PatrolState.LastPatrolCalculateTime = 0
+                        PatrolState.PatrolDirection = nil
+                        PatrolState.PatrolPauseUntil = 0
+                        PatrolState.PatrolLastPosition = nil
+                        PatrolState.PatrolLastDistance = 0
+                        AICProfile.SaveActiveProfile()
                     end
                 )
                 FeatureState.AutoPatrol.Button = self.Button

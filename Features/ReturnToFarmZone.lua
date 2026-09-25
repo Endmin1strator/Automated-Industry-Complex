@@ -174,11 +174,18 @@ return {
 
         function Feature:CreateUI()
             if UIRef.FeatureSection and UIRef.FeatureSection.AddToggle then
+                --// Defaults to on. Without this the toggle drew as off while the
+                --// return logic was actually running.
+                self.Enabled = FeatureState.ReturnToFarmZone.Enabled == true
                 self.Button = UIRef.FeatureSection:AddToggle(
                     "Return To Farm Zone",
                     self.Enabled,
                     function(Value)
                         self:SetEnabled(Value)
+
+                        AICFeature.S.FarmReturnPosition = nil
+                        AICFeature.S.LastFarmReturnCalculateTime = 0
+                        AICProfile.SaveActiveProfile()
                     end
                 )
                 FeatureState.ReturnToFarmZone.Button = self.Button

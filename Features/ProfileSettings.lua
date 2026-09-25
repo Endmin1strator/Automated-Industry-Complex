@@ -294,6 +294,16 @@ end)
 
 
         function Module:Finalize()
+            AICUI.RefreshWaypointList()
+            AICUI.RefreshFarmZoneList()
+            AICUI.RefreshDeadzoneList()
+            AICUI.updatePosition()
+
+            --// Initial debug setup.
+            AICDebug.UpdateDebugVisualizer()
+
+            --// Load the most recently used profile for this PlaceId. If there
+            --// is none, the place_config defaults stay in effect.
             if AICProfile.S.ProfileStore.LastUsed
                 and AICProfile.S.ProfileStore.Profiles[AICProfile.S.ProfileStore.LastUsed]
             then

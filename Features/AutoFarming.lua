@@ -612,7 +612,13 @@ return {
 
         Feature:CreateUI()
 
-        if UIRef.FeatureSection then
+        --// Called by Init after every feature toggle exists, so the sliders sit
+        --// below Reset Stats as they do in AFV2.
+        function Feature:BuildLateUI()
+            if not UIRef.FeatureSection then
+                return
+            end
+
             UIRef.ExecuteChargeSlider = UIRef.FeatureSection:AddSlider(
                 "Execute Charge at Enemy HP %",
                 math.clamp(tonumber(CONFIG.EXECUTE_CHARGE_HP_PERCENT) or 0, 0, 90),

@@ -14,15 +14,15 @@ return {
 
         function Feature:GetPriority()
             return Config.EnemyPriority
-                or (Runtime.CONFIG and Runtime.CONFIG.TARGET_ENTITY_PRIORITY)
+                or (Context.CONFIG and Context.CONFIG.TARGET_ENTITY_PRIORITY)
                 or {}
         end
 
         function Feature:SetPriority(Value)
             Config.EnemyPriority = Value or {}
 
-            if Runtime.CONFIG then
-                Runtime.CONFIG.TARGET_ENTITY_PRIORITY = Config.EnemyPriority
+            if Context.CONFIG then
+                Context.CONFIG.TARGET_ENTITY_PRIORITY = Config.EnemyPriority
             end
         end
 

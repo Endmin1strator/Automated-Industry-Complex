@@ -47,22 +47,10 @@ return {
         --======================================================================
         
         
-        AICPlaceConfig = AICConfig.IsValidPlace(game.PlaceId)
-        
-        AICPlaceConfig = AICConfig.NormalizePlaceConfig(AICPlaceConfig or {})
-        Runtime:SetPlaceConfig(AICPlaceConfig)
-        Context.PLACE_CONFIG = AICPlaceConfig
-        
-        BasePlaceConfig = AICConfig.NormalizePlaceConfig(AICConfig.IsValidPlace(game.PlaceId) or {})
-        Runtime:SetBasePlaceConfig(BasePlaceConfig)
-        
-        
-        
-        
-        if AICPlaceConfig then
-            CONFIG.TARGET_ENTITY_PRIORITY = AICPlaceConfig.DEFAULT_TARGET_PRIORITY
-        end
-        
+        --// PlaceConfig, BasePlaceConfig and the default target priority are
+        --// resolved in Runtime. Rebuilding them here would hand out new tables
+        --// after ProfileManager and the zone modules already hold the old ones.
+
         AICFeature.updateCharacter()
         
         AICFeature.CreateToggleContainer()
