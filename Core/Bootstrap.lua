@@ -61,6 +61,8 @@ return {
         
             AICFeature.S.DEATH_COUNT += 1
             CONFIG.CURRENT_WAYPOINT_TARGET = 1
+            AICFeature.S.WaypointWaitUntil = nil
+            if AICFeature.ResetWaypointLoop then AICFeature.ResetWaypointLoop() end
             AICDebug.ResetDebugWaypoints()
             AICDebug.UpdateDebugWaypointColors()
             AICCombat.S.ClosestTarget = nil
@@ -233,7 +235,22 @@ return {
             if AICCombat.IsEntityInPriority(EntityName) then
                 return
             end
-        
+
+            --// A player entry is accepted only while that player is still in
+            --// the server, and never the local player.
+            if AICCombat.IsPlayerTargetName(EntityName) then
+                local OtherPlayer = Players:FindFirstChild(string.sub(EntityName, 2))
+
+                if not OtherPlayer
+                    or not OtherPlayer:IsA("Player")
+                    or not AICCombat.IsTargetablePlayer(OtherPlayer)
+                then
+                    NotifyAction("Target Priority", "Player is not in this server")
+                    AICUI.RefreshTargetDropdown()
+                    return
+                end
+            end
+
             UIRef.PriorityComponent:Add(EntityName)
         end
         

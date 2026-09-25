@@ -51,7 +51,8 @@ return {
             local PreviousReturnPosition = AICFeature.S.FarmReturnPosition
             AICFeature.S.FarmReturnPosition = nil
         
-            local FarmCenter = (PlaceConfig.FARM_ZONES[1] and PlaceConfig.FARM_ZONES[1].Center) or RootPart.Position
+            local ActiveZone = AICCombatUtils.GetActiveFarmZone()
+            local FarmCenter = (ActiveZone and ActiveZone.Center) or RootPart.Position
             local Origin = RootPart.Position
             local Candidates = {}
         
@@ -112,7 +113,8 @@ return {
                 return false
             end
         
-            local FarmCenter = (PlaceConfig.FARM_ZONES[1] and PlaceConfig.FARM_ZONES[1].Center) or RootPart.Position
+            local ActiveZone = AICCombatUtils.GetActiveFarmZone()
+            local FarmCenter = (ActiveZone and ActiveZone.Center) or RootPart.Position
             local CenterOffset = RootPart.Position - FarmCenter
             local CenterDistance = Vector3.new(CenterOffset.X, 0, CenterOffset.Z).Magnitude
         

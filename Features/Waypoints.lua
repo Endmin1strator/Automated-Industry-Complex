@@ -66,7 +66,42 @@ UIRef.WaypointSection:AddButton("Clear Waypoints", function()
     NotifyAction("Waypoint", "Cleared all waypoints")
 end)
 
-UIRef.WaypointListComponent = UIRef.WaypointSection:AddPriority("All Waypoints", AICUI.BuildWaypointLabels())
+UIRef.WaypointListComponent = UIRef.WaypointSection:AddPriority("All Waypoints", AICUI.BuildWaypointLabels(), {
+    --// Seconds to stand at each waypoint before heading to the next.
+    Values = true,
+    ValueLabel = "Wait (s)",
+    Default = 0,
+    Min = 0,
+    Max = AICConfig.MAX_WAYPOINT_WAIT,
+})
+
+UIRef.WaypointListComponent.OnValueChanged = function(Index, Value)
+    local PlaceConfig = Runtime:GetPlaceConfig()
+
+    if not AICProfile.S.ActiveProfileName then
+        AICUI.SetProfileStatus("DEFAULT PLACE_CONFIG IS READ-ONLY")
+        AICUI.RefreshWaypointList()
+        return
+    end
+
+    PlaceConfig.WAYPOINT_WAITS = AICConfig.NormalizeWaitList(PlaceConfig.WAYPOINT_WAITS, #PlaceConfig.WAYPOINTS)
+    PlaceConfig.WAYPOINT_WAITS[Index] = Value
+    AICProfile.QueueProfileSave()
+    AICUI.SetProfileStatus("WAYPOINT #" .. tostring(Index) .. " WAIT " .. tostring(Value) .. "s")
+end
+
+--// Swaps two waypoints together with their wait times.
+local function SwapWaypoints(A, B)
+    local PlaceConfig = Runtime:GetPlaceConfig()
+    local Waits = AICConfig.NormalizeWaitList(PlaceConfig.WAYPOINT_WAITS, #PlaceConfig.WAYPOINTS)
+    local Zones = AICConfig.NormalizeZonePairs(PlaceConfig.WAYPOINT_ZONES, #PlaceConfig.WAYPOINTS, #PlaceConfig.FARM_ZONES)
+
+    PlaceConfig.WAYPOINTS[A], PlaceConfig.WAYPOINTS[B] = PlaceConfig.WAYPOINTS[B], PlaceConfig.WAYPOINTS[A]
+    Waits[A], Waits[B] = Waits[B], Waits[A]
+    Zones[A], Zones[B] = Zones[B], Zones[A]
+    PlaceConfig.WAYPOINT_WAITS = Waits
+    PlaceConfig.WAYPOINT_ZONES = Zones
+end
 
 AICUI.S.OriginalWaypointMoveUp = UIRef.WaypointListComponent.MoveUp
 AICUI.S.OriginalWaypointMoveDown = UIRef.WaypointListComponent.MoveDown
@@ -81,8 +116,7 @@ function UIRef.WaypointListComponent:MoveUp(Label)
     local Index = table.find(AICUI.BuildWaypointLabels(), Label)
 
     if Index and Index > 1 then
-        Runtime:GetPlaceConfig().WAYPOINTS[Index], Runtime:GetPlaceConfig().WAYPOINTS[Index - 1] =
-            Runtime:GetPlaceConfig().WAYPOINTS[Index - 1], Runtime:GetPlaceConfig().WAYPOINTS[Index]
+        SwapWaypoints(Index, Index - 1)
 
         AICUI.S.OriginalWaypointMoveUp(self, Label)
         CONFIG.CURRENT_WAYPOINT_TARGET = math.clamp(
@@ -108,8 +142,7 @@ function UIRef.WaypointListComponent:MoveDown(Label)
     local Index = table.find(AICUI.BuildWaypointLabels(), Label)
 
     if Index and Index < #Runtime:GetPlaceConfig().WAYPOINTS then
-        Runtime:GetPlaceConfig().WAYPOINTS[Index], Runtime:GetPlaceConfig().WAYPOINTS[Index + 1] =
-            Runtime:GetPlaceConfig().WAYPOINTS[Index + 1], Runtime:GetPlaceConfig().WAYPOINTS[Index]
+        SwapWaypoints(Index, Index + 1)
 
         AICUI.S.OriginalWaypointMoveDown(self, Label)
         CONFIG.CURRENT_WAYPOINT_TARGET = math.clamp(
@@ -135,7 +168,12 @@ function UIRef.WaypointListComponent:Remove(Label)
     local Index = table.find(AICUI.BuildWaypointLabels(), Label)
 
     if Index then
-        table.remove(Runtime:GetPlaceConfig().WAYPOINTS, Index)
+        local PlaceConfig = Runtime:GetPlaceConfig()
+        PlaceConfig.WAYPOINT_WAITS = AICConfig.NormalizeWaitList(PlaceConfig.WAYPOINT_WAITS, #PlaceConfig.WAYPOINTS)
+        PlaceConfig.WAYPOINT_ZONES = AICConfig.NormalizeZonePairs(PlaceConfig.WAYPOINT_ZONES, #PlaceConfig.WAYPOINTS, #PlaceConfig.FARM_ZONES)
+        table.remove(PlaceConfig.WAYPOINTS, Index)
+        table.remove(PlaceConfig.WAYPOINT_WAITS, Index)
+        table.remove(PlaceConfig.WAYPOINT_ZONES, Index)
         AICUI.S.OriginalWaypointRemove(self, Label)
         CONFIG.CURRENT_WAYPOINT_TARGET = math.clamp(
             CONFIG.CURRENT_WAYPOINT_TARGET,

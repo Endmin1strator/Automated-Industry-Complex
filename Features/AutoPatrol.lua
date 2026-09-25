@@ -151,7 +151,7 @@ return {
             if FeatureState.IgnoreFarmZone.Enabled then
                 Center = (RootPart and RootPart.Position) or Vector3.zero
             else
-                Center = (PlaceConfig and PlaceConfig.FARM_ZONES[1] and PlaceConfig.FARM_ZONES[1].Center)
+                Center = (AICCombatUtils.GetActiveFarmZone() and AICCombatUtils.GetActiveFarmZone().Center)
                     or (RootPart and RootPart.Position)
                     or Vector3.zero
             end

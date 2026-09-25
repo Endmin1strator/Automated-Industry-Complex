@@ -61,16 +61,83 @@ return {
         --// AICEntity  ::  mob discovery, validation, priority, target selection
         --// 15 function(s)
         ------------------------------------------------------------------------
+        --// Players share the priority list with mobs. They are stored as
+        --// "@Name" so a player can never collide with a mob's entity name.
+        local PLAYER_TARGET_PREFIX = "@"
+
+        function AICCombat.GetPlayerTargetName(OtherPlayer)
+            return PLAYER_TARGET_PREFIX .. OtherPlayer.Name
+        end
+
+        function AICCombat.IsPlayerTargetName(EntityName)
+            return type(EntityName) == "string"
+                and string.sub(EntityName, 1, #PLAYER_TARGET_PREFIX) == PLAYER_TARGET_PREFIX
+        end
+
+        --// A player can be targeted only while they are still in the server,
+        --// and never the local player.
+        function AICCombat.IsTargetablePlayer(OtherPlayer)
+            return OtherPlayer ~= nil
+                and OtherPlayer ~= Player
+                and OtherPlayer.Parent == Players
+        end
+
+        --// Entity name used for priority matching: Config.Entity for a mob in
+        --// the Mobs folder, "@Name" for another player's character, else nil.
+        function AICCombat.GetTargetEntityName(Model)
+            if not Model or not Model:IsA("Model") then
+                return nil
+            end
+
+            local MobFolder = workspace:FindFirstChild("Mobs")
+
+            if MobFolder and Model:IsDescendantOf(MobFolder) then
+                local Config = Model:FindFirstChild("Config")
+                local Entity = Config and Config:FindFirstChild("Entity")
+
+                if Entity and Entity:IsA("StringValue") and Entity.Value ~= "" then
+                    return Entity.Value
+                end
+
+                return nil
+            end
+
+            local OtherPlayer = Players:GetPlayerFromCharacter(Model)
+
+            if AICCombat.IsTargetablePlayer(OtherPlayer) then
+                return AICCombat.GetPlayerTargetName(OtherPlayer)
+            end
+
+            return nil
+        end
+
+        --// Characters of players whose "@Name" is in the priority list.
+        function AICCombat.GetPriorityPlayerCharacters()
+            local Result = {}
+
+            for _, OtherPlayer in ipairs(Players:GetPlayers()) do
+                if AICCombat.IsTargetablePlayer(OtherPlayer)
+                    and OtherPlayer.Character
+                    and AICCombat.IsEntityTargeted(AICCombat.GetPlayerTargetName(OtherPlayer))
+                then
+                    table.insert(Result, OtherPlayer.Character)
+                end
+            end
+
+            return Result
+        end
+
         function AICCombat.GetDetectedEnemyEntities()
             local MobFolder = workspace:FindFirstChild("Mobs")
-        
-            if not MobFolder then
-                return {}
-            end
-        
             local EntitySet = {}
-        
-            for _, Mob in MobFolder:GetChildren() do
+
+            for _, OtherPlayer in ipairs(Players:GetPlayers()) do
+                if AICCombat.IsTargetablePlayer(OtherPlayer) then
+                    EntitySet[AICCombat.GetPlayerTargetName(OtherPlayer)] = true
+                end
+            end
+
+            for _, Mob in (MobFolder and MobFolder:GetChildren() or {}) do
                 if not Mob:IsA("Model") then
                     continue
                 end
@@ -123,6 +190,22 @@ return {
         end
         function AICCombat.IsEntityInPriority(EntityName: string): boolean
             return table.find(CONFIG.TARGET_ENTITY_PRIORITY, EntityName) ~= nil
+        end
+
+        --// Names the bot may attack right now, in priority order. A paired
+        --// zone fought by the waypoint loop uses its own list when it has one.
+        function AICCombat.GetActiveTargetList()
+            local Zone = AICCombatUtils.S.ActiveZoneIndex and AICCombatUtils.GetActiveFarmZone()
+
+            if Zone and type(Zone.Targets) == "table" and #Zone.Targets > 0 then
+                return Zone.Targets
+            end
+
+            return CONFIG.TARGET_ENTITY_PRIORITY or {}
+        end
+
+        function AICCombat.IsEntityTargeted(EntityName)
+            return table.find(AICCombat.GetActiveTargetList(), EntityName) ~= nil
         end
         
         --// Raised whenever the set of mobs, or the entity a mob reports, changes.
@@ -315,25 +398,10 @@ return {
                 return false
             end
         
-            local MobFolder = workspace:FindFirstChild("Mobs")
-        
-            if not MobFolder or not Mob:IsDescendantOf(MobFolder) then
-                return false
-            end
-        
-            local Config = Mob:FindFirstChild("Config")
-        
-            if not Config then
-                return false
-            end
-        
-            local Entity = Config:FindFirstChild("Entity")
-        
-            if not Entity or not Entity:IsA("StringValue") then
-                return false
-            end
-        
-            if not AICCombat.IsEntityInPriority(Entity.Value) then
+            --// A mob from the Mobs folder, or another player still in the server.
+            local EntityName = AICCombat.GetTargetEntityName(Mob)
+
+            if not EntityName or not AICCombat.IsEntityTargeted(EntityName) then
                 return false
             end
         
@@ -390,7 +458,9 @@ return {
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             local MobFolder = workspace:FindFirstChild("Mobs")
         
-            if not MobFolder or not RootPart then
+            --// A missing Mobs folder no longer ends the scan: player targets
+            --// can still be valid without it.
+            if not RootPart then
                 table.clear(AICCombat.S.ValidMobs)
         
                 if AICCombat.S.ClosestTarget and not AICCombat.IsTargetLockValid(AICCombat.S.ClosestTarget) then
@@ -401,10 +471,16 @@ return {
             end
         
             local CurrentMobs = {}
-        
-            for _, Mob in MobFolder:GetChildren() do
+            local Candidates = MobFolder and MobFolder:GetChildren() or {}
+
+            --// Players on the priority list are validated alongside mobs.
+            for _, PlayerCharacter in ipairs(AICCombat.GetPriorityPlayerCharacters()) do
+                table.insert(Candidates, PlayerCharacter)
+            end
+
+            for _, Mob in Candidates do
                 CurrentMobs[Mob] = true
-        
+
                 if AICCombat.IsValidMob(Mob) then
                     AICCombat.S.ValidMobs[Mob] = true
                 else
@@ -425,19 +501,13 @@ return {
         
         --// Closest Visible Goblin
         function AICCombat.GetMobPriority(Mob)
-            local Config = Mob:FindFirstChild("Config")
-        
-            if not Config then
+            local EntityName = AICCombat.GetTargetEntityName(Mob)
+
+            if not EntityName then
                 return nil
             end
-        
-            local Entity = Config:FindFirstChild("Entity")
-        
-            if not Entity then
-                return nil
-            end
-        
-            return table.find(CONFIG.TARGET_ENTITY_PRIORITY, Entity.Value)
+
+            return table.find(AICCombat.GetActiveTargetList(), EntityName)
         end
         
         --// Priority always decides first. Target Type only breaks ties between mobs
@@ -515,9 +585,14 @@ return {
             --// validation failure from making the target completely invisible.
             if not BestTarget then
                 local MobFolder = workspace:FindFirstChild("Mobs")
-        
-                if MobFolder then
-                    for _, Mob in MobFolder:GetChildren() do
+                local Candidates = MobFolder and MobFolder:GetChildren() or {}
+
+                for _, PlayerCharacter in ipairs(AICCombat.GetPriorityPlayerCharacters()) do
+                    table.insert(Candidates, PlayerCharacter)
+                end
+
+                if #Candidates > 0 then
+                    for _, Mob in Candidates do
                         if AICCombat.IsTargetLockValid(Mob) then
                             local Priority = AICCombat.GetMobPriority(Mob)
                             local Distance = AICCombatUtils.GetMobDistance(Mob)
@@ -699,34 +774,16 @@ return {
                 return false
             end
         
-            local MobFolder = workspace:FindFirstChild("Mobs")
-        
-            if not MobFolder
-                or not Mob:IsDescendantOf(MobFolder)
-            then
-                return false
-            end
-        
-            local Config      = Mob:FindFirstChild("Config")
             local MobHumanoid = Mob:FindFirstChildOfClass("Humanoid")
             local MobRoot     = Mob:FindFirstChild("HumanoidRootPart")
-        
-            if not Config
-                or not MobHumanoid
-                or not MobRoot
-            then
+
+            if not MobHumanoid or not MobRoot then
                 return false
             end
-        
-            local Entity = Config:FindFirstChild("Entity")
-        
-            if not Entity
-                or not Entity:IsA("StringValue")
-            then
-                return false
-            end
-        
-            if not AICCombat.IsEntityInPriority(Entity.Value) then
+
+            local EntityName = AICCombat.GetTargetEntityName(Mob)
+
+            if not EntityName or not AICCombat.IsEntityTargeted(EntityName) then
                 return false
             end
         
@@ -892,6 +949,27 @@ return {
         end
 
         Module:CreateUI()
+
+        --// Players are targets too, so the picker follows the roster, and a
+        --// player who leaves is dropped at once rather than on the next scan.
+        Players.PlayerAdded:Connect(function()
+            AICCombat.NotifyMobSetChanged()
+        end)
+
+        Players.PlayerRemoving:Connect(function(LeavingPlayer)
+            local LeavingCharacter = LeavingPlayer.Character
+
+            if LeavingCharacter then
+                AICCombat.S.ValidMobs[LeavingCharacter] = nil
+
+                if AICCombat.S.ClosestTarget == LeavingCharacter then
+                    AICCombat.S.ClosestTarget = nil
+                    AICCombat.ResetTargetReposition()
+                end
+            end
+
+            task.defer(AICCombat.NotifyMobSetChanged)
+        end)
 
         AICCombat.S.ExistingMobFolder = workspace:FindFirstChild("Mobs")
 

@@ -2407,20 +2407,61 @@ end
 --// Priority
 --//==============================================================
 
+--// options (all optional):
+--//   Values       true to give every row an editable number (e.g. a wait time)
+--//   ValueLabel   short caption shown in the header, e.g. "WAIT (S)"
+--//   Default      value for rows added without one (default 0)
+--//   Min, Max     clamp for typed values (default 0 .. math.huge)
+--//   Draggable    false to turn off drag-to-reorder (default on)
+--//
+--// Rows are reordered by dragging the name. The drop is applied as a run of
+--// MoveUp / MoveDown calls, so any override a caller installed on those two
+--// still sees every step.
 function Library.SectionMethods:AddPriority(
     name: string,
-    values: {string}?
+    values: {string}?,
+    options: {[string]: any}?
 )
+    options = options or {}
+
     local component = {}
     component.Library = self.Library
 
     component.Priority = {}
+    component.Values = {}
+
+    local hasValues = options.Values == true
+    local draggable = options.Draggable ~= false
+    local defaultValue = tonumber(options.Default) or 0
+    local minValue = tonumber(options.Min) or 0
+    local maxValue = tonumber(options.Max) or math.huge
+
+    local ROW_HEIGHT = 34
+    local ROW_GAP = 3
+    local ROW_STRIDE = ROW_HEIGHT + ROW_GAP
+
+    local function ClampValue(value)
+        return math.clamp(tonumber(value) or defaultValue, minValue, maxValue)
+    end
+
+    --// Keeps Values the same length as Priority.
+    local function FitValues()
+        for index = 1, #component.Priority do
+            component.Values[index] = ClampValue(component.Values[index])
+        end
+
+        for index = #component.Values, #component.Priority + 1, -1 do
+            component.Values[index] = nil
+        end
+    end
 
     if values then
         for _, value in ipairs(values) do
             table.insert(component.Priority, value)
         end
     end
+
+    FitValues()
 
     local frame = New("Frame", {
         Parent = self.Holder,
@@ -2472,9 +2513,19 @@ function Library.SectionMethods:AddPriority(
 
     title.Font = Enum.Font.GothamBold
 
+    local subtitleText = "TARGET PRIORITY LIST"
+
+    if draggable then
+        subtitleText = subtitleText .. "  ·  DRAG TO REORDER"
+    end
+
+    if hasValues and options.ValueLabel then
+        subtitleText = subtitleText .. "  ·  " .. tostring(options.ValueLabel):upper()
+    end
+
     local subtitle = AddText(
         header,
-        "TARGET PRIORITY LIST",
+        subtitleText,
         7,
         UDim2.fromOffset(0, 18),
         UDim2.new(1, -100, 0, 15)
@@ -2519,19 +2570,105 @@ function Library.SectionMethods:AddPriority(
         ZIndex = 16,
     })
 
-    local layout = New("UIListLayout", {
+    New("UIListLayout", {
         Parent = list,
 
         FillDirection = Enum.FillDirection.Vertical,
 
         SortOrder = Enum.SortOrder.LayoutOrder,
 
-        Padding = UDim.new(0, 3),
+        Padding = UDim.new(0, ROW_GAP),
     })
 
     component.List = list
 
+    --// Drop marker. Lives on the outer frame, not in the list, so the list
+    --// layout does not move it around.
+    local dropIndicator = New("Frame", {
+        Parent = frame,
+
+        BackgroundColor3 = self.Library.Theme.Cyan,
+
+        BorderSizePixel = 0,
+
+        Size = UDim2.new(1, 0, 0, 2),
+
+        Visible = false,
+
+        ZIndex = 20,
+    })
+
     local rows = {}
+
+    --// Active drag, or nil. Index is the row being dragged, Target where it
+    --// would land, StartY the pointer height when the drag began.
+    local dragState = nil
+
+    --// Space kept clear on the right of each row for its buttons.
+    local rightReserve = hasValues and 190 or 130
+
+    local function TargetIndexFor(pointerY)
+        local offset = pointerY - dragState.StartY
+        local target = dragState.Index + math.floor(offset / ROW_STRIDE + 0.5)
+
+        return math.clamp(target, 1, #component.Priority)
+    end
+
+    local function ShowDropIndicator(target)
+        if target == dragState.Index then
+            dropIndicator.Visible = false
+            return
+        end
+
+        --// Above the target row when moving up, below it when moving down.
+        local slot = target < dragState.Index and target - 1 or target
+        dropIndicator.Position = UDim2.fromOffset(0, 36 + slot * ROW_STRIDE - ROW_GAP)
+        dropIndicator.Visible = true
+    end
+
+    local function FinishDrag()
+        if not dragState then
+            return
+        end
+
+        local from = dragState.Index
+        local target = dragState.Target
+
+        dragState = nil
+        dropIndicator.Visible = false
+
+        if not target or target == from then
+            --// Nothing moved, but the dragged row is still highlighted.
+            component:_Refresh()
+            return
+        end
+
+        --// Step by index, not by value: an override may relabel every row
+        --// after each step (waypoint labels include their number).
+        if target < from then
+            for index = from, target + 1, -1 do
+                local value = component.Priority[index]
+
+                if value == nil then
+                    break
+                end
+
+                component:MoveUp(value)
+            end
+        else
+            for index = from, target - 1 do
+                local value = component.Priority[index]
+
+                if value == nil then
+                    break
+                end
+
+                component:MoveDown(value)
+            end
+        end
+
+        component:_Refresh()
+    end
 
     local function Refresh()
         for _, row in pairs(rows) do
@@ -2539,6 +2676,7 @@ function Library.SectionMethods:AddPriority(
         end
 
         table.clear(rows)
+        FitValues()
 
         for index, value in ipairs(component.Priority) do
             local row = New("Frame", {
@@ -2550,7 +2688,7 @@ function Library.SectionMethods:AddPriority(
 
                 BorderSizePixel = 0,
 
-                Size = UDim2.new(1, 0, 0, 34),
+                Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
 
                 LayoutOrder = index,
 
@@ -2562,7 +2700,7 @@ function Library.SectionMethods:AddPriority(
                 string.format("%02d", index),
                 8,
                 UDim2.fromOffset(8, 0),
-                UDim2.fromOffset(28, 34)
+                UDim2.fromOffset(28, ROW_HEIGHT)
             )
 
             number.TextColor3 = self.Library.Theme.CyanDark
@@ -2573,7 +2711,7 @@ function Library.SectionMethods:AddPriority(
                 index == 1 and "◆" or "◇",
                 12,
                 UDim2.fromOffset(36, 0),
-                UDim2.fromOffset(20, 34)
+                UDim2.fromOffset(20, ROW_HEIGHT)
             )
 
             marker.TextColor3 =
@@ -2586,10 +2724,48 @@ function Library.SectionMethods:AddPriority(
                 value:upper(),
                 9,
                 UDim2.fromOffset(60, 0),
-                UDim2.new(1, -190, 1, 0)
+                UDim2.new(1, -(rightReserve + 60), 1, 0)
             )
 
             nameLabel.Font = Enum.Font.GothamBold
+
+            if hasValues then
+                local valueBox = New("TextBox", {
+                    Parent = row,
+
+                    BackgroundColor3 = self.Library.Theme.Element,
+
+                    BackgroundTransparency = 0.1,
+
+                    BorderSizePixel = 0,
+
+                    Position = UDim2.new(1, -182, 0.5, -11),
+
+                    Size = UDim2.fromOffset(52, 22),
+
+                    Text = tostring(component.Values[index]),
+
+                    PlaceholderText = tostring(defaultValue),
+
+                    TextColor3 = self.Library.Theme.Text,
+
+                    TextSize = 10,
+
+                    Font = Enum.Font.GothamBold,
+
+                    ClearTextOnFocus = false,
+
+                    ZIndex = 18,
+                })
+
+                AddCorner(valueBox, 4)
+
+                self.Library:_Connect(valueBox.FocusLost, function()
+                    local newValue = ClampValue(valueBox.Text)
+                    valueBox.Text = tostring(newValue)
+                    component:SetValue(index, newValue)
+                end)
+            end
 
             -- Up
             local up = New("TextButton", {
@@ -2599,7 +2775,7 @@ function Library.SectionMethods:AddPriority(
 
                 Position = UDim2.new(1, -125, 0, 0),
 
-                Size = UDim2.fromOffset(35, 34),
+                Size = UDim2.fromOffset(35, ROW_HEIGHT),
 
                 Text = "▲",
 
@@ -2622,7 +2798,7 @@ function Library.SectionMethods:AddPriority(
 
                 Position = UDim2.new(1, -90, 0, 0),
 
-                Size = UDim2.fromOffset(35, 34),
+                Size = UDim2.fromOffset(35, ROW_HEIGHT),
 
                 Text = "▼",
 
@@ -2645,7 +2821,7 @@ function Library.SectionMethods:AddPriority(
 
                 Position = UDim2.new(1, -48, 0, 0),
 
-                Size = UDim2.fromOffset(35, 34),
+                Size = UDim2.fromOffset(35, ROW_HEIGHT),
 
                 Text = "×",
 
@@ -2672,15 +2848,98 @@ function Library.SectionMethods:AddPriority(
                 component:Remove(value)
             end)
 
+            if draggable then
+                --// Invisible grip over the number, marker and name. The
+                --// buttons on the right stay clickable.
+                local grip = New("TextButton", {
+                    Parent = row,
+
+                    BackgroundTransparency = 1,
+
+                    Position = UDim2.fromOffset(0, 0),
+
+                    Size = UDim2.new(1, -rightReserve, 1, 0),
+
+                    Text = "",
+
+                    AutoButtonColor = false,
+
+                    ZIndex = 19,
+                })
+
+                self.Library:_Connect(grip.InputBegan, function(input)
+                    if input.UserInputType ~= Enum.UserInputType.MouseButton1
+                        and input.UserInputType ~= Enum.UserInputType.Touch
+                    then
+                        return
+                    end
+
+                    if dragState or #component.Priority < 2 then
+                        return
+                    end
+
+                    dragState = {
+                        Index = index,
+                        Target = index,
+                        StartY = input.Position.Y,
+                    }
+
+                    row.BackgroundColor3 = self.Library.Theme.CyanDark
+                    row.BackgroundTransparency = 0.45
+
+                    local endConnection
+
+                    endConnection = input.Changed:Connect(function()
+                        if input.UserInputState ~= Enum.UserInputState.End then
+                            return
+                        end
+
+                        endConnection:Disconnect()
+                        FinishDrag()
+                    end)
+                end)
+            end
+
             table.insert(rows, row)
         end
     end
 
-    function component:SetPriority(newPriority: {string})
+    --// One pointer listener per list, not per row: rows are rebuilt on every
+    --// change and would otherwise leak a connection each time.
+    self.Library:_Connect(UserInputService.InputChanged, function(input)
+        if not dragState then
+            return
+        end
+
+        if input.UserInputType ~= Enum.UserInputType.MouseMovement
+            and input.UserInputType ~= Enum.UserInputType.Touch
+        then
+            return
+        end
+
+        dragState.Target = TargetIndexFor(input.Position.Y)
+        ShowDropIndicator(dragState.Target)
+    end)
+
+    function component:_Refresh()
+        Refresh()
+    end
+
+    --// newValues is optional. Without it the current values are kept, trimmed
+    --// or padded with the default to fit the new list.
+    function component:SetPriority(newPriority: {string}, newValues: {number}?)
         table.clear(self.Priority)
 
         for _, value in ipairs(newPriority) do
             table.insert(self.Priority, value)
+        end
+
+        if newValues then
+            table.clear(self.Values)
+
+            for index, value in ipairs(newValues) do
+                self.Values[index] = value
+            end
         end
 
         Refresh()
@@ -2690,12 +2949,35 @@ function Library.SectionMethods:AddPriority(
         return table.clone(self.Priority)
     end
 
-    function component:Add(value: string)
+    function component:GetValues()
+        FitValues()
+        return table.clone(self.Values)
+    end
+
+    function component:GetValue(index: number)
+        return ClampValue(self.Values[index])
+    end
+
+    --// Callers hook OnValueChanged(index, value, label) to persist edits.
+    function component:SetValue(index: number, value: number)
+        if not self.Priority[index] then
+            return
+        end
+
+        self.Values[index] = ClampValue(value)
+
+        if self.OnValueChanged then
+            self.OnValueChanged(index, self.Values[index], self.Priority[index])
+        end
+    end
+
+    function component:Add(value: string, initialValue: number?)
         if table.find(self.Priority, value) then
             return false
         end
 
         table.insert(self.Priority, value)
+        self.Values[#self.Priority] = ClampValue(initialValue)
 
         Refresh()
 
@@ -2710,6 +2992,7 @@ function Library.SectionMethods:AddPriority(
         end
 
         table.remove(self.Priority, index)
+        table.remove(self.Values, index)
 
         Refresh()
 
@@ -2725,6 +3008,8 @@ function Library.SectionMethods:AddPriority(
 
         self.Priority[index], self.Priority[index - 1] =
             self.Priority[index - 1], self.Priority[index]
+        self.Values[index], self.Values[index - 1] =
+            self.Values[index - 1], self.Values[index]
 
         Refresh()
     end
@@ -2738,6 +3023,8 @@ function Library.SectionMethods:AddPriority(
 
         self.Priority[index], self.Priority[index + 1] =
             self.Priority[index + 1], self.Priority[index]
+        self.Values[index], self.Values[index + 1] =
+            self.Values[index + 1], self.Values[index]
 
         Refresh()
     end

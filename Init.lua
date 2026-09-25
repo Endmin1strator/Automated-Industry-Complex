@@ -39,6 +39,8 @@ local REMOTE_MODULES = {
     "Features/Farmzone.lua",
     "Features/Deadzone.lua",
     "Features/ProfileSettings.lua",
+    "Features/PartySystem.lua",
+    "Features/WaypointLoop.lua",
 
     "Combat/Combat.lua",
     "Combat/CombatUtils.lua",
@@ -82,10 +84,12 @@ local START_ORDER = {
     "AutoRefill",
     "AntiAFK",
     "AutoCraft",
+    "PartySystem",
     "ProfileSettings",
     "Waypoints",
     "Farmzone",
     "Deadzone",
+    "WaypointLoop",
     "Bootstrap",
     "Heartbeat",
 }

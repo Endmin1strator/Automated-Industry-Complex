@@ -112,6 +112,10 @@ function UIRef.FarmZoneListComponent:MoveUp(Label)
     if Index and Index > 1 then
         Runtime:GetPlaceConfig().FARM_ZONES[Index], Runtime:GetPlaceConfig().FARM_ZONES[Index - 1] =
             Runtime:GetPlaceConfig().FARM_ZONES[Index - 1], Runtime:GetPlaceConfig().FARM_ZONES[Index]
+        --// Waypoints paired with these two zones follow them.
+        AICConfig.RemapWaypointZones(Runtime:GetPlaceConfig(), function(Z)
+            return (Z == Index and Index - 1) or (Z == Index - 1 and Index) or Z
+        end)
         AICUI.S.OriginalFarmZoneMoveUp(self, Label)
         AICUI.RefreshFarmZoneList()
         AICProfile.S.SelectedFarmZoneIndex = math.max(1, Index - 1)
@@ -134,6 +138,9 @@ function UIRef.FarmZoneListComponent:MoveDown(Label)
     if Index and Index < #Runtime:GetPlaceConfig().FARM_ZONES then
         Runtime:GetPlaceConfig().FARM_ZONES[Index], Runtime:GetPlaceConfig().FARM_ZONES[Index + 1] =
             Runtime:GetPlaceConfig().FARM_ZONES[Index + 1], Runtime:GetPlaceConfig().FARM_ZONES[Index]
+        AICConfig.RemapWaypointZones(Runtime:GetPlaceConfig(), function(Z)
+            return (Z == Index and Index + 1) or (Z == Index + 1 and Index) or Z
+        end)
         AICUI.S.OriginalFarmZoneMoveDown(self, Label)
         AICUI.RefreshFarmZoneList()
         AICProfile.S.SelectedFarmZoneIndex = math.min(#Runtime:GetPlaceConfig().FARM_ZONES, Index + 1)
@@ -155,6 +162,11 @@ function UIRef.FarmZoneListComponent:Remove(Label)
 
     if Index then
         table.remove(Runtime:GetPlaceConfig().FARM_ZONES, Index)
+        --// Waypoints paired with the removed zone lose their pair; later
+        --// zones shift down by one.
+        AICConfig.RemapWaypointZones(Runtime:GetPlaceConfig(), function(Z)
+            return (Z == Index and 0) or (Z > Index and Z - 1) or Z
+        end)
         AICUI.S.OriginalFarmZoneRemove(self, Label)
         Runtime:SetPlaceConfig(AICConfig.NormalizePlaceConfig(Runtime:GetPlaceConfig()))
         AICProfile.S.SelectedFarmZoneIndex = math.clamp(Index, 1, math.max(1, #Runtime:GetPlaceConfig().FARM_ZONES))

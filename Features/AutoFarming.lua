@@ -168,6 +168,8 @@ return {
             if Humanoid.Health <= 0 then
                 AICDebug.ResetDebugWaypoints()
                 CONFIG.CURRENT_WAYPOINT_TARGET = 1
+                AICFeature.S.WaypointWaitUntil = nil
+                if AICFeature.ResetWaypointLoop then AICFeature.ResetWaypointLoop() end
                 table.clear(AICCombat.S.ValidMobs)
                 AICCombat.S.ClosestTarget = nil
                 return
@@ -201,6 +203,16 @@ return {
             if now - AICCombat.S.LAST_MOB_VALIDATION_TIME >= CONFIG.MOB_VALIDATION_INTERVAL then
                 AICCombat.S.LAST_MOB_VALIDATION_TIME = now
                 AICCombat.UpdateValidMobs()
+            end
+
+            --// Party System is resetting or waiting to Tp to its Leader.
+            if AICFeature.IsPartyHolding and AICFeature.IsPartyHolding() then
+                if FaceOrientation then
+                    FaceOrientation.Enabled = false
+                end
+                Humanoid.AutoRotate = true
+                Humanoid:Move(Vector3.zero)
+                return
             end
 
             if not AICFeature.S.Enabled then
@@ -338,7 +350,10 @@ return {
             --// Whitelisted players are ignored entirely, so a server holding only
             --// them is left alone. Anyone else is blocked individually and then the
             --// server is abandoned; the whole lobby is no longer blocked one by one.
-            if AICFeature.S.BlockEnabled then
+            --// With a party Leader set, Party System deals with intruders instead.
+            local PartyHandles = AICFeature.PartyHandlesIntruders and AICFeature.PartyHandlesIntruders()
+
+            if AICFeature.S.BlockEnabled and not PartyHandles then
                 local Intruder = nil
 
                 for _, plr in Players:GetPlayers() do
@@ -372,6 +387,24 @@ return {
             local HasWaypoints = PlaceConfig and type(PlaceConfig.WAYPOINTS) == "table" and #PlaceConfig.WAYPOINTS > 0
             local WaypointIndex = tonumber(CONFIG.CURRENT_WAYPOINT_TARGET) or 1
             local target = nil
+
+            --// Holding at a waypoint that has a wait time. Nothing else runs on
+            --// the route meanwhile, the same as walking it.
+            if AICFeature.S.WaypointWaitUntil then
+                if HasWaypoints
+                    and not FeatureState.AutoFind.Enabled
+                    and now < AICFeature.S.WaypointWaitUntil
+                then
+                    if FaceOrientation then
+                        FaceOrientation.Enabled = false
+                    end
+                    Humanoid.AutoRotate = true
+                    Humanoid:Move(Vector3.zero)
+                    return
+                end
+
+                AICFeature.S.WaypointWaitUntil = nil
+            end
 
             if HasWaypoints then
                 if WaypointIndex < 1 then
@@ -409,6 +442,16 @@ return {
                         AICCombatUtils.S.LAST_STUCK_TIME = now
                         AICDebug.UpdateDebugWaypointColors()
 
+                        --// Waypoint wait: hold here before heading on. The
+                        --// check at the top of the route stands still until then.
+                        local Wait = tonumber(PlaceConfig.WAYPOINT_WAITS and PlaceConfig.WAYPOINT_WAITS[WaypointIndex]) or 0
+
+                        if Wait > 0 then
+                            AICFeature.S.WaypointWaitUntil = now + Wait
+                            Humanoid:Move(Vector3.zero)
+                            return
+                        end
+
                         WaypointIndex = CONFIG.CURRENT_WAYPOINT_TARGET
                         target = PlaceConfig.WAYPOINTS[WaypointIndex]
                     end
@@ -433,11 +476,15 @@ return {
                     end
 
                 else
-                    --// Final waypoint reached: only now allow farm-zone return/combat/patrol.
+                    --// Final waypoint reached: the waypoint loop, when on, decides
+                    --// which paired zone to fight in or walks the route to find one.
+                    local LoopResult = AICFeature.WaypointLoopStep and AICFeature.WaypointLoopStep(now)
                     local OutsideFarmZone = not AICCombatUtils.IsInsideFarmArea(RootPart.Position)
                     local InFarmDeadzone = AICCombatUtils.IsInsideFarmDeadzone(RootPart.Position)
 
-                    if FeatureState.ReturnToFarmZone.Enabled
+                    if LoopResult == "move" then
+                        AICFeature.CancelPatrol()
+                    elseif FeatureState.ReturnToFarmZone.Enabled
                         and not FeatureState.IgnoreFarmZone.Enabled
                         and (OutsideFarmZone or InFarmDeadzone)
                     then

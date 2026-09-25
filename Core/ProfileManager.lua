@@ -37,6 +37,8 @@ return {
             ResetOnBoostOut = "i",
             ResetStats = "j",
             DebugVisualizer = "k",
+            PartySystem = "l",
+            WaypointLoop = "m",
         }
 
         AICProfile.S.ActiveProfileName = nil
@@ -206,6 +208,18 @@ return {
             return true
         end
 
+        --// { Name, UserId } of the party Leader, or {} when none is set.
+        function AICProfile.NormalizePartyLeader(Leader)
+            if type(Leader) ~= "table" or type(Leader.Name) ~= "string" or Leader.Name == "" then
+                return {}
+            end
+
+            return {
+                Name = Leader.Name,
+                UserId = tonumber(Leader.UserId),
+            }
+        end
+
         function AICProfile.NormalizePinnedState(State)
             if type(State) ~= "table" then
                 return {}
@@ -359,6 +373,7 @@ return {
                         and UIRef.PinPanel:GetState()
                         or CONFIG.PINNED_STATE,
                     BLOCK_WHITELIST = table.clone(CONFIG.BLOCK_WHITELIST or {}),
+                    PARTY_LEADER = AICProfile.NormalizePartyLeader(CONFIG.PARTY_LEADER),
                 },
             }
         end
@@ -701,6 +716,7 @@ return {
             end
 
             CONFIG.BLOCK_WHITELIST = Whitelist
+            CONFIG.PARTY_LEADER = AICProfile.NormalizePartyLeader(Data.SETTINGS and Data.SETTINGS.PARTY_LEADER)
 
                 PlaceConfig = AICConfig.NormalizePlaceConfig(FarmConfig)
                 Runtime:SetPlaceConfig(PlaceConfig)
@@ -727,6 +743,8 @@ return {
             end
 
             CONFIG.CURRENT_WAYPOINT_TARGET = 1
+            AICFeature.S.WaypointWaitUntil = nil
+            if AICFeature.ResetWaypointLoop then AICFeature.ResetWaypointLoop() end
             AICCombat.ResetTargetReposition()
             AICFeature.S.DeadzoneEscapePosition = nil
             PatrolState.PatrolPosition = nil
@@ -780,6 +798,8 @@ return {
                 Feature.AutoBlock.Enabled = BasePlaceConfig.AUTOBLOCK == true
                 AICFeature.S.BlockEnabled = BasePlaceConfig.AUTOBLOCK == true
                 CONFIG.CURRENT_WAYPOINT_TARGET = 1
+            AICFeature.S.WaypointWaitUntil = nil
+            if AICFeature.ResetWaypointLoop then AICFeature.ResetWaypointLoop() end
             end
 
             AICProfile.WriteProfileStore()
@@ -850,11 +870,14 @@ return {
                 AutoBlock:SetEnabled(BasePlaceConfig.AUTOBLOCK == true, false)
             end
             CONFIG.CURRENT_WAYPOINT_TARGET = 1
+            AICFeature.S.WaypointWaitUntil = nil
+            if AICFeature.ResetWaypointLoop then AICFeature.ResetWaypointLoop() end
             CONFIG.RETREAT_HEALTH_PERCENT = 40
             CONFIG.AUTO_HEAL_HEALTH_PERCENT = 65
             CONFIG.SAFE_ENEMY_RANGE = 4
             CONFIG.TARGET_HP_MODE = "Disabled"
             CONFIG.BLOCK_WHITELIST = {}
+            CONFIG.PARTY_LEADER = {}
             CONFIG.EXECUTE_CHARGE_HP_PERCENT = 0
             --// PINNED_STATE is global, not part of the place defaults.
 

@@ -128,6 +128,18 @@ return {
         
             return false
         end
+        --// The waypoint loop fights one paired zone at a time. While it does,
+        --// every farm-area check, return point and patrol uses only that zone.
+        AICCombatUtils.S.ActiveZoneIndex = nil
+
+        function AICCombatUtils.GetActiveFarmZone()
+            local PlaceConfig = Runtime:GetPlaceConfig()
+            local FarmZones = PlaceConfig and PlaceConfig.FARM_ZONES or {}
+            local Active = AICCombatUtils.S.ActiveZoneIndex
+
+            return (Active and FarmZones[Active]) or FarmZones[1]
+        end
+
         function AICCombatUtils.IsInsideFarmArea(Position)
             local PlaceConfig = Runtime:GetPlaceConfig()
             if FeatureState.IgnoreFarmZone.Enabled or not PlaceConfig then
@@ -139,6 +151,11 @@ return {
             end
         
             local FarmZones = PlaceConfig.FARM_ZONES or {}
+            local ActiveZone = AICCombatUtils.S.ActiveZoneIndex and FarmZones[AICCombatUtils.S.ActiveZoneIndex]
+
+            if ActiveZone then
+                FarmZones = { ActiveZone }
+            end
         
             --// No farm zones means the profile does not constrain the farm area.
             --// Deadzones can still be used independently.

@@ -66,7 +66,7 @@ return {
             local UtilsChunk = assert(loadstring(game:HttpGet("https://raw.githubusercontent.com/Endmin1strator/Automated-Industry-Complex/refs/heads/main/UI/Utils.lua"), "@Utils.lua"))
             Utils = UtilsChunk()
         end
-        local UI = Utils.new("AUTO FARMING v2.39")
+        local UI = Utils.new("AUTO FARMING v2.40")
 
         --// Shared UI foundation. Feature modules own their controls; Runtime
         --// only creates the tabs/sections they attach those controls to.
@@ -125,6 +125,15 @@ return {
             --// UserIds that are allowed to share the server. Auto Block ignores
             --// these players entirely and only reacts to anyone else.
             BLOCK_WHITELIST = {},
+
+            --// Party System. The Leader is followed between servers with the
+            --// game's "Tp friend <Name>" chat command. Empty table = no Leader.
+            PARTY_LEADER = {},
+            PARTY_CHECK_INTERVAL = 1,
+            PARTY_TP_ATTEMPTS = 3,
+            PARTY_TP_ATTEMPT_TIMEOUT = 15,
+            PARTY_RESPAWN_TIMEOUT = 10,
+            PARTY_FAILED_COOLDOWN = 60,
         
             --// Saved arrangement of the pinned item panel: which items, whether it
             --// has been popped out of the window, and where it was left.
@@ -480,6 +489,16 @@ return {
                 Button = nil,
                 Status = nil,
             },
+            WaypointLoop = {
+                Enabled = false,
+                Button = nil,
+                Status = nil,
+            },
+            PartySystem = {
+                Enabled = false,
+                Button = nil,
+                Status = nil,
+            },
             ReturnToFarmZone = {
                 Enabled = true,
                 Button = nil,
@@ -626,6 +645,8 @@ return {
         AICFeature.S.BlockValue = nil
         
         AICFeature.S.WaypointEnabled = true
+        --// os.clock() time a waypoint wait ends, or nil when not waiting.
+        AICFeature.S.WaypointWaitUntil = nil
         AICFeature.S.Enabled = true
         AICFeature.S.Equipped = false
         AICUI.S.TargetCurrency = "Golden Shell"
@@ -753,7 +774,13 @@ return {
             local FirstDeadzone = Deadzones[1]
         
             Config.WAYPOINTS = Waypoints
+            --// Seconds to stand at each waypoint before moving on, one entry per
+            --// waypoint. Padded with 0 and trimmed so it always lines up.
+            Config.WAYPOINT_WAITS = AICConfig.NormalizeWaitList(Config.WAYPOINT_WAITS, #Waypoints)
             Config.FARM_ZONES = FarmZones
+            --// Farm zone paired with each waypoint for the waypoint loop, one
+            --// entry per waypoint. 0 means the waypoint has no zone.
+            Config.WAYPOINT_ZONES = AICConfig.NormalizeZonePairs(Config.WAYPOINT_ZONES, #Waypoints, #FarmZones)
             Config.DEADZONES = Deadzones
         
             --// Legacy aliases remain available to old code while the actual logic
@@ -771,6 +798,59 @@ return {
             return Config
         end
         
+        --// Longest a waypoint may hold the character, so a typo cannot park
+        --// the bot for hours.
+        AICConfig.MAX_WAYPOINT_WAIT = 600
+
+        function AICConfig.NormalizeWaitList(List, Count)
+            local Result = {}
+
+            for Index = 1, Count do
+                local Value = type(List) == "table" and tonumber(List[Index]) or 0
+                Result[Index] = math.clamp(Value or 0, 0, AICConfig.MAX_WAYPOINT_WAIT)
+            end
+
+            return Result
+        end
+
+        function AICConfig.NormalizeZonePairs(List, Count, ZoneCount)
+            local Result = {}
+
+            for Index = 1, Count do
+                local Value = math.floor(type(List) == "table" and tonumber(List[Index]) or 0)
+                Result[Index] = (Value >= 1 and Value <= ZoneCount) and Value or 0
+            end
+
+            return Result
+        end
+
+        --// Target names a farm zone fights; empty means the Enemy Priority list.
+        function AICConfig.CloneTargetList(List)
+            local Result = {}
+
+            for _, Name in ipairs(type(List) == "table" and List or {}) do
+                if type(Name) == "string" and Name ~= "" and not table.find(Result, Name) then
+                    table.insert(Result, Name)
+                end
+            end
+
+            return Result
+        end
+
+        --// Rewrites waypoint->zone pairs after farm zones are removed or
+        --// reordered. Map(oldIndex) returns the new index, or 0 if gone.
+        function AICConfig.RemapWaypointZones(Config, Map)
+            local Pairs = Config.WAYPOINT_ZONES or {}
+
+            for Index, ZoneIndex in ipairs(Pairs) do
+                if ZoneIndex > 0 then
+                    Pairs[Index] = Map(ZoneIndex) or 0
+                end
+            end
+
+            Config.WAYPOINT_ZONES = Pairs
+        end
+
         function AICConfig.EncodeVector3(Value)
             if typeof(Value) ~= "Vector3" then
                 return { X = 0, Y = 0, Z = 0 }
@@ -817,6 +897,7 @@ return {
                     table.insert(Result, {
                         Center = AICConfig.DecodeVector3(Zone.Center),
                         Radius = math.max(0, tonumber(Zone.Radius) or 0),
+                        Targets = AICConfig.CloneTargetList(Zone.Targets),
                     })
                 end
             end
@@ -842,6 +923,7 @@ return {
                     table.insert(Result, {
                         Center = AICConfig.EncodeVector3(Zone.Center),
                         Radius = tonumber(Zone.Radius) or 0,
+                        Targets = AICConfig.CloneTargetList(Zone.Targets),
                     })
                 end
             end

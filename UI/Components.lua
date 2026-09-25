@@ -115,6 +115,12 @@ return {
             AICUI.SetFeatureComponent("AutoPatrol", FeatureState.AutoPatrol.Enabled)
             AICUI.SetFeatureComponent("ReturnToFarmZone", FeatureState.ReturnToFarmZone.Enabled)
             AICUI.SetFeatureComponent("ResetOnBoostOut", FeatureState.ResetOnBoostOut.Enabled)
+            AICUI.SetFeatureComponent("PartySystem", FeatureState.PartySystem.Enabled)
+            AICUI.SetFeatureComponent("WaypointLoop", FeatureState.WaypointLoop.Enabled)
+
+            if AICUI.RefreshPartyUI then
+                AICUI.RefreshPartyUI()
+            end
             if FeatureState.DebugWaypoints.Button then FeatureState.DebugWaypoints.Button:Set(FeatureState.DebugWaypoints.Enabled, false) end
             if FeatureState.DebugFarmZones.Button then FeatureState.DebugFarmZones.Button:Set(FeatureState.DebugFarmZones.Enabled, false) end
             if FeatureState.DebugDeadzones.Button then FeatureState.DebugDeadzones.Button:Set(FeatureState.DebugDeadzones.Enabled, false) end
@@ -136,7 +142,10 @@ return {
             local Labels = {}
         
             for Index, Position in ipairs(PlaceConfig.WAYPOINTS or {}) do
-                Labels[Index] = string.format("#%d  (%s)", Index, AICUI.FormatVector3(Position))
+                local ZoneIndex = PlaceConfig.WAYPOINT_ZONES and PlaceConfig.WAYPOINT_ZONES[Index] or 0
+                local Pair = ZoneIndex > 0 and string.format("  > Z%d", ZoneIndex) or ""
+
+                Labels[Index] = string.format("#%d%s  (%s)", Index, Pair, AICUI.FormatVector3(Position))
             end
         
             return Labels
@@ -163,7 +172,24 @@ return {
             Component:SetPriority(Values)
         end
         function AICUI.RefreshWaypointList()
-            AICUI.ReplacePriorityList(UIRef.WaypointListComponent, AICUI.BuildWaypointLabels())
+            if not UIRef.WaypointListComponent then
+                return
+            end
+
+            --// Wait times ride along with the labels, so the list always shows
+            --// what PlaceConfig holds, including after a profile load.
+            local PlaceConfig = Runtime:GetPlaceConfig()
+            PlaceConfig.WAYPOINT_WAITS = AICConfig.NormalizeWaitList(PlaceConfig.WAYPOINT_WAITS, #PlaceConfig.WAYPOINTS)
+            PlaceConfig.WAYPOINT_ZONES = AICConfig.NormalizeZonePairs(PlaceConfig.WAYPOINT_ZONES, #PlaceConfig.WAYPOINTS, #PlaceConfig.FARM_ZONES)
+
+            UIRef.WaypointListComponent:SetPriority(
+                AICUI.BuildWaypointLabels(),
+                table.clone(PlaceConfig.WAYPOINT_WAITS)
+            )
+
+            if AICUI.RefreshWaypointPairPickers then
+                AICUI.RefreshWaypointPairPickers()
+            end
         end
         function AICUI.RefreshFarmZoneList()
         local PlaceConfig = Runtime:GetPlaceConfig()
@@ -171,6 +197,15 @@ return {
                 UIRef.FarmZoneListComponent,
                 AICUI.BuildZoneLabels(PlaceConfig.FARM_ZONES, "Farm")
             )
+
+            --// Zone count or order may have changed.
+            if AICUI.RefreshZoneTargets then
+                AICUI.RefreshZoneTargets()
+            end
+
+            if AICUI.RefreshWaypointPairPickers then
+                AICUI.RefreshWaypointPairPickers()
+            end
         end
         function AICUI.RefreshDeadzoneList()
         local PlaceConfig = Runtime:GetPlaceConfig()
@@ -211,6 +246,10 @@ return {
         
                 AICProfile.S.SelectedFarmZoneIndex = Index
                 UIRef.FarmRadiusSlider:Set(tonumber(PlaceConfig.FARM_ZONES[Index].Radius) or 100, false)
+
+                if AICUI.RefreshZoneTargets then
+                    AICUI.RefreshZoneTargets()
+                end
             end)
         
             if SelectedOption then UIRef.FarmZonePicker:Set(SelectedOption) end
