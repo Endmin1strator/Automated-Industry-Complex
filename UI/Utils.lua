@@ -7,14 +7,14 @@ local TweenService       = game:GetService("TweenService")
 local RunService         = game:GetService("RunService")
 
 local Player             = Players.LocalPlayer
-local PlayerGui          = Player:WaitForChild("PlayerGui")
+local PlayerGui          = Player:WaitForChild("PlayerGui", 10)
 
 local Library = {}
 Library.__index = Library
 
---//==============================================================
---// Theme
---//==============================================================
+------//==============================================================
+----// Theme
+------//==============================================================
 
 local Theme = {
 	Background         = Color3.fromRGB(15, 18, 19),
@@ -46,22 +46,22 @@ local Theme = {
 	Black              = Color3.fromRGB(7, 9, 10),
 }
 
---//==============================================================
---// Constants
---//==============================================================
+------//==============================================================
+----// Constants
+------//==============================================================
 
-local WINDOW_SIZE     = Vector2.new(960, 590)
-local MIN_WINDOW_SIZE = Vector2.new(560, 360)
-local MAX_WINDOW_SIZE = Vector2.new(1400, 900)
-local RESIZE_HANDLE   = 12
+local WINDOW_SIZE       = Vector2.new(960, 590)
+local MIN_WINDOW_SIZE   = Vector2.new(560, 360)
+local MAX_WINDOW_SIZE   = Vector2.new(1400, 900)
+local RESIZE_HANDLE     = 14
 
 local TWEEN_FAST   = TweenInfo.new(0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 local TWEEN_NORMAL = TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 local TWEEN_SMOOTH = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 
---//==============================================================
---// Utility
---//==============================================================
+------//==============================================================
+----// Utility
+------//==============================================================
 
 local function New(className: string, properties: {[string]: any}?): Instance
 	local object = Instance.new(className)
@@ -170,9 +170,9 @@ local function AddText(
 	return label
 end
 
---//==============================================================
---// Angular Decoration
---//==============================================================
+------//==============================================================
+----// Angular Decoration
+------//==============================================================
 
 local function AddAngularCorners(parent: Instance, color: Color3?)
 	local holder = New("Frame", {
@@ -260,9 +260,9 @@ local function AddAngularCorners(parent: Instance, color: Color3?)
 	return holder
 end
 
---//==============================================================
---// Connection Manager
---//==============================================================
+------//==============================================================
+----// Connection Manager
+------//==============================================================
 
 function Library:_Connect(signal, callback)
 	local connection = signal:Connect(callback)
@@ -272,9 +272,9 @@ function Library:_Connect(signal, callback)
 	return connection
 end
 
---//==============================================================
---// Window
---//==============================================================
+------//==============================================================
+----// Window
+------//==============================================================
 
 function Library.new(title: string?)
 	local self = setmetatable({}, Library)
@@ -291,6 +291,7 @@ function Library.new(title: string?)
 	self.Visible           = true
 	self.Destroyed         = false
 	self.WindowSize        = WINDOW_SIZE
+	self._FirstOpen        = true
 	self._Loading          = true
 
 	self._dropdowns        = {}
@@ -335,8 +336,8 @@ function Library.new(title: string?)
 		Position = UDim2.fromScale(0.5, 0.5),
 
 		Size = UDim2.fromOffset(
-			WINDOW_SIZE.X,
-			WINDOW_SIZE.Y
+			self.WindowSize.X,
+			self.WindowSize.Y
 		),
 
 		BackgroundColor3 = self.Theme.Background,
@@ -351,6 +352,7 @@ function Library.new(title: string?)
 	self.Window = window
 
 	AddStroke(window, self.Theme.Border, 0.15, 1)
+	AddAngularCorners(window)
 
 	--==========================================================
 	-- Resize Handles
@@ -365,7 +367,7 @@ function Library.new(title: string?)
 		Size = UDim2.new(0, RESIZE_HANDLE, 1, -58 - RESIZE_HANDLE),
 		Text = "",
 		AutoButtonColor = false,
-		ZIndex = 40,
+		ZIndex = 30,
 	})
 
 	local resizeBottom = New("TextButton", {
@@ -377,7 +379,7 @@ function Library.new(title: string?)
 		Size = UDim2.new(1, -58 - RESIZE_HANDLE, 0, RESIZE_HANDLE),
 		Text = "",
 		AutoButtonColor = false,
-		ZIndex = 40,
+		ZIndex = 30,
 	})
 
 	local resizeCorner = New("TextButton", {
@@ -385,20 +387,19 @@ function Library.new(title: string?)
 		Parent = window,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Position = UDim2.new(1, -RESIZE_HANDLE, 1, -RESIZE_HANDLE),
-		Size = UDim2.fromOffset(RESIZE_HANDLE, RESIZE_HANDLE),
+		Position = UDim2.new(1, -RESIZE_HANDLE - 2, 1, -RESIZE_HANDLE - 2),
+		Size = UDim2.fromOffset(RESIZE_HANDLE + 2, RESIZE_HANDLE + 2),
 		Text = "◢",
 		TextColor3 = self.Theme.CyanDark,
-		TextSize = 9,
+		TextSize = 10,
 		Font = Enum.Font.GothamBold,
 		AutoButtonColor = false,
-		ZIndex = 41,
+		ZIndex = 31,
 	})
 
 	self.ResizeRight  = resizeRight
 	self.ResizeBottom = resizeBottom
 	self.ResizeCorner = resizeCorner
-	AddAngularCorners(window)
 
 	--==========================================================
 	-- Window Header
@@ -472,7 +473,7 @@ function Library.new(title: string?)
 	-- Subtitle
 	local subtitle = AddText(
 		header,
-		"UTILITY SYSTEM  //  ONLINE",
+		"UTILITY SYSTEM  --//  ONLINE",
 		9,
 		UDim2.fromOffset(67, 31),
 		UDim2.fromOffset(330, 17)
@@ -487,7 +488,7 @@ function Library.new(title: string?)
 	-- System status
 	local status = AddText(
 		header,
-		"SYSTEM  //  01",
+		"SYSTEM  --//  01",
 		9,
 		UDim2.new(1, -260, 0, 10),
 		UDim2.fromOffset(130, 18)
@@ -640,7 +641,7 @@ function Library.new(title: string?)
 	-- Sidebar footer
 	local footer = AddText(
 		sidebar,
-		"AFTERHE4RTZ  //  UTILITY",
+		"AFTERHE4RTZ  --//  UTILITY",
 		8,
 		UDim2.fromOffset(20, -44),
 		UDim2.new(1, -40, 0, 18)
@@ -651,7 +652,7 @@ function Library.new(title: string?)
 
 	local version = AddText(
 		sidebar,
-		"SYSTEM BUILD  //  01",
+		"SYSTEM BUILD  --//  01",
 		8,
 		UDim2.fromOffset(20, -25),
 		UDim2.new(1, -40, 0, 18)
@@ -683,6 +684,26 @@ function Library.new(title: string?)
 	self.Content = content
 
 	--==========================================================
+	-- Overlay
+	--==========================================================
+
+	local overlay = New("Frame", {
+		Name = "Overlay",
+
+		Parent = screenGui,
+
+		BackgroundTransparency = 1,
+
+		Size = UDim2.fromScale(1, 1),
+
+		ZIndex = 100,
+
+		Active = false,
+	})
+
+	self.Overlay = overlay
+
+	--==========================================================
 	-- Initial Loading
 	--==========================================================
 
@@ -690,8 +711,9 @@ function Library.new(title: string?)
 		Name = "Loading",
 		Parent = window,
 		BackgroundColor3 = self.Theme.Background,
-		BackgroundTransparency = 0,
+		BackgroundTransparency = 0.02,
 		BorderSizePixel = 0,
+		Position = UDim2.fromScale(0, 0),
 		Size = UDim2.fromScale(1, 1),
 		Visible = true,
 		ZIndex = 500,
@@ -712,7 +734,7 @@ function Library.new(title: string?)
 
 	local loadingStatus = AddText(
 		loading,
-		"LOADING MODULES  //  0%",
+		"LOADING MODULES  --//  0%",
 		9,
 		UDim2.new(0.5, -180, 0.5, 10),
 		UDim2.fromOffset(360, 20)
@@ -744,26 +766,6 @@ function Library.new(title: string?)
 	self.LoadingStatus = loadingStatus
 	self.LoadingBar    = loadingBar
 	self.LoadingFill   = loadingFill
-
-	--==========================================================
-	-- Overlay
-	--==========================================================
-
-	local overlay = New("Frame", {
-		Name = "Overlay",
-
-		Parent = screenGui,
-
-		BackgroundTransparency = 1,
-
-		Size = UDim2.fromScale(1, 1),
-
-		ZIndex = 100,
-
-		Active = false,
-	})
-
-	self.Overlay = overlay
 
 	--==========================================================
 	-- Reopen Button
@@ -828,20 +830,8 @@ function Library.new(title: string?)
 	-- Responsive
 	--==========================================================
 
-	local camera = workspace.CurrentCamera
-
-	if camera then
-		self:_Connect(camera:GetPropertyChangedSignal("ViewportSize"), function()
-			self:_UpdateScale()
-		end)
-	end
-
-	self:_Connect(workspace:GetPropertyChangedSignal("CurrentCamera"), function()
-		local currentCamera = workspace.CurrentCamera
-
-		if currentCamera then
-			self:_UpdateScale()
-		end
+	self:_Connect(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), function()
+		self:_UpdateScale()
 	end)
 
 	self:_UpdateScale()
@@ -851,12 +841,16 @@ function Library.new(title: string?)
 	--==========================================================
 
 	self:_MakeDraggable(header, window)
+
+	--==========================================================
+	-- Resize
+	--==========================================================
+
 	self:_MakeResizable(resizeRight, "Right")
 	self:_MakeResizable(resizeBottom, "Bottom")
 	self:_MakeResizable(resizeCorner, "Corner")
 
-	-- Keep the actual window visible immediately. The loading pass only
-	-- sits above the finished interface and can never hide the UI itself.
+	-- Build everything first, then reveal the finished window.
 	task.defer(function()
 		self:_FinishInitialLoad()
 	end)
@@ -864,9 +858,9 @@ function Library.new(title: string?)
 	return self
 end
 
---//==============================================================
---// Responsive Scale
---//==============================================================
+------//==============================================================
+----// Responsive Scale
+------//==============================================================
 
 function Library:_UpdateScale()
 	if self.Destroyed then
@@ -893,9 +887,174 @@ function Library:_UpdateScale()
 	self.UIScale.Scale = scale
 end
 
---//==============================================================
+------//==============================================================
+----// Resizable
+------//==============================================================
+
+function Library:_MakeResizable(handle: GuiObject, direction: string)
+	local resizing = false
+	local resizeStart: Vector2
+	local startSize: Vector2
+
+	self:_Connect(handle.InputBegan, function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+
+		if self.Destroyed or not self.Visible or self._Loading then
+			return
+		end
+
+		resizing = true
+		resizeStart = input.Position
+		startSize = self.WindowSize
+
+		local changedConnection
+
+		changedConnection = input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				resizing = false
+
+				if changedConnection then
+					changedConnection:Disconnect()
+				end
+			end
+		end)
+	end)
+
+	self:_Connect(UserInputService.InputChanged, function(input)
+		if not resizing then
+			return
+		end
+
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement
+			and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+
+		local scale = self.UIScale.Scale
+
+		if scale <= 0 then
+			return
+		end
+
+		local delta = (input.Position - resizeStart) / scale
+		local width = startSize.X
+		local height = startSize.Y
+
+		if direction == "Right" or direction == "Corner" then
+			width = startSize.X + delta.X
+		end
+
+		if direction == "Bottom" or direction == "Corner" then
+			height = startSize.Y + delta.Y
+		end
+
+		local camera = workspace.CurrentCamera
+
+		if camera then
+			local viewport = camera.ViewportSize
+			local absolutePosition = self.Window.AbsolutePosition
+
+			local maxWidth = (viewport.X - absolutePosition.X - 20) / scale
+			local maxHeight = (viewport.Y - absolutePosition.Y - 20) / scale
+
+			width = math.min(width, maxWidth, MAX_WINDOW_SIZE.X)
+			height = math.min(height, maxHeight, MAX_WINDOW_SIZE.Y)
+		end
+
+		width = math.max(width, MIN_WINDOW_SIZE.X)
+		height = math.max(height, MIN_WINDOW_SIZE.Y)
+
+		self.WindowSize = Vector2.new(width, height)
+		self.Window.Size = UDim2.fromOffset(width, height)
+
+		self:_UpdateScale()
+	end)
+
+	self:_Connect(UserInputService.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			resizing = false
+		end
+	end)
+end
+
+------//==============================================================
+--// Initial Loading
+----//==============================================================
+
+	function Library:_FinishInitialLoad()
+		if self.Destroyed or not self._Loading then
+			return
+		end
+
+		local loading = self.LoadingFrame
+		local title = self.LoadingTitle
+		local status = self.LoadingStatus
+		local bar = self.LoadingBar
+		local fill = self.LoadingFill
+
+		if not loading or not title or not status or not bar or not fill then
+			self._Loading = false
+			return
+		end
+
+		local stages = {
+			{Percent = 0.28, Text = "LOADING MODULES  --//  28%"},
+			{Percent = 0.55, Text = "BUILDING INTERFACE  --//  55%"},
+			{Percent = 0.78, Text = "INDEXING COMPONENTS  --//  78%"},
+			{Percent = 1, Text = "SYSTEM READY  --//  100%"},
+		}
+
+		for _, stage in ipairs(stages) do
+			if self.Destroyed then
+				return
+			end
+
+			status.Text = stage.Text
+
+			Tween(fill, TWEEN_NORMAL, {
+				Size = UDim2.fromScale(stage.Percent, 1),
+			})
+
+			task.wait(0.07)
+		end
+
+		task.wait(0.08)
+
+		self._Loading = false
+		self._FirstOpen = false
+
+		Tween(loading, TWEEN_SMOOTH, {
+			BackgroundTransparency = 1,
+		})
+
+		Tween(title, TWEEN_SMOOTH, {
+			TextTransparency = 1,
+		})
+
+		Tween(status, TWEEN_SMOOTH, {
+			TextTransparency = 1,
+		})
+
+		Tween(bar, TWEEN_SMOOTH, {
+			BackgroundTransparency = 1,
+		})
+
+		task.delay(0.34, function()
+			if self.Destroyed then
+				return
+			end
+
+			loading.Visible = false
+		end)
+	end
+
+------//==============================================================
 --// Draggable
---//==============================================================
+------//==============================================================
 
 function Library:_MakeDraggable(handle: GuiObject, target: GuiObject)
 	local dragging = false
@@ -947,138 +1106,9 @@ function Library:_MakeDraggable(handle: GuiObject, target: GuiObject)
 	end)
 end
 
---//==============================================================
---// Resizable
---//==============================================================
-
-function Library:_MakeResizable(handle: GuiObject, direction: string)
-	local resizing = false
-	local resizeStart: Vector2
-	local startSize: Vector2
-
-	self:_Connect(handle.InputBegan, function(input)
-		if input.UserInputType ~= Enum.UserInputType.MouseButton1
-			and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-
-		if self.Destroyed or not self.Visible then
-			return
-		end
-
-		resizing = true
-		resizeStart = input.Position
-		startSize = self.WindowSize
-	end)
-
-	self:_Connect(UserInputService.InputChanged, function(input)
-		if not resizing then
-			return
-		end
-
-		if input.UserInputType ~= Enum.UserInputType.MouseMovement
-			and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-
-		local scale = self.UIScale.Scale
-		local delta = (input.Position - resizeStart) / math.max(scale, 0.01)
-
-		local width = startSize.X
-		local height = startSize.Y
-
-		if direction == "Right" or direction == "Corner" then
-			width = startSize.X + delta.X
-		end
-
-		if direction == "Bottom" or direction == "Corner" then
-			height = startSize.Y + delta.Y
-		end
-
-		width = math.clamp(width, MIN_WINDOW_SIZE.X, MAX_WINDOW_SIZE.X)
-		height = math.clamp(height, MIN_WINDOW_SIZE.Y, MAX_WINDOW_SIZE.Y)
-
-		self.WindowSize = Vector2.new(width, height)
-		self.Window.Size = UDim2.fromOffset(width, height)
-		self:_UpdateScale()
-	end)
-
-	self:_Connect(UserInputService.InputEnded, function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch then
-			resizing = false
-		end
-	end)
-end
-
---//==============================================================
---// Initial Loading
---//==============================================================
-
-function Library:_FinishInitialLoad()
-	if self.Destroyed or not self._Loading then
-		return
-	end
-
-	local loading = self.LoadingFrame
-	local fill = self.LoadingFill
-	local status = self.LoadingStatus
-
-	if not loading or not fill or not status then
-		self._Loading = false
-		return
-	end
-
-	local stages = {
-		{Percent = 0.25, Text = "LOADING MODULES  //  25%"},
-		{Percent = 0.50, Text = "BUILDING INTERFACE  //  50%"},
-		{Percent = 0.75, Text = "INDEXING COMPONENTS  //  75%"},
-		{Percent = 1, Text = "SYSTEM READY  //  100%"},
-	}
-
-	for _, stage in ipairs(stages) do
-		if self.Destroyed then
-			return
-		end
-
-		status.Text = stage.Text
-		Tween(fill, TWEEN_NORMAL, {
-			Size = UDim2.fromScale(stage.Percent, 1),
-		})
-
-		task.wait(0.08)
-	end
-
-	self._Loading = false
-
-	Tween(loading, TWEEN_NORMAL, {
-		BackgroundTransparency = 1,
-	})
-
-	for _, object in ipairs(loading:GetDescendants()) do
-		if object:IsA("TextLabel") or object:IsA("TextButton") then
-			Tween(object, TWEEN_NORMAL, {
-				TextTransparency = 1,
-			})
-		elseif object:IsA("Frame") then
-			if object ~= loading then
-				Tween(object, TWEEN_NORMAL, {
-					BackgroundTransparency = 1,
-				})
-			end
-		end
-	end
-
-	task.wait(0.24)
-
-	if not self.Destroyed then
-		loading.Visible = false
-	end
-end
-
---//==============================================================
---// Set Visible
---//==============================================================
+------//==============================================================
+----// Set Visible
+------//==============================================================
 
 function Library:SetVisible(value: boolean)
 	if self.Destroyed then
@@ -1162,9 +1192,9 @@ function Library:Toggle()
 	self:SetVisible(not self.Visible)
 end
 
---//==============================================================
---// Tab
---//==============================================================
+------//==============================================================
+----// Tab
+------//==============================================================
 
 local TabMethods = {}
 TabMethods.__index = TabMethods
@@ -1386,9 +1416,9 @@ function Library:SelectTab(tab)
 	self.CurrentTab = tab
 end
 
---//==============================================================
---// Section
---//==============================================================
+------//==============================================================
+----// Section
+------//==============================================================
 
 function TabMethods:AddSection(name: string)
 	local section = {}
@@ -1522,9 +1552,9 @@ end
 
 Library.SectionMethods = {}
 
---//==============================================================
---// Label
---//==============================================================
+------//==============================================================
+----// Label
+------//==============================================================
 
 function Library.SectionMethods:AddLabel(text: string)
 	local label = AddText(
@@ -1543,9 +1573,9 @@ function Library.SectionMethods:AddLabel(text: string)
 	return label
 end
 
---//==============================================================
---// Button
---//==============================================================
+------//==============================================================
+----// Button
+------//==============================================================
 
 function Library.SectionMethods:AddButton(name: string, callback)
 	local button = New("TextButton", {
@@ -1645,9 +1675,9 @@ function Library.SectionMethods:AddButton(name: string, callback)
 	return button
 end
 
---//==============================================================
---// Toggle
---//==============================================================
+------//==============================================================
+----// Toggle
+------//==============================================================
 
 function Library.SectionMethods:AddToggle(name: string, default: boolean?, callback)
 	local component = {}
@@ -1797,9 +1827,9 @@ function Library.SectionMethods:AddToggle(name: string, default: boolean?, callb
 	return component
 end
 
---//==============================================================
---// Slider
---//==============================================================
+------//==============================================================
+----// Slider
+------//==============================================================
 
 function Library.SectionMethods:AddSlider(
 	name: string,
@@ -1990,9 +2020,9 @@ function Library.SectionMethods:AddSlider(
 	return component
 end
 
---//==============================================================
---// Textbox
---//==============================================================
+------//==============================================================
+----// Textbox
+------//==============================================================
 
 function Library.SectionMethods:AddTextbox(name: string, default: string?, callback)
 	local component = {}
@@ -2086,9 +2116,9 @@ function Library.SectionMethods:AddTextbox(name: string, default: string?, callb
 	return component
 end
 
---//==============================================================
---// Dropdown
---//==============================================================
+------//==============================================================
+----// Dropdown
+------//==============================================================
 
 function Library.SectionMethods:AddDropdown(
 	name: string,
@@ -2353,9 +2383,9 @@ function Library.SectionMethods:AddDropdown(
 	return component
 end
 
---//==============================================================
---// Keybind
---//==============================================================
+------//==============================================================
+----// Keybind
+------//==============================================================
 
 function Library.SectionMethods:AddKeybind(
 	name: string,
@@ -2468,9 +2498,9 @@ function Library.SectionMethods:AddKeybind(
 	return component
 end
 
---//==============================================================
---// Priority
---//==============================================================
+------//==============================================================
+----// Priority
+------//==============================================================
 
 function Library.SectionMethods:AddPriority(
 	name: string,
@@ -2818,9 +2848,9 @@ function Library.SectionMethods:AddPriority(
 	return component
 end
 
---//==============================================================
---// Dropdown Position
---//==============================================================
+------//==============================================================
+----// Dropdown Position
+------//==============================================================
 
 function Library:_PositionDropdown(button: GuiObject, popup: GuiObject)
 	local position = button.AbsolutePosition
@@ -2862,9 +2892,9 @@ function Library:_CloseDropdowns(exception)
 	end
 end
 
---//==============================================================
---// Notification
---//==============================================================
+------//==============================================================
+----// Notification
+------//==============================================================
 
 function Library:Notify(title: string, message: string, duration: number?)
 	duration = duration or 3
@@ -2991,9 +3021,9 @@ function Library:Notify(title: string, message: string, duration: number?)
 	return notification
 end
 
---//==============================================================
---// Theme
---//==============================================================
+------//==============================================================
+----// Theme
+------//==============================================================
 
 function Library:SetTheme(theme: {[string]: any})
 	for key, value in pairs(theme) do
@@ -3015,9 +3045,9 @@ function Library:SetTheme(theme: {[string]: any})
 	self.ReopenButton.TextColor3 = self.Theme.Cyan
 end
 
---//==============================================================
---// Destroy
---//==============================================================
+------//==============================================================
+----// Destroy
+------//==============================================================
 
 function Library:Destroy()
 	if self.Destroyed then
@@ -3045,8 +3075,8 @@ function Library:Destroy()
 	table.clear(self._notifications)
 end
 
---//==============================================================
---// Return
---//==============================================================
+------//==============================================================
+----// Return
+------//==============================================================
 
 return Library
