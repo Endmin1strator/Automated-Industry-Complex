@@ -692,7 +692,7 @@ return {
             end
 
             UIRef.ExecuteChargeSlider = UIRef.FeatureSection:AddSlider(
-                "Execute Charge at Enemy HP %",
+                "Execute Charge at HP%",
                 math.clamp(tonumber(CONFIG.EXECUTE_CHARGE_HP_PERCENT) or 0, 0, 90),
                 0,
                 90,
@@ -703,7 +703,7 @@ return {
             )
 
             UIRef.RetreatHealthSlider = UIRef.FeatureSection:AddSlider(
-                "Retreat At Health %",
+                "Retreat At HP%",
                 math.clamp(tonumber(CONFIG.RETREAT_HEALTH_PERCENT) or 40, 30, 80),
                 30,
                 80,
@@ -714,7 +714,7 @@ return {
             )
 
             UIRef.AutoHealHealthSlider = UIRef.FeatureSection:AddSlider(
-                "Auto Heal at HP",
+                "Auto Heal at HP%",
                 math.clamp(tonumber(CONFIG.AUTO_HEAL_HEALTH_PERCENT) or 65, 30, 80),
                 30,
                 80,
