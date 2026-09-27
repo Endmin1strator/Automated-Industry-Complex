@@ -92,9 +92,14 @@ return {
         local function RequestTeleport(LeaderName)
             return pcall(function()
                 local ChatEvent = Replicated:FindFirstChild("ChatEvent", true)
+                local TeleportEvent = Replicated:FindFirstChild("TeleportEvent", true)
 
-                assert(ChatEvent, "no ChatEvent remote")
-                ChatEvent:FireServer("Teleport", "tp friend " .. LeaderName)
+                assert(TeleportEvent, "no TeleportEvent remote")
+                TeleportEvent:FireServer(0)
+                task.delay(0.5, function()
+                    assert(ChatEvent, "no ChatEvent remote")
+                    ChatEvent:FireServer("Party", "tp friend " .. LeaderName)
+                end)
             end)
         end
 
