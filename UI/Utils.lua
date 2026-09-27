@@ -1047,7 +1047,7 @@ function Library.new(title: string?)
         BorderSizePixel = 0,
         Position = UDim2.fromOffset(7, 10),
         Size = UDim2.fromOffset(20, 24),
-        Text = "v",
+        Text = "⮟",
         TextColor3 = self.Theme.Cyan,
         TextSize = 14,
         Font = Enum.Font.GothamBold,
@@ -1270,6 +1270,7 @@ function Library.new(title: string?)
 
     footer.AnchorPoint = Vector2.new(0, 1)
     footer.TextColor3 = self.Theme.TextMuted
+    self.NavigationFooter = footer
 
     local version = AddText(
         sidebar,
@@ -1281,6 +1282,7 @@ function Library.new(title: string?)
 
     version.AnchorPoint = Vector2.new(0, 1)
     version.TextColor3 = self.Theme.CyanDark
+    self.NavigationVersion = version
 
     self:_CreateSettingsPanel()
 
@@ -2444,6 +2446,20 @@ function Library:SetNavigationCollapsed(value: boolean)
         self.ConfigButton.Visible = not value
     end
 
+    -- Footer belongs to the expanded navigation pane and should disappear
+    -- with it instead of remaining under the collapsed rail.
+    if self.NavigationFooter then
+        Tween(self.NavigationFooter, TWEEN_FAST, {
+            TextTransparency = value and 1 or 0,
+        })
+    end
+
+    if self.NavigationVersion then
+        Tween(self.NavigationVersion, TWEEN_FAST, {
+            TextTransparency = value and 1 or 0,
+        })
+    end
+
     if searchResults then
         searchResults.Visible = (not value) and searchResults.Visible and (self.NavigationSearchText ~= "")
     end
@@ -2465,6 +2481,13 @@ function Library:SetNavigationCollapsed(value: boolean)
     end
 
     if value then
+        -- Fade labels/icons first; only hide the container after the fade.
+        for _, tab in ipairs(self.Tabs) do
+            if tab.Diamond then Tween(tab.Diamond, TWEEN_FAST, {TextTransparency = 1}) end
+            if tab.Label then Tween(tab.Label, TWEEN_FAST, {TextTransparency = 1}) end
+            if tab.Number then Tween(tab.Number, TWEEN_FAST, {TextTransparency = 1}) end
+        end
+
         task.delay(0.16, function()
             if self.Destroyed or not self.NavigationCollapsed then
                 return
@@ -2474,6 +2497,11 @@ function Library:SetNavigationCollapsed(value: boolean)
         end)
     else
         tabContainer.Visible = true
+        for _, tab in ipairs(self.Tabs) do
+            if tab.Diamond then Tween(tab.Diamond, TWEEN_FAST, {TextTransparency = 0}) end
+            if tab.Label then Tween(tab.Label, TWEEN_FAST, {TextTransparency = 0}) end
+            if tab.Number then Tween(tab.Number, TWEEN_FAST, {TextTransparency = 0}) end
+        end
     end
 end
 
@@ -2658,6 +2686,9 @@ function TabMethods:AddSection(name: string)
 
     section.Holder = holder
 
+    -- Keep the last component visually separated from the section bottom edge.
+    AddPadding(holder, 0, 0, 0, 7)
+
     local layout = New("UIListLayout", {
         Parent = holder,
 
@@ -2682,7 +2713,36 @@ function TabMethods:AddSection(name: string)
         end
 
         self.Collapsed = value
-        self.Holder.Visible = not value
+
+        -- Fade component text before collapsing the holder so the UI does not
+        -- visually jump upward while text is still fully visible.
+        if value then
+            for _, object in ipairs(self.Holder:GetDescendants()) do
+                if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+                    if object:GetAttribute("SectionTextTransparency") == nil then
+                        object:SetAttribute("SectionTextTransparency", object.TextTransparency)
+                    end
+                    Tween(object, TWEEN_FAST, {TextTransparency = 1})
+                end
+            end
+
+            task.delay(0.16, function()
+                if self.Collapsed then
+                    self.Holder.Visible = false
+                end
+            end)
+        else
+            self.Holder.Visible = true
+
+            for _, object in ipairs(self.Holder:GetDescendants()) do
+                if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+                    local target = object:GetAttribute("SectionTextTransparency")
+                    if target ~= nil then
+                        Tween(object, TWEEN_FAST, {TextTransparency = target})
+                    end
+                end
+            end
+        end
 
         if self.CollapseButton then
             Tween(self.CollapseButton, TWEEN_FAST, {
@@ -3661,7 +3721,8 @@ function Library.SectionMethods:AddDropdown(
             ancestor = ancestor.Parent
         end
 
-        arrow.Text = "^"
+        arrow.Text = "⮟"
+        arrow.Rotation = 180
     end
 
     function component:Close()
@@ -3672,7 +3733,8 @@ function Library.SectionMethods:AddDropdown(
         self.IsOpen = false
         popup.Visible = false
 
-        arrow.Text = "v"
+        arrow.Text = "⮟"
+        arrow.Rotation = 0
     end
 
     self.Library:_Connect(button.MouseButton1Click, function()
