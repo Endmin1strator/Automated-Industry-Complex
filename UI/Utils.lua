@@ -651,15 +651,60 @@ function Library.new(title: string?)
         PaddingRight = UDim.new(0, 8),
     })
 
-    local searchIcon = AddText(
-        searchBox,
-        "⌕",
-        14,
-        UDim2.fromOffset(8, 0),
-        UDim2.fromOffset(18, 30)
-    )
-    searchIcon.TextColor3 = self.Theme.CyanDark
-    searchIcon.ZIndex = 16
+    -- Clean industrial search glyph. Drawn with Frames instead of a font
+    -- character so it cannot render as a floating/arrow-like symbol.
+    local searchGlyph = New("Frame", {
+        Name = "SearchGlyph",
+        Parent = searchBox,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(8, 8),
+        Size = UDim2.fromOffset(15, 15),
+        ZIndex = 16,
+    })
+
+    local searchCircle = New("Frame", {
+        Parent = searchGlyph,
+        BackgroundColor3 = self.Theme.CyanDark,
+        BackgroundTransparency = 0,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(1, 1),
+        Size = UDim2.fromOffset(9, 9),
+        ZIndex = 16,
+    })
+
+    New("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = searchCircle,
+    })
+
+    local searchCircleCut = New("Frame", {
+        Parent = searchCircle,
+        BackgroundColor3 = self.Theme.Background,
+        BackgroundTransparency = 0,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(2, 2),
+        Size = UDim2.fromOffset(5, 5),
+        ZIndex = 17,
+    })
+
+    New("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+        Parent = searchCircleCut,
+    })
+
+    local searchHandle = New("Frame", {
+        Parent = searchGlyph,
+        BackgroundColor3 = self.Theme.CyanDark,
+        BackgroundTransparency = 0,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(9, 9),
+        Size = UDim2.fromOffset(2, 1),
+        Rotation = 45,
+        ZIndex = 16,
+    })
+
+    self.NavigationSearchIcon = searchGlyph
 
     searchBox.TextXAlignment = Enum.TextXAlignment.Left
     searchBox.TextEditable = true
