@@ -295,6 +295,8 @@ function Library.new(title: string?)
 
     self._dropdowns        = {}
     self._notifications    = {}
+    self.NavigationCollapsed = false
+    self.NavigationSearchText = ""
 
     --==========================================================
     -- ScreenGui
@@ -621,6 +623,81 @@ function Library.new(title: string?)
 
     self.NavigationTitle = navTitle
 
+    -- Explorer-style navigation search
+    local searchBox = New("TextBox", {
+        Name = "NavigationSearch",
+        Parent = sidebar,
+        BackgroundColor3 = self.Theme.Background,
+        BackgroundTransparency = 0.12,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(10, 48),
+        Size = UDim2.new(1, -20, 0, 30),
+        ClearTextOnFocus = false,
+        PlaceholderText = "SEARCH...",
+        PlaceholderColor3 = self.Theme.TextMuted,
+        Text = "",
+        TextColor3 = self.Theme.Text,
+        TextSize = 9,
+        Font = Enum.Font.GothamMedium,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 15,
+    })
+    self.NavigationSearch = searchBox
+    AddStroke(searchBox, self.Theme.BorderDim, 0.18, 1)
+
+    local searchPadding = New("UIPadding", {
+        Parent = searchBox,
+        PaddingLeft = UDim.new(0, 28),
+        PaddingRight = UDim.new(0, 8),
+    })
+
+    local searchIcon = AddText(
+        searchBox,
+        "⌕",
+        14,
+        UDim2.fromOffset(8, 0),
+        UDim2.fromOffset(18, 30)
+    )
+    searchIcon.TextColor3 = self.Theme.CyanDark
+    searchIcon.ZIndex = 16
+
+    searchBox.TextXAlignment = Enum.TextXAlignment.Left
+    searchBox.TextEditable = true
+    self:_Connect(searchBox:GetPropertyChangedSignal("Text"), function()
+        self.NavigationSearchText = searchBox.Text
+        self:_RefreshNavigationSearch()
+    end)
+
+    -- Search results are deliberately separate from the real tab list.
+    -- This keeps AddTab/SelectTab and their layout untouched.
+    local searchResults = New("ScrollingFrame", {
+        Name = "NavigationSearchResults",
+        Parent = sidebar,
+        BackgroundColor3 = self.Theme.Panel,
+        BackgroundTransparency = 0.02,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(10, 82),
+        Size = UDim2.new(1, -20, 0, 0),
+        CanvasSize = UDim2.fromOffset(0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 2,
+        ScrollBarImageColor3 = self.Theme.CyanDark,
+        Visible = false,
+        ZIndex = 40,
+        ClipsDescendants = true,
+    })
+    self.NavigationSearchResults = searchResults
+    AddStroke(searchResults, self.Theme.BorderDim, 0.2, 1)
+    AddPadding(searchResults, 4, 4, 4, 4)
+
+    local resultLayout = New("UIListLayout", {
+        Parent = searchResults,
+        FillDirection = Enum.FillDirection.Vertical,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 3),
+    })
+    self.NavigationSearchLayout = resultLayout
+
     -- Tab container / scrollable navigation
     -- Kept as the same TabContainer reference so existing AddTab/SelectTab
     -- logic and external code do not need to change.
@@ -633,9 +710,9 @@ function Library.new(title: string?)
 
         BorderSizePixel = 0,
 
-        Position = UDim2.fromOffset(10, 48),
+        Position = UDim2.fromOffset(10, 84),
 
-        Size = UDim2.new(1, -20, 1, -95),
+        Size = UDim2.new(1, -20, 1, -131),
 
         CanvasSize = UDim2.fromOffset(0, 0),
 
@@ -672,6 +749,15 @@ function Library.new(title: string?)
         Padding = UDim.new(0, 5),
     })
 
+    self.NavigationLayout = tabLayout
+
+    self:_Connect(searchBox.Focused, function()
+        Tween(searchBox, TWEEN_FAST, {BackgroundTransparency = 0.02})
+    end)
+
+    self:_Connect(searchBox.FocusLost, function()
+        Tween(searchBox, TWEEN_FAST, {BackgroundTransparency = 0.12})
+    end)
     self.NavigationLayout = tabLayout
 
     self:_Connect(navCollapse.MouseEnter, function()
@@ -1537,12 +1623,177 @@ function Library:AddTab(name: string)
     tab.Layout = layout
 
     table.insert(self.Tabs, tab)
+    self:_RefreshNavigationSearch()
 
     if not self.CurrentTab then
         self:SelectTab(tab)
     end
 
     return tab
+end
+
+function Library:_RefreshNavigationSearch()
+    if self.Destroyed or not self.NavigationSearchResults then
+        return
+    end
+
+    local query = string.lower(string.gsub(self.NavigationSearchText or "", "^%s*(.-)%s*$", "%1"))
+    local results = self.NavigationSearchResults
+
+    for _, child in ipairs(results:GetChildren()) do
+        if child:IsA("GuiObject") and child ~= self.NavigationSearchLayout then
+            child:Destroy()
+        end
+    end
+
+    if query == "" then
+        results.Visible = false
+        results.Size = UDim2.new(1, -20, 0, 0)
+        self.TabContainer.Visible = true
+        return
+    end
+
+    local matches = {}
+
+    local function addMatch(tab, section, kind, name, order)
+        if #matches >= 30 then
+            return
+        end
+
+        if string.find(string.lower(name), query, 1, true) then
+            table.insert(matches, {
+                Tab = tab,
+                Section = section,
+                Kind = kind,
+                Name = name,
+                Order = order,
+            })
+        end
+    end
+
+    for _, tab in ipairs(self.Tabs) do
+        addMatch(tab, nil, "TAB", tab.Name, tab._layoutOrder)
+
+        for _, section in ipairs(tab.Sections) do
+            addMatch(tab, section, "SECTION", section.Name, tab._layoutOrder * 1000 + section.Frame.LayoutOrder)
+        end
+    end
+
+    if #matches == 0 then
+        local empty = AddText(
+            results,
+            "NO MATCHES // SYSTEM SEARCH",
+            8,
+            UDim2.fromOffset(8, 0),
+            UDim2.new(1, -16, 0, 28)
+        )
+        empty.TextColor3 = self.Theme.TextMuted
+        empty.ZIndex = 42
+    else
+        for index, match in ipairs(matches) do
+            local button = New("TextButton", {
+                Parent = results,
+                BackgroundColor3 = self.Theme.Element,
+                BackgroundTransparency = 0.18,
+                BorderSizePixel = 0,
+                Size = UDim2.new(1, 0, 0, 36),
+                Text = "",
+                AutoButtonColor = false,
+                LayoutOrder = index,
+                ZIndex = 41,
+            })
+
+            local marker = AddText(
+                button,
+                match.Kind == "TAB" and "◇" or "└",
+                11,
+                UDim2.fromOffset(8, 0),
+                UDim2.fromOffset(18, 36)
+            )
+            marker.TextColor3 = match.Kind == "TAB" and self.Theme.Cyan or self.Theme.TextMuted
+            marker.ZIndex = 42
+
+            local label = AddText(
+                button,
+                match.Name:upper(),
+                9,
+                UDim2.fromOffset(29, 0),
+                UDim2.new(1, -68, 0, 36)
+            )
+            label.Font = Enum.Font.GothamBold
+            label.TextColor3 = self.Theme.TextSecondary
+            label.TextTruncate = Enum.TextTruncate.AtEnd
+            label.ZIndex = 42
+
+            local typeLabel = AddText(
+                button,
+                match.Kind,
+                7,
+                UDim2.new(1, -42, 0, 0),
+                UDim2.fromOffset(34, 36)
+            )
+            typeLabel.TextColor3 = self.Theme.CyanDark
+            typeLabel.TextXAlignment = Enum.TextXAlignment.Right
+            typeLabel.ZIndex = 42
+
+            self:_Connect(button.MouseEnter, function()
+                Tween(button, TWEEN_FAST, {
+                    BackgroundColor3 = self.Theme.CyanDim,
+                    BackgroundTransparency = 0.35,
+                })
+                Tween(label, TWEEN_FAST, {
+                    TextColor3 = self.Theme.White,
+                })
+            end)
+
+            self:_Connect(button.MouseLeave, function()
+                Tween(button, TWEEN_FAST, {
+                    BackgroundColor3 = self.Theme.Element,
+                    BackgroundTransparency = 0.18,
+                })
+                Tween(label, TWEEN_FAST, {
+                    TextColor3 = self.Theme.TextSecondary,
+                })
+            end)
+
+            self:_Connect(button.MouseButton1Click, function()
+                self:_SelectNavigationSearchResult(match)
+            end)
+        end
+    end
+
+    -- Show at most five results; everything else is scrollable.
+    local visibleRows = math.min(#matches, 5)
+    local height = math.max(36, visibleRows * 36 + 8)
+
+    results.Size = UDim2.new(1, -20, 0, height)
+    results.CanvasPosition = Vector2.zero
+    results.Visible = true
+    self.TabContainer.Visible = false
+end
+
+function Library:_SelectNavigationSearchResult(match)
+    if not match or not match.Tab then
+        return
+    end
+
+    self:SelectTab(match.Tab)
+
+    if match.Section and match.Section.Frame then
+        local page = match.Tab.Page
+        task.defer(function()
+            if self.Destroyed or not page.Parent or not match.Section.Frame.Parent then
+                return
+            end
+
+            local y = match.Section.Frame.AbsolutePosition.Y - page.AbsolutePosition.Y
+            page.CanvasPosition = Vector2.new(0, math.max(0, y - 12))
+        end)
+    end
+
+    if self.NavigationSearch then
+        self.NavigationSearch:ReleaseFocus(false)
+    end
 end
 
 function Library:SelectTab(tab)
@@ -1605,6 +1856,8 @@ function Library:SetNavigationCollapsed(value: boolean)
     local content = self.Content
     local tabContainer = self.TabContainer
     local collapseButton = self.NavigationCollapseButton
+    local searchBox = self.NavigationSearch
+    local searchResults = self.NavigationSearchResults
 
     if not sidebar or not content or not tabContainer then
         return
@@ -1626,6 +1879,14 @@ function Library:SetNavigationCollapsed(value: boolean)
         Tween(collapseButton, TWEEN_FAST, {
             Rotation = value and -90 or 0,
         })
+    end
+
+    if searchBox then
+        searchBox.Visible = not value
+    end
+
+    if searchResults then
+        searchResults.Visible = (not value) and searchResults.Visible and (self.NavigationSearchText ~= "")
     end
 
     if self.NavigationTitle then
@@ -1668,6 +1929,7 @@ function TabMethods:AddSection(name: string)
     section.Tab = self
     section.Name = name
     section.Components = {}
+    section.Collapsed = false
 
     local frame = New("Frame", {
         Name = name,
@@ -1714,6 +1976,21 @@ function TabMethods:AddSection(name: string)
         ZIndex = 14,
     })
 
+    local collapseButton = New("TextButton", {
+        Name = "Collapse",
+        Parent = header,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Position = UDim2.new(1, -42, 0, 10),
+        Size = UDim2.fromOffset(28, 34),
+        Text = "⌄",
+        TextColor3 = self.Library.Theme.TextMuted,
+        TextSize = 16,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = false,
+        ZIndex = 16,
+    })
+    section.CollapseButton = collapseButton
     section.Header = header
 
     local icon = AddText(
@@ -1784,7 +2061,44 @@ function TabMethods:AddSection(name: string)
         Padding = UDim.new(0, 5),
     })
 
+    section.Layout = layout
+
+    function section:SetCollapsed(value: boolean)
+        value = value and true or false
+
+        if self.Collapsed == value then
+            return
+        end
+
+        self.Collapsed = value
+        self.Holder.Visible = not value
+
+        if self.CollapseButton then
+            Tween(self.CollapseButton, TWEEN_FAST, {
+                Rotation = value and -90 or 0,
+                TextColor3 = value and self.Library.Theme.Cyan or self.Library.Theme.TextMuted,
+            })
+        end
+    end
+
+    self.Library:_Connect(collapseButton.MouseEnter, function()
+        Tween(collapseButton, TWEEN_FAST, {
+            TextColor3 = self.Library.Theme.Cyan,
+        })
+    end)
+
+    self.Library:_Connect(collapseButton.MouseLeave, function()
+        Tween(collapseButton, TWEEN_FAST, {
+            TextColor3 = section.Collapsed and self.Library.Theme.Cyan or self.Library.Theme.TextMuted,
+        })
+    end)
+
+    self.Library:_Connect(collapseButton.MouseButton1Click, function()
+        section:SetCollapsed(not section.Collapsed)
+    end)
+
     table.insert(self.Sections, section)
+    self.Library:_RefreshNavigationSearch()
 
     return setmetatable(section, {
         __index = Library.SectionMethods,
