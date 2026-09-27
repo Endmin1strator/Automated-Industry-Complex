@@ -16,7 +16,7 @@ return {
         local Player    = Players.LocalPlayer
         local PlayerGui = Player:WaitForChild("PlayerGui", 30)
         if not PlayerGui then
-            error("[AIC] PlayerGui not found — cannot start AutoFarm UI")
+            error("[AIC] PlayerGui not found — cannot start AIC UI")
         end
         
         --==============================================================
@@ -66,7 +66,7 @@ return {
             local UtilsChunk = assert(loadstring(game:HttpGet("https://raw.githubusercontent.com/Endmin1strator/Automated-Industry-Complex/refs/heads/main/UI/Utils.lua"), "@Utils.lua"))
             Utils = UtilsChunk()
         end
-        local UI = Utils.new("AUTO FARMING v2.49")
+        local UI = Utils.new("ENDFIELD INDUSTRIES v2.49")
 
         --// Shared UI foundation. Feature modules own their controls; Runtime
         --// only creates the tabs/sections they attach those controls to.
