@@ -2632,6 +2632,17 @@ function TabMethods:AddSection(name: string)
     })
     section.HeaderButton = headerButton
 
+    -- Toggle the section from anywhere on the header. The dedicated
+    -- chevron button also has its own connection below so the whole
+    -- header remains clickable without relying on a text glyph.
+    self.Library:_Connect(headerButton.MouseButton1Click, function()
+        section:SetCollapsed(not section.Collapsed)
+    end)
+
+    self.Library:_Connect(collapseButton.MouseButton1Click, function()
+        section:SetCollapsed(not section.Collapsed)
+    end)
+
     local activeAccent = New("Frame", {
         Name = "Accent",
         Parent = header,
