@@ -1,11 +1,12 @@
 -- PartySystem follows a Leader between servers.
 --
--- A Leader is picked from the players in the server. Whenever someone who is
--- not whitelisted (and is not the Leader) is in the server, or the Leader is
--- not, the character is reset and held still, and the game's
--- "Tp friend <Leader>" chat command is sent. A try succeeds once the Leader
--- is in the same server; after PARTY_TP_ATTEMPTS failed tries it gives up for
--- PARTY_FAILED_COOLDOWN seconds, during which Auto Block handles intruders.
+-- A Leader is picked from the players in the server. While the Leader is in
+-- the server the farm runs as normal, strangers included. Once the Leader is
+-- gone the character is reset and held still, and about a second later the
+-- game's ChatEvent remote is fired with "tp friend <Leader>". A try succeeds
+-- once the Leader is in the same server; after PARTY_TP_ATTEMPTS failed tries
+-- it gives up for PARTY_FAILED_COOLDOWN seconds, during which Auto Block
+-- handles intruders.
 return {
     Name = "PartySystem",
     IsFeature = true,
@@ -79,20 +80,6 @@ return {
             return false
         end
 
-        --// Anyone other than us and the Leader who is not on the whitelist.
-        local function GetIntruder()
-            for _, OtherPlayer in ipairs(Players:GetPlayers()) do
-                if OtherPlayer ~= Player
-                    and not IsLeaderPlayer(OtherPlayer)
-                    and not (AICFeature.IsWhitelisted and AICFeature.IsWhitelisted(OtherPlayer.UserId))
-                then
-                    return OtherPlayer
-                end
-            end
-
-            return nil
-        end
-
         local function SetStatus(Text)
             State.Status = Text
 
@@ -101,28 +88,13 @@ return {
             end
         end
 
-        --// Sends a message on whichever chat system the game uses.
-        local function SendChat(Message)
-            local TextChatService = game:GetService("TextChatService")
-
-            local Sent = pcall(function()
-                local Channels = TextChatService:FindFirstChild("TextChannels")
-                local General = Channels and Channels:FindFirstChild("RBXGeneral")
-
-                assert(General, "no RBXGeneral channel")
-                General:SendAsync(Message)
-            end)
-
-            if Sent then
-                return true
-            end
-
+        --// Asks the game to Tp us to the Leader through its ChatEvent remote.
+        local function RequestTeleport(LeaderName)
             return pcall(function()
-                local Events = Replicated:FindFirstChild("DefaultChatSystemChatEvents")
-                local Say = Events and Events:FindFirstChild("SayMessageRequest")
+                local ChatEvent = Replicated:FindFirstChild("ChatEvent", true)
 
-                assert(Say, "no legacy chat")
-                Say:FireServer(Message, "All")
+                assert(ChatEvent, "no ChatEvent remote")
+                ChatEvent:FireServer("Teleport", "tp friend " .. LeaderName)
             end)
         end
 
@@ -158,26 +130,16 @@ return {
             SetStatus(StatusText)
         end
 
+        --// Runs only once the Leader has left the server.
         local function RunFollow()
             State.Holding = true
             SetStatus("RESETTING")
             ResetCharacter()
 
-            --// Someone joined but the Leader is still here: stand still until
-            --// the Leader moves on, then follow.
-            while IsLeaderInServer() do
-                if not IsActive() then
-                    Release("IDLE")
-                    return
-                end
-
-                if not GetIntruder() then
-                    Release("WITH LEADER")
-                    return
-                end
-
-                SetStatus("WAITING FOR LEADER TO MOVE")
-                task.wait(1)
+            --// The Leader came back while we were respawning.
+            if IsLeaderInServer() then
+                Release("WITH LEADER")
+                return
             end
 
             local Leader = GetLeader()
@@ -192,8 +154,8 @@ return {
 
                 SetStatus(string.format("TP FRIEND %s  (%d/%d)", Leader.Name, Attempt, Attempts))
 
-                if not SendChat("Tp friend " .. Leader.Name) then
-                    NotifyAction("Party", "Could not send chat message")
+                if not RequestTeleport(Leader.Name) then
+                    NotifyAction("Party", "Could not fire ChatEvent")
                 end
 
                 --// A successful Tp moves us to the Leader's server and this
@@ -246,7 +208,9 @@ return {
                 return
             end
 
-            if IsLeaderInServer() and not GetIntruder() then
+            --// While the Leader is here the farm carries on as normal, even
+            --// with strangers around; only the Leader leaving starts a follow.
+            if IsLeaderInServer() then
                 if State.Status ~= "WITH LEADER" then
                     SetStatus("WITH LEADER")
                 end

@@ -56,17 +56,22 @@ return {
         local UIRef = {}
         local PatrolState = {}
         
-        --// Studio can require the local Utils ModuleScript. Executor/Git mode
-        --// falls back to the same remote Utils source used by the original.
-        local UtilsModule = Replicated:FindFirstChild("Utils")
-        local Utils
-        if UtilsModule and UtilsModule:IsA("ModuleScript") then
-            Utils = require(UtilsModule)
-        else
-            local UtilsChunk = assert(loadstring(game:HttpGet("https://raw.githubusercontent.com/Endmin1strator/Automated-Industry-Complex/refs/heads/main/UI/Utils.lua"), "@Utils.lua"))
-            Utils = UtilsChunk()
+        --// Init normally creates the window up front so its boot loader can
+        --// show real progress. Without it, Studio can require the local Utils
+        --// ModuleScript and executor/Git mode fetches the remote source.
+        local UI = Context.UI
+
+        if not UI then
+            local UtilsModule = Replicated:FindFirstChild("Utils")
+            local Utils
+            if UtilsModule and UtilsModule:IsA("ModuleScript") then
+                Utils = require(UtilsModule)
+            else
+                local UtilsChunk = assert(loadstring(game:HttpGet("https://raw.githubusercontent.com/Endmin1strator/Automated-Industry-Complex/refs/heads/main/UI/Utils.lua"), "@Utils.lua"))
+                Utils = UtilsChunk()
+            end
+            UI = Utils.new("AUTOMATED INDUSTRY COMPLEX v2.51")
         end
-        local UI = Utils.new("AUTOMATED INDUSTRY COMPLEX v2.50")
 
         --// Shared UI foundation. Feature modules own their controls; Runtime
         --// only creates the tabs/sections they attach those controls to.
@@ -127,7 +132,7 @@ return {
             BLOCK_WHITELIST = {},
 
             --// Party System. The Leader is followed between servers with the
-            --// game's "Tp friend <Name>" chat command. Empty table = no Leader.
+            --// game's ChatEvent "tp friend <Name>" command. Empty table = no Leader.
             PARTY_LEADER = {},
             PARTY_CHECK_INTERVAL = 1,
             PARTY_TP_ATTEMPTS = 3,
@@ -149,6 +154,9 @@ return {
             THREAT_ANGLE = 65,
             THREAT_ESCAPE_DISTANCE = 20,
             RETREAT_NEARBY_MOB_DISTANCE = 30,
+            --// While retreating from a player the character keeps moving until
+            --// they are at least this far away. In a duel it never stops.
+            RETREAT_PLAYER_SAFE_DISTANCE = 50,
             RETREAT_HEALTH_PERCENT = 40,
             AUTO_HEAL_HEALTH_PERCENT = 65,
         

@@ -796,10 +796,13 @@ end
 --// Window
 --//==============================================================
 
-function Library.new(title: string?)
+--// options.ManualLoading keeps the boot loader up until FinishLoading is
+--// called, with SetLoadingProgress reporting real progress meanwhile.
+function Library.new(title: string?, options: {ManualLoading: boolean?}?)
     local self = setmetatable({}, Library)
 
     self.Title             = title or "SYSTEM"
+    self._ManualLoading    = options ~= nil and options.ManualLoading == true
     self.Theme             = table.clone(Theme)
     self._DefaultTheme     = table.clone(Theme)
 
@@ -1876,37 +1879,35 @@ function Library:_PlayIntro()
     footer.TextTransparency = 1
     footer.ZIndex = 301
 
-    task.spawn(function()
-        if self.Destroyed then
+    Tween(loader, TWEEN_SMOOTH, {BackgroundTransparency = 0.06})
+    Tween(topLine, TWEEN_SMOOTH, {BackgroundTransparency = 0.05})
+    Tween(brand, TWEEN_SMOOTH, {TextTransparency = 0})
+    Tween(title, TWEEN_SMOOTH, {TextTransparency = 0})
+    Tween(status, TWEEN_SMOOTH, {TextTransparency = 0.15})
+    Tween(statusDot, TWEEN_SMOOTH, {BackgroundTransparency = 0})
+    Tween(bar, TWEEN_SMOOTH, {BackgroundTransparency = 0.15})
+    Tween(footer, TWEEN_SMOOTH, {TextTransparency = 0.25})
+    Tween(fill, TWEEN_SMOOTH, {BackgroundTransparency = 0})
+
+    -- Subtle status pulse while the boot sequence is active.
+    local pulseConnection
+    pulseConnection = RunService.RenderStepped:Connect(function()
+        if self.Destroyed or not loader.Parent then
+            if pulseConnection then pulseConnection:Disconnect() end
             return
         end
+        statusDot.BackgroundTransparency = 0.05 + ((math.sin(os.clock() * 5) + 1) * 0.12)
+    end)
 
-        Tween(loader, TWEEN_SMOOTH, {BackgroundTransparency = 0.06})
-        Tween(topLine, TWEEN_SMOOTH, {BackgroundTransparency = 0.05})
-        Tween(brand, TWEEN_SMOOTH, {TextTransparency = 0})
-        Tween(title, TWEEN_SMOOTH, {TextTransparency = 0})
-        Tween(status, TWEEN_SMOOTH, {TextTransparency = 0.15})
-        Tween(statusDot, TWEEN_SMOOTH, {BackgroundTransparency = 0})
-        Tween(bar, TWEEN_SMOOTH, {BackgroundTransparency = 0.15})
-        Tween(footer, TWEEN_SMOOTH, {TextTransparency = 0.25})
-        Tween(fill, TWEEN_SMOOTH, {BackgroundTransparency = 0})
+    -- Driven by SetLoadingProgress / FinishLoading when the window was made
+    -- with ManualLoading; otherwise the bar simply runs to the end.
+    self._BootLoader = {
+        Status = status,
+        Fill = fill,
+        Finishing = false,
+    }
 
-        local progress = Tween(fill, TweenInfo.new(0.85, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Size = UDim2.fromScale(1, 1),
-        })
-
-        -- Subtle status pulse while the boot sequence is active.
-        local pulseConnection
-        pulseConnection = RunService.RenderStepped:Connect(function()
-            if self.Destroyed or not loader.Parent then
-                if pulseConnection then pulseConnection:Disconnect() end
-                return
-            end
-            statusDot.BackgroundTransparency = 0.05 + ((math.sin(os.clock() * 5) + 1) * 0.12)
-        end)
-
-        progress.Completed:Wait()
-
+    local function close()
         if pulseConnection then
             pulseConnection:Disconnect()
         end
@@ -1935,6 +1936,7 @@ function Library:_PlayIntro()
 
         loader:Destroy()
         self._introPlaying = false
+        self._BootLoader = nil
 
         if self.Visible then
             window.Visible = true
@@ -1942,6 +1944,55 @@ function Library:_PlayIntro()
             Tween(self.WindowUIScale, TWEEN_SMOOTH, {Scale = 1})
             self:_FadeWindow(0)
         end
+    end
+
+    self._BootLoader.Close = close
+
+    if not self._ManualLoading then
+        self:FinishLoading()
+    end
+end
+
+--// Boot loader progress, for callers that load in stages (ManualLoading).
+--// Fraction is 0..1; Text replaces the status line when given. IsError
+--// paints the status red and leaves the loader up.
+function Library:SetLoadingProgress(fraction: number?, text: string?, isError: boolean?)
+    local boot = self._BootLoader
+
+    if self.Destroyed or not boot or boot.Finishing then
+        return
+    end
+
+    if text then
+        boot.Status.Text = string.upper(text)
+    end
+
+    boot.Status.TextColor3 = isError and self.Theme.Danger or self.Theme.TextMuted
+
+    if fraction then
+        Tween(boot.Fill, TWEEN_FAST, {
+            Size = UDim2.fromScale(math.clamp(fraction, 0, 1), 1),
+        })
+    end
+end
+
+--// Runs the bar to the end, fades the loader out and shows the window.
+function Library:FinishLoading()
+    local boot = self._BootLoader
+
+    if self.Destroyed or not boot or boot.Finishing then
+        return
+    end
+
+    boot.Finishing = true
+
+    task.spawn(function()
+        local progress = Tween(boot.Fill, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = UDim2.fromScale(1, 1),
+        })
+
+        progress.Completed:Wait()
+        boot.Close()
     end)
 end
 

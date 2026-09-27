@@ -139,6 +139,27 @@ return {
                 end
             end
         end
+        --// Draws the weapon when it is sheathed. True when the draw was just
+        --// issued, so the caller should give it this frame.
+        local function EnsureWeaponDrawn(now, InputBindableFunction, MainWeld)
+            local Sheathed = not AICFeature.S.Equipped
+                or (MainWeld.Part1 and MainWeld.Part1.Name == "UpperTorso")
+
+            if not Sheathed or now - AICFeature.S.LAST_EQUIP_TIME < CONFIG.EQUIP_TOGGLE_COOLDOWN then
+                return false
+            end
+
+            AICFeature.S.Equipped = true
+            AICFeature.S.LAST_EQUIP_TIME = now
+
+            InputBindableFunction:Invoke(
+                "EquipButton",
+                Enum.UserInputState.Begin
+            )
+
+            return true
+        end
+
         function Feature:Update(dt)
             -- Keep walkspeed / position UI in sync every frame (was RenderUpdate)
             Feature:RenderUpdate(dt)
@@ -323,6 +344,22 @@ return {
                     AICFeature.MoveBackToFarmZone()
                 end
 
+                --// Something inside attack range is hit while backing away. In a
+                --// duel the weapon stays drawn and no potion is drunk at all.
+                local InDuel = AICCombat.IsInDuel()
+                local FightBackThreat = AICCombat.GetFightBackThreat()
+
+                if (InDuel or (FightBackThreat and not EnemyUsingSkill))
+                    and EnsureWeaponDrawn(now, InputBindableFunction, MainWeld)
+                then
+                    return
+                end
+
+                if FightBackThreat and not EnemyUsingSkill then
+                    AICCombat.FaceGoblin(FightBackThreat)
+                    AICCombat.RetreatAttack(FightBackThreat, now)
+                end
+
                 local LastConsumed = PlayerStats and PlayerStats:FindFirstChild("LastConsumed")
                 local WantsConsume = UseConsumable
                     and LastConsumed
@@ -332,6 +369,8 @@ return {
                     --// Never stop to drink mid-dodge. Getting out of the skill first
                     --// is worth more than the heal, and sheathing costs an animation.
                     and not EnemyUsingSkill
+                    and not InDuel
+                    and not FightBackThreat
 
                 --// Sheathe only when a potion is actually about to be drunk. The old
                 --// build sheathed on every retreat frame and drew again as soon as
@@ -459,6 +498,16 @@ return {
                         and WaypointVerticalDistance <= math.max(ReachDistance, CONFIG.JUMP_HEIGHT + 2)
                     then
                         CONFIG.CURRENT_WAYPOINT_TARGET = WaypointIndex + 1
+
+                        --// Waypoint Loop takes over from the first paired
+                        --// waypoint, so the route ends there.
+                        local LoopEntry = AICFeature.GetWaypointLoopEntry and AICFeature.GetWaypointLoopEntry()
+
+                        if LoopEntry and WaypointIndex >= LoopEntry then
+                            CONFIG.CURRENT_WAYPOINT_TARGET = WaypointCount + 1
+                            AICFeature.EnterWaypointLoop(WaypointIndex)
+                        end
+
                         AICCombatUtils.S.LAST_STUCK_POSITION = nil
                         AICCombatUtils.S.LAST_STUCK_TIME = now
                         AICDebug.UpdateDebugWaypointColors()
@@ -612,8 +661,13 @@ return {
                 or not HasWaypoints
                 or (tonumber(CONFIG.CURRENT_WAYPOINT_TARGET) or 1) > #PlaceConfig.WAYPOINTS
 
+            --// A duel is always fought, Ignore Farm Zone or not: the opponent
+            --// may be anywhere, and falling through to Interact never attacks.
+            local CanFightTarget = AICCombat.S.ClosestTarget
+                and (not FeatureState.IgnoreFarmZone.Enabled or AICCombat.IsInDuel())
+
             if WaypointRouteFinished
-                and (FeatureState.AutoFind.Enabled or not HasWaypoints or (AICCombat.S.ClosestTarget and not FeatureState.IgnoreFarmZone.Enabled)) then
+                and (FeatureState.AutoFind.Enabled or not HasWaypoints or CanFightTarget) then
                 if AICCombat.S.ClosestTarget then
                     if not AICCombat.IsTargetLockValid(AICCombat.S.ClosestTarget) then
                         AICCombat.S.ClosestTarget = nil
@@ -629,17 +683,7 @@ return {
                         return
                     end
 
-                    if (not AICFeature.S.Equipped or (MainWeld.Part1 and MainWeld.Part1.Name == "UpperTorso"))
-                        and now - AICFeature.S.LAST_EQUIP_TIME >= CONFIG.EQUIP_TOGGLE_COOLDOWN
-                    then
-                        AICFeature.S.Equipped = true
-                        AICFeature.S.LAST_EQUIP_TIME = now
-
-                        InputBindableFunction:Invoke(
-                            "EquipButton",
-                            Enum.UserInputState.Begin
-                        )
-
+                    if EnsureWeaponDrawn(now, InputBindableFunction, MainWeld) then
                         return
                     end
 

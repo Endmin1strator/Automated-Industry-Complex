@@ -1,6 +1,12 @@
 -- AutoFarm bootstrap.
 -- Every module returns {Name, Dependencies, Start(Context)}.
 
+local TITLE = "AUTOMATED INDUSTRY COMPLEX v2.51"
+local UTILS_PATH = "UI/Utils.lua"
+
+--// A failed download is retried this many times before giving up.
+local FETCH_RETRIES = 2
+
 local BRANCH = "main"
 local BASE =
     "https://raw.githubusercontent.com/Endmin1strator/Automated-Industry-Complex/refs/heads/"
@@ -107,54 +113,169 @@ local function collect(Container, Prefix, Output)
     end
 end
 
-local function loadAll()
+local Context = {
+    Modules = {},
+    Features = {},
+}
+
+--// The window is built first so its boot loader can report real progress:
+--// fetching takes the first half of the bar, starting modules the rest.
+local UI = nil
+local FETCH_SHARE = 0.5
+
+local function report(Fraction, Text)
+    if UI then
+        UI:SetLoadingProgress(Fraction, Text)
+    end
+end
+
+local function fail(Message)
+    --// Only the first line fits on the loader; the full text is raised.
+    if UI then
+        UI:SetLoadingProgress(nil, "LOAD FAILED  //  " .. string.match(Message, "^[^\n]*"), true)
+    end
+
+    error(Message, 0)
+end
+
+local function checkSpec(Spec, Path)
+    if type(Spec) ~= "table" or type(Spec.Start) ~= "function" then
+        fail("Invalid module: " .. Path)
+    end
+
+    return Spec
+end
+
+local function fetchOnce(Path)
+    local Ok, Body = pcall(function()
+        return game:HttpGet(BASE .. Path, true)
+    end)
+
+    if Ok and type(Body) == "string" and Body ~= "" and not string.find(Body, "^404: Not Found") then
+        return Body
+    end
+
+    return nil
+end
+
+--// Starts every download at once. HttpGet yields, so fetching in parallel
+--// costs about one round trip instead of one per file.
+local function fetchParallel(Paths)
+    local Bodies = {}
+    local Pending = #Paths
+
+    for _, Path in ipairs(Paths) do
+        task.spawn(function()
+            for _ = 0, FETCH_RETRIES do
+                Bodies[Path] = fetchOnce(Path)
+
+                if Bodies[Path] then
+                    break
+                end
+            end
+
+            Pending -= 1
+        end)
+    end
+
+    return Bodies, function()
+        return Pending
+    end
+end
+
+local function createWindow(Utils)
+    UI = Utils.new(TITLE, { ManualLoading = true })
+    Context.UI = UI
+end
+
+local function loadLocal()
     local Sources = {}
     local Specs = {}
 
-    if ROOT then
-        collect(ROOT, "", Sources)
+    local UIFolder = ROOT:FindFirstChild("UI")
+    local UtilsModule = UIFolder and UIFolder:FindFirstChild("Utils")
 
-        for Path, ModuleScript in pairs(Sources) do
-            local Spec = require(ModuleScript)
-
-            assert(
-                type(Spec) == "table" and type(Spec.Start) == "function",
-                "Invalid module: " .. Path
-            )
-
-            Specs[Spec.Name] = Spec
-        end
-
-        return Specs
+    if UtilsModule and UtilsModule:IsA("ModuleScript") then
+        createWindow(require(UtilsModule))
     end
 
-    for _, Path in ipairs(REMOTE_MODULES) do
-        local Body = assert(
-            game:HttpGet(BASE .. Path, true),
-            "Failed to fetch " .. Path
-        )
+    collect(ROOT, "", Sources)
 
-        local Chunk = assert(loadstring(Body, "@" .. Path))
-        local Spec = Chunk()
-
-        assert(
-            type(Spec) == "table" and type(Spec.Start) == "function",
-            "Invalid module: " .. Path
-        )
-
+    for Path, ModuleScript in pairs(Sources) do
+        local Spec = checkSpec(require(ModuleScript), Path)
         Specs[Spec.Name] = Spec
     end
 
     return Specs
 end
 
-local Specs = loadAll()
-local Context = {
-    Modules = {},
-    Features = {},
-}
+local function loadRemote()
+    local Paths = table.clone(REMOTE_MODULES)
+    table.insert(Paths, 1, UTILS_PATH)
+
+    local Bodies, GetPending = fetchParallel(Paths)
+    local Total = #Paths
+
+    --// Show the window as soon as Utils arrives; the modules keep
+    --// downloading behind the loader.
+    local UtilsBody = Bodies[UTILS_PATH]
+
+    while not UtilsBody and GetPending() > 0 do
+        task.wait()
+        UtilsBody = Bodies[UTILS_PATH]
+    end
+
+    if not UtilsBody then
+        fail("Failed to fetch " .. UTILS_PATH)
+    end
+
+    local UtilsChunk = loadstring(UtilsBody, "@" .. UTILS_PATH)
+
+    if not UtilsChunk then
+        fail("Failed to compile " .. UTILS_PATH)
+    end
+
+    createWindow(UtilsChunk())
+
+    while GetPending() > 0 do
+        local Done = Total - GetPending()
+        report(Done / Total * FETCH_SHARE, string.format("FETCHING MODULES  //  %d / %d", Done, Total))
+        task.wait()
+    end
+
+    report(FETCH_SHARE, "COMPILING MODULES")
+
+    local Specs = {}
+
+    for _, Path in ipairs(REMOTE_MODULES) do
+        local Body = Bodies[Path]
+
+        if not Body then
+            fail("Failed to fetch " .. Path)
+        end
+
+        local Chunk, CompileError = loadstring(Body, "@" .. Path)
+
+        if not Chunk then
+            fail("Failed to compile " .. Path .. ": " .. tostring(CompileError))
+        end
+
+        local Spec = checkSpec(Chunk(), Path)
+        Specs[Spec.Name] = Spec
+    end
+
+    return Specs
+end
+
+local Specs = ROOT and loadLocal() or loadRemote()
+local SpecCount = 0
+
+for _ in pairs(Specs) do
+    SpecCount += 1
+end
 
 local Started = {}
+local StartedCount = 0
 
 local function start(Name)
     if Started[Name] then
@@ -170,11 +291,21 @@ local function start(Name)
         start(Dependency)
     end
 
-    local Module = Spec.Start(Context)
+    report(
+        FETCH_SHARE + StartedCount / math.max(1, SpecCount) * (1 - FETCH_SHARE),
+        "STARTING  //  " .. Name
+    )
+
+    local Ok, Module = xpcall(Spec.Start, debug.traceback, Context)
+
+    if not Ok then
+        fail(Name .. " failed to start\n" .. tostring(Module))
+    end
 
     Context.Modules[Name] = Module
     Context[Name] = Module
     Started[Name] = true
+    StartedCount += 1
 
     if Spec.IsFeature or (type(Module) == "table" and Module.IsFeature) then
         table.insert(Context.Features, Module)
@@ -223,5 +354,9 @@ for _, Name in ipairs(START_ORDER) do
 end
 
 Context.Heartbeat:Start(Context.Features)
+
+if Context.UI then
+    Context.UI:FinishLoading()
+end
 
 return Context

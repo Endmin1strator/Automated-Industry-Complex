@@ -1,17 +1,20 @@
--- WaypointLoop: after the waypoint route is walked, farm only the farm zones
--- paired with a waypoint, walking the route between them.
+-- WaypointLoop: farm only the farm zones paired with a waypoint, walking the
+-- route between them.
 --
 -- Each waypoint may be paired with one farm zone, and each farm zone may have
--- its own target list (empty = the Enemy Priority list). Once the route
--- reaches its last waypoint the character walks to the nearest paired
--- waypoint and fights in that zone, one zone at a time:
---   * with a single paired zone it stays there for good, waiting inside the
---     zone while nothing is alive;
---   * with two or more, once a zone is cleared it walks on to the next
---     paired zone (route order, wrapping around; a zone already seen to have
---     targets goes first), e.g. zones on #33 and #39 alternate 33 > 39 > 33.
+-- its own target list (empty = the Enemy Priority list).
+--   * The route is walked as usual up to the first paired waypoint, where the
+--     loop takes over.
+--   * First pass: every paired waypoint is visited in route order. Where its
+--     zone has targets they are fought until the zone is clear, then the walk
+--     goes on to the next paired waypoint.
+--   * After the last paired waypoint: walk to the nearest paired zone that has
+--     targets. With none anywhere, wait where we are until something spawns
+--     instead of walking back and forth. A paired waypoint passed on the way
+--     whose zone has targets is fought on the spot.
 -- The walk only uses the waypoints between paired ones: it never heads back
--- past the first or last paired waypoint.
+-- past the first or last paired waypoint (e.g. first pair on #34 never walks
+-- back to #33).
 return {
     Name = "WaypointLoop",
     IsFeature = true,
@@ -50,6 +53,8 @@ return {
             Goal = nil,
             --// When the goal zone was first seen empty, or nil.
             EmptySince = nil,
+            --// True during the first pass over the paired waypoints.
+            Sweeping = false,
             ScanTime = 0,
             ScanResult = {},
         }
@@ -129,17 +134,33 @@ return {
             return Loop.ScanResult[ZoneIndex]
         end
 
-        --// First goal once the route ends: the nearest paired waypoint (by
-        --// route distance), preferring one whose zone already shows targets.
-        local function FirstGoal(PlaceConfig, Paired, now)
+        --// Nearest paired waypoint (by route distance) whose zone has targets.
+        --// A waypoint paired with ExcludeZone is skipped. nil when no zone
+        --// shows any targets.
+        local function NearestGoalWithTargets(PlaceConfig, Paired, ExcludeZone, now)
+            local Best, BestScore = nil, math.huge
+
+            for _, WaypointIndex in ipairs(Paired) do
+                local ZoneIndex = PlaceConfig.WAYPOINT_ZONES[WaypointIndex]
+                local Score = math.abs(WaypointIndex - Loop.Index)
+
+                if ZoneIndex ~= ExcludeZone
+                    and Score < BestScore
+                    and ZoneHasTargets(PlaceConfig, ZoneIndex, now)
+                then
+                    Best, BestScore = WaypointIndex, Score
+                end
+            end
+
+            return Best
+        end
+
+        --// Nearest paired waypoint regardless of targets.
+        local function NearestGoal(Paired)
             local Best, BestScore = nil, math.huge
 
             for _, WaypointIndex in ipairs(Paired) do
                 local Score = math.abs(WaypointIndex - Loop.Index)
-
-                if not ZoneHasTargets(PlaceConfig, PlaceConfig.WAYPOINT_ZONES[WaypointIndex], now) then
-                    Score += #PlaceConfig.WAYPOINTS
-                end
 
                 if Score < BestScore then
                     Best, BestScore = WaypointIndex, Score
@@ -149,29 +170,31 @@ return {
             return Best
         end
 
-        --// Next paired waypoint after the cleared Goal, in route order and
-        --// wrapping around. Waypoints paired with the goal's own zone are
-        --// skipped, and a zone already seen to have targets is preferred.
-        --// nil when every paired waypoint belongs to the goal's zone.
-        local function NextGoal(PlaceConfig, Paired, Goal, now)
-            local Position = table.find(Paired, Goal) or 0
-            local GoalZone = PlaceConfig.WAYPOINT_ZONES[Goal]
-            local FirstOther = nil
-
-            for Step = 1, #Paired - 1 do
-                local WaypointIndex = Paired[(Position + Step - 1) % #Paired + 1]
-                local ZoneIndex = PlaceConfig.WAYPOINT_ZONES[WaypointIndex]
-
-                if ZoneIndex ~= GoalZone then
-                    if ZoneHasTargets(PlaceConfig, ZoneIndex, now) then
-                        return WaypointIndex
-                    end
-
-                    FirstOther = FirstOther or WaypointIndex
+        --// Next paired waypoint after Goal in route order, or nil at the end.
+        local function NextPairedAfter(Paired, Goal)
+            for _, WaypointIndex in ipairs(Paired) do
+                if WaypointIndex > Goal then
+                    return WaypointIndex
                 end
             end
 
-            return FirstOther
+            return nil
+        end
+
+        --// Waypoint closest to the character, for picking the loop up when
+        --// it did not start from the route (e.g. switched on mid-farm).
+        local function NearestWaypointIndex(PlaceConfig, RootPart)
+            local Best, BestDistance = #PlaceConfig.WAYPOINTS, math.huge
+
+            for Index, Position in ipairs(PlaceConfig.WAYPOINTS) do
+                local Distance = (Position - RootPart.Position).Magnitude
+
+                if Distance < BestDistance then
+                    Best, BestDistance = Index, Distance
+                end
+            end
+
+            return Best
         end
 
         local function StandStill(Humanoid)
@@ -203,7 +226,7 @@ return {
                 end
 
                 StandStill(Humanoid)
-                return
+                return true
             end
 
             local FaceOrientation = Runtime:GetFaceOrientation()
@@ -215,14 +238,65 @@ return {
             Humanoid.AutoRotate = true
             Humanoid:MoveTo(Target)
             AICCombatUtils.DoJumpIfObstacle(Target)
+            return false
         end
 
         function AICFeature.ResetWaypointLoop()
             Loop.Index = nil
             Loop.Goal = nil
             Loop.EmptySince = nil
+            Loop.Sweeping = false
             table.clear(Loop.ScanResult)
             AICCombatUtils.S.ActiveZoneIndex = nil
+        end
+
+        --// Paired waypoints when the loop applies, else nil.
+        local function GetActivePaired()
+            local PlaceConfig = Runtime:GetPlaceConfig()
+
+            if not FeatureState.WaypointLoop.Enabled
+                or FeatureState.AutoFind.Enabled
+                or FeatureState.IgnoreFarmZone.Enabled
+                or not PlaceConfig
+                or #PlaceConfig.WAYPOINTS == 0
+            then
+                return nil
+            end
+
+            local Paired = PairedWaypoints(PlaceConfig)
+            return #Paired > 0 and Paired or nil
+        end
+
+        --// First paired waypoint: the route hands over to the loop there.
+        --// nil when the loop does not apply and the route runs to the end.
+        function AICFeature.GetWaypointLoopEntry()
+            local Paired = GetActivePaired()
+            return Paired and Paired[1] or nil
+        end
+
+        --// Called by the route on reaching the entry waypoint (or beyond).
+        function AICFeature.EnterWaypointLoop(WaypointIndex)
+            AICFeature.ResetWaypointLoop()
+            Loop.Index = WaypointIndex
+            Loop.Goal = WaypointIndex
+            Loop.Sweeping = true
+        end
+
+        --// The goal zone has stayed empty for the grace period: choose where
+        --// to go next. Returns the new goal, or the current one to wait there.
+        local function ChooseGoalAfterClear(PlaceConfig, Paired, now)
+            if Loop.Sweeping then
+                local Next = NextPairedAfter(Paired, Loop.Goal)
+
+                if Next then
+                    return Next
+                end
+
+                Loop.Sweeping = false
+            end
+
+            local GoalZone = PlaceConfig.WAYPOINT_ZONES[Loop.Goal]
+            return NearestGoalWithTargets(PlaceConfig, Paired, GoalZone, now) or Loop.Goal
         end
 
         --// Called by the farm loop once the route has been walked.
@@ -232,17 +306,9 @@ return {
         function AICFeature.WaypointLoopStep(now)
             local PlaceConfig = Runtime:GetPlaceConfig()
             local _, Humanoid, RootPart = Runtime:GetCharacter()
-            local Paired = PlaceConfig and PairedWaypoints(PlaceConfig) or {}
+            local Paired = GetActivePaired()
 
-            if not FeatureState.WaypointLoop.Enabled
-                or FeatureState.AutoFind.Enabled
-                or FeatureState.IgnoreFarmZone.Enabled
-                or not PlaceConfig
-                or not Humanoid
-                or not RootPart
-                or #PlaceConfig.WAYPOINTS == 0
-                or #Paired == 0
-            then
+            if not Paired or not Humanoid or not RootPart then
                 if Loop.Index then
                     AICFeature.ResetWaypointLoop()
                 end
@@ -250,21 +316,37 @@ return {
                 return nil
             end
 
+            --// Not entered from the route: pick up from the nearest waypoint.
             if not Loop.Index or not PlaceConfig.WAYPOINTS[Loop.Index] then
-                Loop.Index = #PlaceConfig.WAYPOINTS
+                Loop.Index = NearestWaypointIndex(PlaceConfig, RootPart)
                 Loop.Goal = nil
+                Loop.Sweeping = false
             end
 
-            --// No goal yet, or its pair was removed: pick from where we stand.
+            --// No goal yet, or its pair was removed: the nearest zone with
+            --// targets, else simply the nearest paired waypoint.
             if not Loop.Goal or not table.find(Paired, Loop.Goal) then
-                Loop.Goal = FirstGoal(PlaceConfig, Paired, now)
+                Loop.Goal = NearestGoalWithTargets(PlaceConfig, Paired, nil, now) or NearestGoal(Paired)
                 Loop.EmptySince = nil
             end
 
             if Loop.Goal ~= Loop.Index then
                 AICCombatUtils.S.ActiveZoneIndex = nil
                 AICCombat.S.ClosestTarget = nil
-                StepTo(PlaceConfig, Loop.Index + (Loop.Goal > Loop.Index and 1 or -1), Humanoid, RootPart, now)
+
+                local Arrived = StepTo(PlaceConfig, Loop.Index + (Loop.Goal > Loop.Index and 1 or -1), Humanoid, RootPart, now)
+
+                --// Passing a paired waypoint whose zone has targets: fight here
+                --// first rather than walking past them.
+                if Arrived
+                    and Loop.Index ~= Loop.Goal
+                    and table.find(Paired, Loop.Index)
+                    and ZoneHasTargets(PlaceConfig, PlaceConfig.WAYPOINT_ZONES[Loop.Index], now)
+                then
+                    Loop.Goal = Loop.Index
+                    Loop.EmptySince = nil
+                end
+
                 return "move"
             end
 
@@ -278,12 +360,12 @@ return {
 
             Loop.EmptySince = Loop.EmptySince or now
 
-            --// Zone cleared: head for the next paired zone. With a single
-            --// zone there is nowhere else to go, so keep waiting inside it.
+            --// Zone cleared. With nowhere better to go the goal stays put and
+            --// the character waits inside this zone for a spawn.
             if now - Loop.EmptySince >= ZONE_CLEAR_GRACE then
-                local Next = NextGoal(PlaceConfig, Paired, Loop.Goal, now)
+                local Next = ChooseGoalAfterClear(PlaceConfig, Paired, now)
 
-                if Next then
+                if Next ~= Loop.Goal then
                     Loop.Goal = Next
                     Loop.EmptySince = nil
                 end

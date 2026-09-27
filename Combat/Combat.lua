@@ -316,6 +316,23 @@ return {
                 end
             end
         end
+        --// A swing thrown while retreating. Unlike PerformCombatActions it does
+        --// not require a priority target: whatever has closed in gets hit, and
+        --// no skill is spent on the way out.
+        function AICCombat.RetreatAttack(Threat, now)
+            if not AICCombat.CanCombatAttack(Threat, now) then
+                return false
+            end
+
+            if not AICCombat.InvokeCombatInput("AttackButton") then
+                return false
+            end
+
+            AICCombat.S.LAST_ATTACK_TIME = now
+            AICCombat.S.COMBAT_NEXT_ATTACK_TIME = now + CONFIG.ATTACK_INTERVAL
+            return true
+        end
+
         function AICCombat.GetLivingGoblins()
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             --// Cached for a fraction of a second. The retreat solver asks for this

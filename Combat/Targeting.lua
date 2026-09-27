@@ -104,11 +104,70 @@ return {
 
             local OtherPlayer = Players:GetPlayerFromCharacter(Model)
 
-            if AICCombat.IsTargetablePlayer(OtherPlayer) then
+            if AICCombat.IsTargetablePlayer(OtherPlayer)
+                and not AICCombat.IsPlayerDuelBlocked(OtherPlayer)
+            then
                 return AICCombat.GetPlayerTargetName(OtherPlayer)
             end
 
             return nil
+        end
+
+        --// Duels. A character in a duel carries a "DuelOpponents" StringValue
+        --// naming who it is fighting. Names are read as tokens so a value
+        --// listing several opponents works too.
+        local DUEL_VALUE_NAME = "DuelOpponents"
+
+        local function GetDuelNames(Character)
+            local Value = Character and Character:FindFirstChild(DUEL_VALUE_NAME)
+
+            if not Value or not Value:IsA("StringValue") or Value.Value == "" then
+                return nil
+            end
+
+            local Names = {}
+
+            for Name in string.gmatch(Value.Value, "[%w_]+") do
+                Names[string.lower(Name)] = true
+            end
+
+            return next(Names) and Names or nil
+        end
+
+        local function NamesInclude(Names, OtherPlayer)
+            return Names[string.lower(OtherPlayer.Name)] == true
+                or Names[string.lower(OtherPlayer.DisplayName)] == true
+        end
+
+        --// Players our own character is dueling, or nil when not in a duel.
+        function AICCombat.GetOwnDuelOpponents()
+            local Names = GetDuelNames(Player.Character)
+
+            if not Names then
+                return nil
+            end
+
+            local Result = {}
+
+            for _, OtherPlayer in ipairs(Players:GetPlayers()) do
+                if AICCombat.IsTargetablePlayer(OtherPlayer) and NamesInclude(Names, OtherPlayer) then
+                    table.insert(Result, OtherPlayer)
+                end
+            end
+
+            return #Result > 0 and Result or nil
+        end
+
+        function AICCombat.IsInDuel()
+            return AICCombat.GetOwnDuelOpponents() ~= nil
+        end
+
+        --// A player dueling somebody else is off limits. A player with no
+        --// DuelOpponents value, or one naming us, may be attacked.
+        function AICCombat.IsPlayerDuelBlocked(OtherPlayer)
+            local Names = GetDuelNames(OtherPlayer and OtherPlayer.Character)
+
+            return Names ~= nil and not NamesInclude(Names, Player)
         end
 
         --// Characters of players whose "@Name" is in the priority list.
@@ -118,6 +177,7 @@ return {
             for _, OtherPlayer in ipairs(Players:GetPlayers()) do
                 if AICCombat.IsTargetablePlayer(OtherPlayer)
                     and OtherPlayer.Character
+                    and not AICCombat.IsPlayerDuelBlocked(OtherPlayer)
                     and AICCombat.IsEntityTargeted(AICCombat.GetPlayerTargetName(OtherPlayer))
                 then
                     table.insert(Result, OtherPlayer.Character)
@@ -195,6 +255,20 @@ return {
         --// Names the bot may attack right now, in priority order. A paired
         --// zone fought by the waypoint loop uses its own list when it has one.
         function AICCombat.GetActiveTargetList()
+            --// In a duel only the opponent counts; every other priority entry
+            --// is ignored until the duel ends.
+            local Opponents = AICCombat.GetOwnDuelOpponents()
+
+            if Opponents then
+                local List = {}
+
+                for _, Opponent in ipairs(Opponents) do
+                    table.insert(List, AICCombat.GetPlayerTargetName(Opponent))
+                end
+
+                return List
+            end
+
             local Zone = AICCombatUtils.S.ActiveZoneIndex and AICCombatUtils.GetActiveFarmZone()
 
             if Zone and type(Zone.Targets) == "table" and #Zone.Targets > 0 then
