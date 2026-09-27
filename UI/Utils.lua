@@ -344,60 +344,49 @@ function Library:_CreateSettingsPanel()
         Name = "ConfigButton",
         Parent = sidebar,
         BackgroundColor3 = self.Theme.Element,
-        BackgroundTransparency = 0.04,
+        BackgroundTransparency = 0.1,
         BorderSizePixel = 0,
         Position = UDim2.new(0, 10, 1, -52),
         Size = UDim2.new(1, -20, 0, 42),
         Text = "",
-        TextColor3 = self.Theme.Cyan,
-        TextSize = 9,
-        Font = Enum.Font.GothamBold,
-        TextXAlignment = Enum.TextXAlignment.Left,
         AutoButtonColor = false,
         ZIndex = 25,
     })
-    AddStroke(configButton, self.Theme.BorderDim, 0.05, 1)
-    AddAngularCorners(configButton, self.Theme.CyanDark)
+    AddStroke(configButton, self.Theme.BorderDim, 0.25, 1)
 
-    local cfgAccent = New("Frame", {
-        Parent = configButton,
-        BackgroundColor3 = self.Theme.Cyan,
-        BackgroundTransparency = 0.05,
-        BorderSizePixel = 0,
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.fromOffset(3, 42),
-        ZIndex = 26,
-    })
-    -- Angular accent; no rounded decoration to match the main window.
-    AddLine(configButton, UDim2.fromOffset(8, 41), UDim2.fromOffset(28, 1), self.Theme.CyanDark)
+    local cfgDiamond = AddText(configButton, "◇", 13, UDim2.fromOffset(13, 0), UDim2.fromOffset(22, 42))
+    cfgDiamond.TextColor3 = self.Theme.Cyan
+    cfgDiamond.Font = Enum.Font.GothamBold
 
-    -- Angular diamond marker, matching the Tab navigation language.
-    local cfgDiamond = New("Frame", {
-        Parent = configButton,
-        BackgroundColor3 = self.Theme.Cyan,
-        BackgroundTransparency = 0.05,
-        BorderSizePixel = 0,
-        AnchorPoint = Vector2.new(0, 0.5),
-        Position = UDim2.new(0, 17, 0.5, 0),
-        Size = UDim2.fromOffset(7, 7),
-        Rotation = -45,
-        ZIndex = 26,
-    })
-    self.ConfigDiamond = cfgDiamond
-
-    local cfgLabel = AddText(configButton, "CONFIGURATION", 9, UDim2.fromOffset(34, 0), UDim2.new(1, -72, 1, 0))
+    local cfgLabel = AddText(configButton, "CONFIGURATION", 9, UDim2.fromOffset(42, 0), UDim2.new(1, -72, 1, 0))
     cfgLabel.TextColor3 = self.Theme.Cyan
     cfgLabel.Font = Enum.Font.GothamBold
-    cfgLabel.ZIndex = 26
 
-    local cfgMark = AddText(configButton, "›", 9, UDim2.new(1, -30, 0, 0), UDim2.fromOffset(20, 42))
+    local cfgMark = AddText(configButton, "›", 18, UDim2.new(1, -34, 0, 0), UDim2.fromOffset(24, 42))
     cfgMark.TextColor3 = self.Theme.TextMuted
     cfgMark.TextXAlignment = Enum.TextXAlignment.Right
-    cfgMark.ZIndex = 26
 
     self.ConfigButton = configButton
-    self.ConfigAccent = cfgAccent
+    self.ConfigAccent = cfgDiamond
+    self.ConfigDiamond = cfgDiamond
     self.ConfigMark = cfgMark
+
+    self:_Connect(configButton.MouseEnter, function()
+        Tween(configButton, TWEEN_FAST, {BackgroundColor3 = self.Theme.ElementHover})
+        Tween(cfgDiamond, TWEEN_FAST, {TextColor3 = self.Theme.White})
+        Tween(cfgLabel, TWEEN_FAST, {TextColor3 = self.Theme.White})
+        Tween(cfgMark, TWEEN_FAST, {TextColor3 = self.Theme.Cyan})
+    end)
+
+    self:_Connect(configButton.MouseLeave, function()
+        Tween(configButton, TWEEN_FAST, {BackgroundColor3 = self.Theme.Element})
+        Tween(cfgDiamond, TWEEN_FAST, {TextColor3 = self.Theme.Cyan})
+        Tween(cfgLabel, TWEEN_FAST, {TextColor3 = self.Theme.Cyan})
+        Tween(cfgMark, TWEEN_FAST, {TextColor3 = self.Theme.TextMuted})
+    end)
+
+    -- Connected after the settings transition function is created below.
+
 
     -- Full content overlay: Settings replaces both Navigation + Tab content,
     -- while the main Window Header remains visible for context.
@@ -441,7 +430,7 @@ function Library:_CreateSettingsPanel()
 
     local scroll = New("ScrollingFrame", {
         Parent = panel, Name = "SettingsScroll", BackgroundTransparency = 1, BorderSizePixel = 0,
-        Position = UDim2.fromOffset(18, 74), Size = UDim2.new(1, -36, 1, -92),
+        Position = UDim2.fromOffset(18, 74), Size = UDim2.new(1, -36, 1, -144),
         CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
         ScrollBarThickness = 3, ScrollBarImageColor3 = self.Theme.CyanDark,
         ZIndex = 81,
@@ -464,7 +453,7 @@ function Library:_CreateSettingsPanel()
         BackgroundColor3 = self.Theme.Panel,
         BorderSizePixel = 0,
         Position = UDim2.fromOffset(18, 0),
-        Size = UDim2.fromOffset(320, 254),
+        Size = UDim2.fromOffset(360, 232),
         Visible = false,
         ClipsDescendants = true,
         ZIndex = 120,
@@ -481,45 +470,60 @@ function Library:_CreateSettingsPanel()
     local pickerClose = New("TextButton", {Parent=picker, BackgroundTransparency=1, BorderSizePixel=0, Position=UDim2.new(1,-32,0,5), Size=UDim2.fromOffset(24,24), Text="X", TextColor3=self.Theme.TextMuted, TextSize=9, Font=Enum.Font.GothamBold, AutoButtonColor=false, ZIndex=122})
     self:_Connect(pickerClose.MouseButton1Click, function() picker.Visible = false end)
 
-    -- Full spectrum palette: 24 hue swatches + neutral grayscale values.
-    local palette = New("Frame", {Parent=picker, BackgroundTransparency=1, Position=UDim2.fromOffset(10,34), Size=UDim2.new(1,-20,0,156), ZIndex=121})
-    New("UIGridLayout", {Parent=palette, CellSize=UDim2.fromOffset(31,25), CellPadding=UDim2.fromOffset(5,5), SortOrder=Enum.SortOrder.LayoutOrder})
+    -- Color picker: spectrum + grayscale, with explicit HEX and RGB fields.
+    local palette = New("Frame", {Parent=picker, BackgroundTransparency=1, Position=UDim2.fromOffset(12,38), Size=UDim2.new(1,-24,0,136), ZIndex=121})
+    New("UIGridLayout", {Parent=palette, CellSize=UDim2.fromOffset(24,20), CellPadding=UDim2.fromOffset(4,4), SortOrder=Enum.SortOrder.LayoutOrder})
 
     local paletteColors = {}
     for i = 0, 23 do
-        table.insert(paletteColors, Color3.fromHSV(i / 24, 0.82, 1))
+        table.insert(paletteColors, Color3.fromHSV(i / 24, 0.88, 1))
     end
-    for _, value in ipairs({1, 0.82, 0.64, 0.46, 0.28, 0.12}) do
+    for _, value in ipairs({1, 0.9, 0.78, 0.62, 0.46, 0.30, 0.14, 0.04}) do
         table.insert(paletteColors, Color3.new(value, value, value))
     end
     self._PickerPalette = paletteColors
 
     for index, color in ipairs(paletteColors) do
         local swatch = New("TextButton", {Parent=palette, BackgroundColor3=color, BorderSizePixel=0, Text="", AutoButtonColor=false, LayoutOrder=index, ZIndex=122})
-        AddStroke(swatch, self.Theme.BorderDim, 0.2, 1)
+        AddStroke(swatch, self.Theme.BorderDim, 0.15, 1)
         self:_Connect(swatch.MouseButton1Click, function()
             if not self._ActiveColorKey then return end
             self:_SetPickerColor(color)
-            picker.Visible = false
         end)
     end
 
-    local hexInput = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Background, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(10,196), Size=UDim2.fromOffset(112,28), Text="#DCCD00", PlaceholderText="#RRGGBB", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=9, Font=Enum.Font.Code, ClearTextOnFocus=false, ZIndex=122})
-    AddAngularCorners(hexInput, self.Theme.CyanDark)
+    local inputHeader = AddText(picker, "VALUE INPUT", 7, UDim2.fromOffset(12,178), UDim2.new(1,-24,0,14))
+    inputHeader.TextColor3 = self.Theme.TextMuted
+    inputHeader.Font = Enum.Font.GothamBold
+    inputHeader.ZIndex = 122
+
+    local hexLabel = AddText(picker, "HEX", 7, UDim2.fromOffset(12,194), UDim2.fromOffset(32,16))
+    hexLabel.TextColor3 = self.Theme.Cyan
+    hexLabel.Font = Enum.Font.GothamBold
+    hexLabel.ZIndex = 122
+
+    local hexInput = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Element, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(43,190), Size=UDim2.fromOffset(92,28), Text="#DCCD00", PlaceholderText="#RRGGBB", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=9, Font=Enum.Font.Code, ClearTextOnFocus=false, ZIndex=122})
+    AddAngularCorners(hexInput, self.Theme.BorderDim)
     AddStroke(hexInput, self.Theme.BorderDim, 0.15, 1)
+    AddPadding(hexInput, 7, 7, 0, 0)
     self._PickerHexInput = hexInput
 
     local rgbInputs = {}
     self._PickerRGBInputs = rgbInputs
     for index, channel in ipairs({"R", "G", "B"}) do
-        local x = 130 + ((index - 1) * 47)
-        local input = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Background, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(x,196), Size=UDim2.fromOffset(42,28), Text="0", PlaceholderText=channel, TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=8, Font=Enum.Font.Code, ClearTextOnFocus=false, ZIndex=122})
-        AddAngularCorners(input, self.Theme.CyanDark)
+        local x = 143 + ((index - 1) * 49)
+        local label = AddText(picker, channel, 7, UDim2.fromOffset(x,194), UDim2.fromOffset(12,16))
+        label.TextColor3 = self.Theme.Cyan
+        label.Font = Enum.Font.GothamBold
+        label.ZIndex = 122
+        local input = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Element, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(x+13,190), Size=UDim2.fromOffset(32,28), Text="0", PlaceholderText="0", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=8, Font=Enum.Font.Code, ClearTextOnFocus=false, TextXAlignment=Enum.TextXAlignment.Center, ZIndex=122})
+        AddAngularCorners(input, self.Theme.BorderDim)
         AddStroke(input, self.Theme.BorderDim, 0.15, 1)
         rgbInputs[channel] = input
     end
 
-    local pickerApply = New("TextButton", {Parent=picker, BackgroundColor3=self.Theme.ElementHover, BorderSizePixel=0, Position=UDim2.new(1,-62,0,196), Size=UDim2.fromOffset(52,28), Text="SET", TextColor3=self.Theme.Cyan, TextSize=8, Font=Enum.Font.GothamBold, AutoButtonColor=false, ZIndex=122})
+    local pickerApply = New("TextButton", {Parent=picker, BackgroundColor3=self.Theme.ElementHover, BorderSizePixel=0, Position=UDim2.new(1,-64,0,190), Size=UDim2.fromOffset(52,28), Text="SET", TextColor3=self.Theme.Cyan, TextSize=8, Font=Enum.Font.GothamBold, AutoButtonColor=false, ZIndex=122})
+    AddStroke(pickerApply, self.Theme.BorderDim, 0.25, 1)
     AddAngularCorners(pickerApply, self.Theme.CyanDark)
     self:_Connect(pickerApply.MouseButton1Click, function()
         if not self._ActiveColorKey then return end
@@ -527,10 +531,7 @@ function Library:_CreateSettingsPanel()
         if not color then
             color = ParseRGBColor((rgbInputs.R.Text or "") .. "," .. (rgbInputs.G.Text or "") .. "," .. (rgbInputs.B.Text or ""))
         end
-        if color then
-            self:_SetPickerColor(color)
-            picker.Visible = false
-        end
+        if color then self:_SetPickerColor(color) end
     end)
 
     function self:_SetPickerColor(color: Color3)
@@ -587,7 +588,7 @@ function Library:_CreateSettingsPanel()
         picker.Visible = true
         local y = anchor.AbsolutePosition.Y - panel.AbsolutePosition.Y + anchor.AbsoluteSize.Y + 5
         local maxY = math.max(8, panel.AbsoluteSize.Y - picker.AbsoluteSize.Y - 8)
-        picker.Position = UDim2.fromOffset(math.clamp(anchor.AbsolutePosition.X - panel.AbsolutePosition.X, 8, math.max(8, panel.AbsoluteSize.X - 328)), math.clamp(y, 8, maxY))
+        picker.Position = UDim2.fromOffset(math.clamp(anchor.AbsolutePosition.X - panel.AbsolutePosition.X, 8, math.max(8, panel.AbsoluteSize.X - 368)), math.clamp(y, 8, maxY))
     end
 
     for index, key in ipairs(THEME_KEYS) do
@@ -659,54 +660,49 @@ function Library:_CreateSettingsPanel()
 
     local setOpen
 
-    -- Configuration actions live in a horizontal footer inside the scrolling area.
+    -- Configuration actions stay outside the ScrollingFrame, matching Navigation's footer pattern.
     local footer = New("Frame", {
-        Parent = scroll,
+        Name = "SettingsFooter",
+        Parent = panel,
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
-        Size = UDim2.new(1, -4, 0, 42),
-        LayoutOrder = #THEME_KEYS + 11,
+        Position = UDim2.fromOffset(18, 0),
+        Size = UDim2.new(1, -36, 0, 42),
         ZIndex = 103,
     })
+    footer.AnchorPoint = Vector2.new(0, 1)
+    footer.Position = UDim2.new(0, 18, 1, -14)
+
     local footerLayout = New("UIListLayout", {
-        Parent = footer,
-        FillDirection = Enum.FillDirection.Horizontal,
-        HorizontalAlignment = Enum.HorizontalAlignment.Center,
-        VerticalAlignment = Enum.VerticalAlignment.Center,
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        Padding = UDim.new(0, 6),
+        Parent = footer, FillDirection = Enum.FillDirection.Horizontal,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6),
     })
 
     local function makeFooterButton(name, order, callback, accentColor)
         local button = New("TextButton", {
-            Parent = footer,
-            BackgroundColor3 = self.Theme.Element,
-            BackgroundTransparency = 0.1,
-            BorderSizePixel = 0,
-            Size = UDim2.new(1/3, -4, 0, 42),
-            Text = "",
-            AutoButtonColor = false,
-            LayoutOrder = order,
-            ZIndex = 104,
+            Parent = footer, BackgroundColor3 = self.Theme.Element, BackgroundTransparency = 0.1,
+            BorderSizePixel = 0, Size = UDim2.new(1/3, -4, 0, 42), Text = "",
+            AutoButtonColor = false, LayoutOrder = order, ZIndex = 104,
         })
         AddStroke(button, self.Theme.BorderDim, 0.25, 1)
         local diamond = AddText(button, "◇", 13, UDim2.fromOffset(13, 0), UDim2.fromOffset(22, 42))
-        diamond.TextColor3 = accentColor or self.Theme.Cyan
-        diamond.Font = Enum.Font.GothamBold
+        diamond.TextColor3 = accentColor or self.Theme.Cyan; diamond.Font = Enum.Font.GothamBold
         local label = AddText(button, name:upper(), 9, UDim2.fromOffset(42, 0), UDim2.new(1, -72, 1, 0))
         label.Font = Enum.Font.GothamBold
         local arrow = AddText(button, "›", 18, UDim2.new(1, -34, 0, 0), UDim2.fromOffset(24, 42))
-        arrow.TextColor3 = self.Theme.TextMuted
-        arrow.TextXAlignment = Enum.TextXAlignment.Right
+        arrow.TextColor3 = self.Theme.TextMuted; arrow.TextXAlignment = Enum.TextXAlignment.Right
         self:_Connect(button.MouseEnter, function()
-            Tween(button, TWEEN_FAST, {BackgroundColor3 = self.Theme.ElementHover})
-            Tween(diamond, TWEEN_FAST, {TextColor3 = self.Theme.White})
-            Tween(arrow, TWEEN_FAST, {TextColor3 = accentColor or self.Theme.Cyan})
+            Tween(button, TWEEN_FAST, {BackgroundColor3=self.Theme.ElementHover})
+            Tween(diamond, TWEEN_FAST, {TextColor3=self.Theme.White})
+            Tween(label, TWEEN_FAST, {TextColor3=self.Theme.White})
+            Tween(arrow, TWEEN_FAST, {TextColor3=accentColor or self.Theme.Cyan})
         end)
         self:_Connect(button.MouseLeave, function()
-            Tween(button, TWEEN_FAST, {BackgroundColor3 = self.Theme.Element})
-            Tween(diamond, TWEEN_FAST, {TextColor3 = accentColor or self.Theme.Cyan})
-            Tween(arrow, TWEEN_FAST, {TextColor3 = self.Theme.TextMuted})
+            Tween(button, TWEEN_FAST, {BackgroundColor3=self.Theme.Element})
+            Tween(diamond, TWEEN_FAST, {TextColor3=accentColor or self.Theme.Cyan})
+            Tween(label, TWEEN_FAST, {TextColor3=accentColor or self.Theme.Cyan})
+            Tween(arrow, TWEEN_FAST, {TextColor3=self.Theme.TextMuted})
         end)
         self:_Connect(button.MouseButton1Click, callback)
         return button
@@ -715,26 +711,21 @@ function Library:_CreateSettingsPanel()
     self.SettingsApply = makeFooterButton("APPLY", 1, function()
         local colors={}
         for key,input in pairs(self._ThemeInputs) do local color=ParseColor(input.Text); if color then colors[key]=color end end
-        self:SetTheme(colors)
-        refreshInputs()
-        self:Notify("CONFIGURATION","Theme applied successfully.",2)
+        self:SetTheme(colors); refreshInputs(); self:Notify("CONFIGURATION","Theme applied successfully.",2)
     end)
-
     self.SettingsReset = makeFooterButton("RESET DEFAULT", 2, function()
         self:SetTheme(table.clone(self._DefaultTheme))
-        self.MinWindowSize = Vector2.new(self._DefaultMinWindowSize.X, self._DefaultMinWindowSize.Y)
-        self.MaxWindowSize = Vector2.new(self._DefaultMaxWindowSize.X, self._DefaultMaxWindowSize.Y)
-        self:SetWindowSize(Vector2.new(self._DefaultWindowSize.X, self._DefaultWindowSize.Y))
-        self:SetTextScale(self._DefaultTextScale)
-        refreshInputs()
-        self:Notify("CONFIGURATION","Default configuration restored.",2)
+        self.MinWindowSize=Vector2.new(self._DefaultMinWindowSize.X,self._DefaultMinWindowSize.Y)
+        self.MaxWindowSize=Vector2.new(self._DefaultMaxWindowSize.X,self._DefaultMaxWindowSize.Y)
+        self:SetWindowSize(Vector2.new(self._DefaultWindowSize.X,self._DefaultWindowSize.Y)); self:SetTextScale(self._DefaultTextScale)
+        refreshInputs(); self:Notify("CONFIGURATION","Default configuration restored.",2)
     end)
+    self.SettingsReturn = makeFooterButton("RETURN", 3, function() setOpen(false) end)
 
-    self.SettingsReturn = makeFooterButton("RETURN", 3, function()
-        setOpen(false)
+    -- The Config button itself uses the same footer button language.
+    self:_Connect(configButton.MouseButton1Click, function()
+        if setOpen then setOpen(true) end
     end)
-
-
 
     local settingsTransitionToken = 0
 
