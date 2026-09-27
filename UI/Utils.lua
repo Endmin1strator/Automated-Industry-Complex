@@ -53,7 +53,7 @@ local Theme = {
 local WINDOW_SIZE      = Vector2.new(760, 480)
 local MIN_WINDOW_SIZE  = Vector2.new(560, 360)
 local MAX_WINDOW_SIZE  = Vector2.new(1100, 760)
-local TEXT_SCALE       = 1.4
+local TEXT_SCALE       = 1
 
 local TWEEN_FAST   = TweenInfo.new(0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 local TWEEN_NORMAL = TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
@@ -790,6 +790,21 @@ function Library.new(title: string?)
     windowScale.Parent = window
     self.Window = window
 
+    -- Single overlay for open/close fades. Avoids creating a Tween for every
+    -- descendant on each toggle, which can cause a noticeable frame spike.
+    local fadeOverlay = New("Frame", {
+        Name = "FadeOverlay",
+        Parent = window,
+        BackgroundColor3 = self.Theme.Background,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Position = UDim2.fromScale(0, 0),
+        Size = UDim2.fromScale(1, 1),
+        Active = false,
+        ZIndex = 90,
+    })
+    self.FadeOverlay = fadeOverlay
+
     AddStroke(window, self.Theme.Border, 0.15, 1)
     AddAngularCorners(window)
 
@@ -878,15 +893,19 @@ function Library.new(title: string?)
     self.Logo = logo
 
     -- Title
+    local titleText = self.Title:upper()
+    local titleSize = #titleText > 30 and 14 or (#titleText > 24 and 16 or 18)
+
     local titleLabel = AddText(
         header,
-        self.Title:upper(),
-        18,
+        titleText,
+        titleSize,
         UDim2.fromOffset(66, 8),
-        UDim2.fromOffset(330, 25)
+        UDim2.fromOffset(430, 25)
     )
 
     titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.ZIndex = 14
 
     self.TitleLabel = titleLabel
@@ -897,7 +916,7 @@ function Library.new(title: string?)
         "CREATED BY ENDMIN1STRATOR // UTILITY SYSTEM  //  ONLINE",
         9,
         UDim2.fromOffset(67, 31),
-        UDim2.fromOffset(330, 17)
+        UDim2.fromOffset(430, 17)
     )
 
     subtitle.TextColor3 = self.Theme.TextMuted
@@ -1169,7 +1188,7 @@ function Library.new(title: string?)
 
         Position = UDim2.fromOffset(10, 84),
 
-        Size = UDim2.new(1, -20, 1, -136),
+        Size = UDim2.new(1, -20, 1, -180),
 
         CanvasSize = UDim2.fromOffset(0, 0),
 
@@ -1203,7 +1222,7 @@ function Library.new(title: string?)
 
         SortOrder = Enum.SortOrder.LayoutOrder,
 
-        Padding = UDim.new(0, 5),
+        Padding = UDim.new(0, 2),
     })
 
     self.NavigationLayout = tabLayout
@@ -1685,13 +1704,17 @@ function Library:_PlayIntro()
     brand.TextTransparency = 1
     brand.ZIndex = 301
 
+    local introTitleText = self.Title:upper()
+    local introTitleSize = #introTitleText > 30 and 14 or (#introTitleText > 24 and 15 or 17)
+
     local title = AddText(
         loader,
-        self.Title:upper(),
-        17,
+        introTitleText,
+        introTitleSize,
         UDim2.fromOffset(20, 43),
         UDim2.new(1, -40, 0, 26)
     )
+    title.TextTruncate = Enum.TextTruncate.AtEnd
     title.Font = Enum.Font.GothamBold
     title.TextTransparency = 1
     title.ZIndex = 301
@@ -1830,6 +1853,8 @@ function Library:SetVisible(value: boolean)
         return
     end
 
+    self._VisibilityToken = (self._VisibilityToken or 0) + 1
+    local visibilityToken = self._VisibilityToken
     self.Visible = value
 
     local windowScale = self.WindowUIScale
@@ -1865,7 +1890,7 @@ function Library:SetVisible(value: boolean)
         })
 
         task.delay(0.30, function()
-            if self.Destroyed or self.Visible then
+            if self.Destroyed or self.Visible or self._VisibilityToken ~= visibilityToken then
                 return
             end
 
@@ -1877,38 +1902,22 @@ function Library:SetVisible(value: boolean)
 end
 
 function Library:_FadeWindow(transparency: number, duration: number?)
-    local info = TweenInfo.new(duration or 0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-    local objects = self.Window:GetDescendants()
-
-    for _, object in ipairs(objects) do
-        if object:IsA("TextLabel")
-            or object:IsA("TextButton")
-            or object:IsA("TextBox") then
-
-            if object:GetAttribute("EndfieldBaseTextTransparency") == nil then
-                object:SetAttribute("EndfieldBaseTextTransparency", object.TextTransparency)
-            end
-            local base = object:GetAttribute("EndfieldBaseTextTransparency")
-            Tween(object, info, {TextTransparency = transparency == 1 and 1 or base})
-
-        elseif object:IsA("ImageLabel")
-            or object:IsA("ImageButton") then
-
-            if object:GetAttribute("EndfieldBaseImageTransparency") == nil then
-                object:SetAttribute("EndfieldBaseImageTransparency", object.ImageTransparency)
-            end
-            local base = object:GetAttribute("EndfieldBaseImageTransparency")
-            Tween(object, info, {ImageTransparency = transparency == 1 and 1 or base})
-
-        elseif object:IsA("Frame") then
-
-            if object:GetAttribute("EndfieldBaseBackgroundTransparency") == nil then
-                object:SetAttribute("EndfieldBaseBackgroundTransparency", object.BackgroundTransparency)
-            end
-            local base = object:GetAttribute("EndfieldBaseBackgroundTransparency")
-            Tween(object, info, {BackgroundTransparency = transparency == 1 and 1 or base})
-        end
+    local overlay = self.FadeOverlay
+    if not overlay then
+        return
     end
+
+    local target = transparency == 1 and 0 or 1
+    overlay.BackgroundColor3 = self.Theme.Background
+    overlay.BackgroundTransparency = (target == 0) and math.min(overlay.BackgroundTransparency, 0.02) or overlay.BackgroundTransparency
+
+    Tween(overlay, TweenInfo.new(
+        duration or 0.22,
+        Enum.EasingStyle.Quint,
+        Enum.EasingDirection.Out
+    ), {
+        BackgroundTransparency = target,
+    })
 end
 
 function Library:Toggle()
