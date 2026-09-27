@@ -1,7 +1,7 @@
 -- AutoFarm bootstrap.
 -- Every module returns {Name, Dependencies, Start(Context)}.
 
-local TITLE = "AUTOMATED INDUSTRY COMPLEX v2.51"
+local TITLE = "AUTOMATED INDUSTRY COMPLEX v2.52"
 local UTILS_PATH = "UI/Utils.lua"
 
 --// A failed download is retried this many times before giving up.
@@ -46,6 +46,7 @@ local REMOTE_MODULES = {
     "Features/Deadzone.lua",
     "Features/ProfileSettings.lua",
     "Features/PartySystem.lua",
+    "Features/RespawnTimers.lua",
     "Features/WaypointLoop.lua",
 
     "Combat/Combat.lua",
@@ -95,6 +96,7 @@ local START_ORDER = {
     "Waypoints",
     "Farmzone",
     "Deadzone",
+    "RespawnTimers",
     "WaypointLoop",
     "Bootstrap",
     "Heartbeat",

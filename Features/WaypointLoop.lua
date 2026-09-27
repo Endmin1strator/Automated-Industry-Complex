@@ -5,20 +5,22 @@
 -- its own target list (empty = the Enemy Priority list).
 --   * The route is walked as usual up to the first paired waypoint, where the
 --     loop takes over.
---   * First pass: every paired waypoint is visited in route order. Where its
---     zone has targets they are fought until the zone is clear, then the walk
---     goes on to the next paired waypoint.
---   * After the last paired waypoint: walk to the nearest paired zone that has
---     targets. With none anywhere, wait where we are until something spawns
---     instead of walking back and forth. A paired waypoint passed on the way
---     whose zone has targets is fought on the spot.
+--   * It always heads for the closest paired zone (walking distance along the
+--     route) worth visiting: targets visible there, or not yet found empty
+--     and not dead according to workspace.RespawnTimers. The choice is made
+--     again at every waypoint, so a closer zone with a target is never
+--     walked past.
+--   * A zone found empty is remembered and skipped until one of its targets
+--     respawns (its timer is removed).
+--   * With every zone dead, walk to the zone whose target respawns soonest
+--     and wait there, instead of walking back and forth.
 -- The walk only uses the waypoints between paired ones: it never heads back
 -- past the first or last paired waypoint (e.g. first pair on #34 never walks
 -- back to #33).
 return {
     Name = "WaypointLoop",
     IsFeature = true,
-    Dependencies = {"Runtime", "ProfileManager", "Components", "Targeting", "Waypoints", "Farmzone"},
+    Dependencies = {"Runtime", "ProfileManager", "Components", "Targeting", "Waypoints", "Farmzone", "RespawnTimers"},
 
     Start = function(Context)
         local Runtime = Context.Runtime
@@ -40,6 +42,9 @@ return {
         --// How long a zone must stay empty before it counts as cleared, so a
         --// scan that misses a mob for a moment does not send us away.
         local ZONE_CLEAR_GRACE = 1.5
+        --// A zone whose timers say its target is alive, but which was found
+        --// empty, is looked at again after this long.
+        local CHECKED_EXPIRE = 60
 
         local Feature = {
             Name = "WaypointLoop",
@@ -53,8 +58,9 @@ return {
             Goal = nil,
             --// When the goal zone was first seen empty, or nil.
             EmptySince = nil,
-            --// True during the first pass over the paired waypoints.
-            Sweeping = false,
+            --// [ZoneIndex] = when that zone was last found empty. Kept across
+            --// deaths: it describes the world, not the character.
+            Checked = {},
             ScanTime = 0,
             ScanResult = {},
         }
@@ -134,21 +140,117 @@ return {
             return Loop.ScanResult[ZoneIndex]
         end
 
-        --// Nearest paired waypoint (by route distance) whose zone has targets.
-        --// A waypoint paired with ExcludeZone is skipped. nil when no zone
-        --// shows any targets.
-        local function NearestGoalWithTargets(PlaceConfig, Paired, ExcludeZone, now)
-            local Best, BestScore = nil, math.huge
+        local function HasOwnTargets(Zone)
+            return type(Zone.Targets) == "table" and #Zone.Targets > 0
+        end
+
+        --// Respawn timers of a zone with its own target list:
+        --//   Dead     every target is waiting to respawn
+        --//   Soonest  seconds until the first of them is back, or nil
+        --// Zones on the Enemy Priority list have no timer view (nil, nil).
+        local function ZoneRespawn(Zone)
+            if not HasOwnTargets(Zone) or not AICFeature.GetRespawnState then
+                return nil, nil
+            end
+
+            local Dead, Soonest = true, nil
+
+            for _, Name in ipairs(Zone.Targets) do
+                local Pending, Remaining = AICFeature.GetRespawnState(Name)
+
+                if Pending == 0 then
+                    Dead = false
+                elseif Remaining then
+                    Soonest = math.min(Soonest or math.huge, Remaining)
+                end
+            end
+
+            return Dead, Soonest
+        end
+
+        --// A zone we stood in and found empty is not revisited until one of
+        --// its targets respawns. Where the timers claim a target is alive
+        --// but it was not there (it may have wandered off), look again after
+        --// CHECKED_EXPIRE; a zone with no timer view waits for a respawn.
+        local function IsCheckedEmpty(PlaceConfig, ZoneIndex, now)
+            local CheckedAt = Loop.Checked[ZoneIndex]
+
+            if not CheckedAt then
+                return false
+            end
+
+            local Zone = PlaceConfig.FARM_ZONES[ZoneIndex]
+
+            if Zone and HasOwnTargets(Zone) and now - CheckedAt >= CHECKED_EXPIRE then
+                Loop.Checked[ZoneIndex] = nil
+                return false
+            end
+
+            return true
+        end
+
+        --// Worth walking to: targets are visible there, or nothing says the
+        --// zone is empty (not checked empty, timers do not say all dead).
+        local function IsZoneCandidate(PlaceConfig, ZoneIndex, now)
+            if ZoneHasTargets(PlaceConfig, ZoneIndex, now) then
+                return true
+            end
+
+            if IsCheckedEmpty(PlaceConfig, ZoneIndex, now) then
+                return false
+            end
+
+            local Zone = PlaceConfig.FARM_ZONES[ZoneIndex]
+            return Zone ~= nil and ZoneRespawn(Zone) ~= true
+        end
+
+        --// Walking distance in studs along the route between two waypoints.
+        local function RouteDistance(PlaceConfig, From, To)
+            local Waypoints = PlaceConfig.WAYPOINTS
+            local Step = To > From and 1 or -1
+            local Total = 0
+
+            for Index = From, To - Step, Step do
+                Total += (Waypoints[Index + Step] - Waypoints[Index]).Magnitude
+            end
+
+            return Total
+        end
+
+        --// Where to go from the current waypoint:
+        --//   1. the closest paired zone (walking distance) worth visiting;
+        --//   2. with none, the zone whose target respawns soonest, to wait
+        --//      there;
+        --//   3. nil when nothing is known: stay where we are.
+        local function SelectGoal(PlaceConfig, Paired, now)
+            local Best, BestDistance = nil, math.huge
 
             for _, WaypointIndex in ipairs(Paired) do
-                local ZoneIndex = PlaceConfig.WAYPOINT_ZONES[WaypointIndex]
-                local Score = math.abs(WaypointIndex - Loop.Index)
+                local Distance = RouteDistance(PlaceConfig, Loop.Index, WaypointIndex)
 
-                if ZoneIndex ~= ExcludeZone
-                    and Score < BestScore
-                    and ZoneHasTargets(PlaceConfig, ZoneIndex, now)
+                if Distance < BestDistance
+                    and IsZoneCandidate(PlaceConfig, PlaceConfig.WAYPOINT_ZONES[WaypointIndex], now)
                 then
-                    Best, BestScore = WaypointIndex, Score
+                    Best, BestDistance = WaypointIndex, Distance
+                end
+            end
+
+            if Best then
+                return Best
+            end
+
+            local BestRespawn = math.huge
+
+            for _, WaypointIndex in ipairs(Paired) do
+                local Zone = PlaceConfig.FARM_ZONES[PlaceConfig.WAYPOINT_ZONES[WaypointIndex]]
+                local _, Soonest = ZoneRespawn(Zone)
+
+                if Soonest then
+                    local Distance = RouteDistance(PlaceConfig, Loop.Index, WaypointIndex)
+
+                    if Soonest < BestRespawn or (Soonest == BestRespawn and Distance < BestDistance) then
+                        Best, BestRespawn, BestDistance = WaypointIndex, Soonest, Distance
+                    end
                 end
             end
 
@@ -156,29 +258,33 @@ return {
         end
 
         --// Nearest paired waypoint regardless of targets.
-        local function NearestGoal(Paired)
-            local Best, BestScore = nil, math.huge
+        local function NearestGoal(PlaceConfig, Paired)
+            local Best, BestDistance = nil, math.huge
 
             for _, WaypointIndex in ipairs(Paired) do
-                local Score = math.abs(WaypointIndex - Loop.Index)
+                local Distance = RouteDistance(PlaceConfig, Loop.Index, WaypointIndex)
 
-                if Score < BestScore then
-                    Best, BestScore = WaypointIndex, Score
+                if Distance < BestDistance then
+                    Best, BestDistance = WaypointIndex, Distance
                 end
             end
 
             return Best
         end
 
-        --// Next paired waypoint after Goal in route order, or nil at the end.
-        local function NextPairedAfter(Paired, Goal)
-            for _, WaypointIndex in ipairs(Paired) do
-                if WaypointIndex > Goal then
-                    return WaypointIndex
+        --// A respawn makes every zone hunting that enemy worth a visit again.
+        function AICFeature.OnEnemyRespawned(EnemyName)
+            local PlaceConfig = Runtime:GetPlaceConfig()
+            local Wanted = string.lower(EnemyName)
+
+            for ZoneIndex, Zone in ipairs(PlaceConfig and PlaceConfig.FARM_ZONES or {}) do
+                for _, Name in ipairs(ZoneTargetNames(Zone)) do
+                    if string.lower(Name) == Wanted then
+                        Loop.Checked[ZoneIndex] = nil
+                        break
+                    end
                 end
             end
-
-            return nil
         end
 
         --// Waypoint closest to the character, for picking the loop up when
@@ -245,7 +351,6 @@ return {
             Loop.Index = nil
             Loop.Goal = nil
             Loop.EmptySince = nil
-            Loop.Sweeping = false
             table.clear(Loop.ScanResult)
             AICCombatUtils.S.ActiveZoneIndex = nil
         end
@@ -278,25 +383,6 @@ return {
         function AICFeature.EnterWaypointLoop(WaypointIndex)
             AICFeature.ResetWaypointLoop()
             Loop.Index = WaypointIndex
-            Loop.Goal = WaypointIndex
-            Loop.Sweeping = true
-        end
-
-        --// The goal zone has stayed empty for the grace period: choose where
-        --// to go next. Returns the new goal, or the current one to wait there.
-        local function ChooseGoalAfterClear(PlaceConfig, Paired, now)
-            if Loop.Sweeping then
-                local Next = NextPairedAfter(Paired, Loop.Goal)
-
-                if Next then
-                    return Next
-                end
-
-                Loop.Sweeping = false
-            end
-
-            local GoalZone = PlaceConfig.WAYPOINT_ZONES[Loop.Goal]
-            return NearestGoalWithTargets(PlaceConfig, Paired, GoalZone, now) or Loop.Goal
         end
 
         --// Called by the farm loop once the route has been walked.
@@ -320,13 +406,11 @@ return {
             if not Loop.Index or not PlaceConfig.WAYPOINTS[Loop.Index] then
                 Loop.Index = NearestWaypointIndex(PlaceConfig, RootPart)
                 Loop.Goal = nil
-                Loop.Sweeping = false
             end
 
-            --// No goal yet, or its pair was removed: the nearest zone with
-            --// targets, else simply the nearest paired waypoint.
+            --// No goal yet, or its pair was removed.
             if not Loop.Goal or not table.find(Paired, Loop.Goal) then
-                Loop.Goal = NearestGoalWithTargets(PlaceConfig, Paired, nil, now) or NearestGoal(Paired)
+                Loop.Goal = SelectGoal(PlaceConfig, Paired, now) or NearestGoal(PlaceConfig, Paired)
                 Loop.EmptySince = nil
             end
 
@@ -336,15 +420,15 @@ return {
 
                 local Arrived = StepTo(PlaceConfig, Loop.Index + (Loop.Goal > Loop.Index and 1 or -1), Humanoid, RootPart, now)
 
-                --// Passing a paired waypoint whose zone has targets: fight here
-                --// first rather than walking past them.
-                if Arrived
-                    and Loop.Index ~= Loop.Goal
-                    and table.find(Paired, Loop.Index)
-                    and ZoneHasTargets(PlaceConfig, PlaceConfig.WAYPOINT_ZONES[Loop.Index], now)
-                then
-                    Loop.Goal = Loop.Index
-                    Loop.EmptySince = nil
+                --// Plan again at every waypoint: a closer zone with a target
+                --// (the one we are standing at, say) wins over the old goal.
+                if Arrived then
+                    local Next = SelectGoal(PlaceConfig, Paired, now)
+
+                    if Next and Next ~= Loop.Goal then
+                        Loop.Goal = Next
+                        Loop.EmptySince = nil
+                    end
                 end
 
                 return "move"
@@ -355,17 +439,21 @@ return {
 
             if ZoneHasTargets(PlaceConfig, ZoneIndex, now) then
                 Loop.EmptySince = nil
+                Loop.Checked[ZoneIndex] = nil
                 return "fight"
             end
 
             Loop.EmptySince = Loop.EmptySince or now
 
-            --// Zone cleared. With nowhere better to go the goal stays put and
-            --// the character waits inside this zone for a spawn.
+            --// Zone cleared: remember it, then go to the closest zone still
+            --// worth visiting, or wait at the one that respawns first. With
+            --// nothing known the goal stays and we wait here.
             if now - Loop.EmptySince >= ZONE_CLEAR_GRACE then
-                local Next = ChooseGoalAfterClear(PlaceConfig, Paired, now)
+                Loop.Checked[ZoneIndex] = Loop.Checked[ZoneIndex] or now
 
-                if Next ~= Loop.Goal then
+                local Next = SelectGoal(PlaceConfig, Paired, now)
+
+                if Next and Next ~= Loop.Goal then
                     Loop.Goal = Next
                     Loop.EmptySince = nil
                 end

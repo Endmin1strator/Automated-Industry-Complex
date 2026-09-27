@@ -70,7 +70,7 @@ return {
                 local UtilsChunk = assert(loadstring(game:HttpGet("https://raw.githubusercontent.com/Endmin1strator/Automated-Industry-Complex/refs/heads/main/UI/Utils.lua"), "@Utils.lua"))
                 Utils = UtilsChunk()
             end
-            UI = Utils.new("AUTOMATED INDUSTRY COMPLEX v2.51")
+            UI = Utils.new("AUTOMATED INDUSTRY COMPLEX v2.52")
         end
 
         --// Shared UI foundation. Feature modules own their controls; Runtime
