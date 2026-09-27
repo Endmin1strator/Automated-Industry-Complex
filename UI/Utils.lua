@@ -291,6 +291,7 @@ local function ColorToHex(color: Color3): string
 end
 
 local function ParseHexColor(value: string): Color3?
+    value = tostring(value or '')
     local hex = string.gsub(value, "#", "")
     if #hex == 3 then
         hex = string.sub(hex, 1, 1) .. string.sub(hex, 1, 1)
@@ -308,6 +309,31 @@ local function ParseHexColor(value: string): Color3?
     end
     return Color3.fromRGB(r, g, b)
 end
+
+local function ParseRGBColor(value: string): Color3?
+    local text = tostring(value or '')
+    local r, g, b = string.match(text, '^%s*(%d+)%s*[,; ]%s*(%d+)%s*[,; ]%s*(%d+)%s*$')
+    if not r or not g or not b then
+        return nil
+    end
+    r, g, b = tonumber(r), tonumber(g), tonumber(b)
+    if not r or not g or not b then
+        return nil
+    end
+    if r < 0 or r > 255 or g < 0 or g > 255 or b < 0 or b > 255 then
+        return nil
+    end
+    return Color3.fromRGB(r, g, b)
+end
+
+local function ParseColor(value: string): Color3?
+    return ParseHexColor(value) or ParseRGBColor(value)
+end
+
+local function ColorToRGB(color: Color3): (number, number, number)
+    return math.round(color.R * 255), math.round(color.G * 255), math.round(color.B * 255)
+end
+
 
 function Library:_CreateSettingsPanel()
     -- The trigger intentionally lives below the Navigation ScrollingFrame.
@@ -364,7 +390,7 @@ function Library:_CreateSettingsPanel()
     cfgLabel.Font = Enum.Font.GothamBold
     cfgLabel.ZIndex = 26
 
-    local cfgMark = AddText(configButton, ">", 9, UDim2.new(1, -30, 0, 0), UDim2.fromOffset(20, 42))
+    local cfgMark = AddText(configButton, "›", 9, UDim2.new(1, -30, 0, 0), UDim2.fromOffset(20, 42))
     cfgMark.TextColor3 = self.Theme.TextMuted
     cfgMark.TextXAlignment = Enum.TextXAlignment.Right
     cfgMark.ZIndex = 26
@@ -413,23 +439,6 @@ function Library:_CreateSettingsPanel()
     panelSub.Font = Enum.Font.GothamMedium
     panelSub.ZIndex = 82
 
-    local closePanel = New("TextButton", {
-        Parent = panel,
-        BackgroundColor3 = self.Theme.Element,
-        BackgroundTransparency = 0.04,
-        BorderSizePixel = 0,
-        Position = UDim2.new(1, -112, 0, 18),
-        Size = UDim2.fromOffset(94, 32),
-        Text = "EXIT  //  CONFIG",
-        TextColor3 = self.Theme.TextSecondary,
-        TextSize = 8,
-        Font = Enum.Font.GothamBold,
-        AutoButtonColor = false,
-        ZIndex = 83,
-    })
-    AddStroke(closePanel, self.Theme.BorderDim, 0.08, 1)
-    AddAngularCorners(closePanel, self.Theme.CyanDark)
-
     local scroll = New("ScrollingFrame", {
         Parent = panel, Name = "SettingsScroll", BackgroundTransparency = 1, BorderSizePixel = 0,
         Position = UDim2.fromOffset(18, 74), Size = UDim2.new(1, -36, 1, -92),
@@ -455,7 +464,7 @@ function Library:_CreateSettingsPanel()
         BackgroundColor3 = self.Theme.Panel,
         BorderSizePixel = 0,
         Position = UDim2.fromOffset(18, 0),
-        Size = UDim2.fromOffset(300, 174),
+        Size = UDim2.fromOffset(320, 254),
         Visible = false,
         ClipsDescendants = true,
         ZIndex = 120,
@@ -472,14 +481,17 @@ function Library:_CreateSettingsPanel()
     local pickerClose = New("TextButton", {Parent=picker, BackgroundTransparency=1, BorderSizePixel=0, Position=UDim2.new(1,-32,0,5), Size=UDim2.fromOffset(24,24), Text="X", TextColor3=self.Theme.TextMuted, TextSize=9, Font=Enum.Font.GothamBold, AutoButtonColor=false, ZIndex=122})
     self:_Connect(pickerClose.MouseButton1Click, function() picker.Visible = false end)
 
-    local palette = New("Frame", {Parent=picker, BackgroundTransparency=1, Position=UDim2.fromOffset(10,34), Size=UDim2.new(1,-20,0,78), ZIndex=121})
-    local paletteLayout = New("UIGridLayout", {Parent=palette, CellSize=UDim2.fromOffset(28,28), CellPadding=UDim2.fromOffset(5,5), SortOrder=Enum.SortOrder.LayoutOrder})
-    local paletteColors = {
-        Color3.fromRGB(220,205,0), Color3.fromRGB(0,210,220), Color3.fromRGB(70,150,255), Color3.fromRGB(150,90,255),
-        Color3.fromRGB(255,80,120), Color3.fromRGB(255,120,40), Color3.fromRGB(80,210,130), Color3.fromRGB(230,230,230),
-        Color3.fromRGB(80,90,100), Color3.fromRGB(30,35,42), Color3.fromRGB(255,190,60), Color3.fromRGB(120,220,255),
-        Color3.fromRGB(180,110,255), Color3.fromRGB(255,100,80), Color3.fromRGB(70,210,190), Color3.fromRGB(15,18,22),
-    }
+    -- Full spectrum palette: 24 hue swatches + neutral grayscale values.
+    local palette = New("Frame", {Parent=picker, BackgroundTransparency=1, Position=UDim2.fromOffset(10,34), Size=UDim2.new(1,-20,0,156), ZIndex=121})
+    New("UIGridLayout", {Parent=palette, CellSize=UDim2.fromOffset(31,25), CellPadding=UDim2.fromOffset(5,5), SortOrder=Enum.SortOrder.LayoutOrder})
+
+    local paletteColors = {}
+    for i = 0, 23 do
+        table.insert(paletteColors, Color3.fromHSV(i / 24, 0.82, 1))
+    end
+    for _, value in ipairs({1, 0.82, 0.64, 0.46, 0.28, 0.12}) do
+        table.insert(paletteColors, Color3.new(value, value, value))
+    end
     self._PickerPalette = paletteColors
 
     for index, color in ipairs(paletteColors) do
@@ -487,34 +499,76 @@ function Library:_CreateSettingsPanel()
         AddStroke(swatch, self.Theme.BorderDim, 0.2, 1)
         self:_Connect(swatch.MouseButton1Click, function()
             if not self._ActiveColorKey then return end
-            local input = self._ThemeInputs[self._ActiveColorKey]
-            if input then input.Text = ColorToHex(color) end
+            self:_SetPickerColor(color)
             picker.Visible = false
-            self:_UpdateThemeSwatch(self._ActiveColorKey)
         end)
     end
 
-    local custom = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Background, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(10,122), Size=UDim2.new(1,-96,0,28), Text="#DCCD00", PlaceholderText="#RRGGBB", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=9, Font=Enum.Font.Code, ClearTextOnFocus=false, ZIndex=122})
-    AddAngularCorners(custom, self.Theme.CyanDark)
-    AddStroke(custom, self.Theme.BorderDim, 0.15, 1)
-    self._PickerCustomInput = custom
-    local pickerApply = New("TextButton", {Parent=picker, BackgroundColor3=self.Theme.ElementHover, BorderSizePixel=0, Position=UDim2.new(1,-78,0,122), Size=UDim2.fromOffset(68,28), Text="SET", TextColor3=self.Theme.Cyan, TextSize=8, Font=Enum.Font.GothamBold, AutoButtonColor=false, ZIndex=122})
+    local hexInput = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Background, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(10,196), Size=UDim2.fromOffset(112,28), Text="#DCCD00", PlaceholderText="#RRGGBB", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=9, Font=Enum.Font.Code, ClearTextOnFocus=false, ZIndex=122})
+    AddAngularCorners(hexInput, self.Theme.CyanDark)
+    AddStroke(hexInput, self.Theme.BorderDim, 0.15, 1)
+    self._PickerHexInput = hexInput
+
+    local rgbInputs = {}
+    self._PickerRGBInputs = rgbInputs
+    for index, channel in ipairs({"R", "G", "B"}) do
+        local x = 130 + ((index - 1) * 47)
+        local input = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Background, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(x,196), Size=UDim2.fromOffset(42,28), Text="0", PlaceholderText=channel, TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=8, Font=Enum.Font.Code, ClearTextOnFocus=false, ZIndex=122})
+        AddAngularCorners(input, self.Theme.CyanDark)
+        AddStroke(input, self.Theme.BorderDim, 0.15, 1)
+        rgbInputs[channel] = input
+    end
+
+    local pickerApply = New("TextButton", {Parent=picker, BackgroundColor3=self.Theme.ElementHover, BorderSizePixel=0, Position=UDim2.new(1,-62,0,196), Size=UDim2.fromOffset(52,28), Text="SET", TextColor3=self.Theme.Cyan, TextSize=8, Font=Enum.Font.GothamBold, AutoButtonColor=false, ZIndex=122})
     AddAngularCorners(pickerApply, self.Theme.CyanDark)
     self:_Connect(pickerApply.MouseButton1Click, function()
         if not self._ActiveColorKey then return end
-        local color = ParseHexColor(custom.Text)
+        local color = ParseHexColor(hexInput.Text)
+        if not color then
+            color = ParseRGBColor((rgbInputs.R.Text or "") .. "," .. (rgbInputs.G.Text or "") .. "," .. (rgbInputs.B.Text or ""))
+        end
         if color then
-            self._ThemeInputs[self._ActiveColorKey].Text = ColorToHex(color)
-            self:_UpdateThemeSwatch(self._ActiveColorKey)
+            self:_SetPickerColor(color)
             picker.Visible = false
         end
     end)
+
+    function self:_SetPickerColor(color: Color3)
+        if not self._ActiveColorKey then return end
+        local input = self._ThemeInputs[self._ActiveColorKey]
+        if not input then return end
+        local r, g, b = ColorToRGB(color)
+        input.Text = ColorToHex(color)
+        if self._PickerHexInput then self._PickerHexInput.Text = ColorToHex(color) end
+        if self._PickerRGBInputs then
+            self._PickerRGBInputs.R.Text = tostring(r)
+            self._PickerRGBInputs.G.Text = tostring(g)
+            self._PickerRGBInputs.B.Text = tostring(b)
+        end
+        self:_UpdateThemeSwatch(self._ActiveColorKey)
+    end
+
+    self:_Connect(hexInput.FocusLost, function()
+        local color = ParseHexColor(hexInput.Text)
+        if color then
+            self:_SetPickerColor(color)
+        end
+    end)
+
+    for _, channel in ipairs({"R", "G", "B"}) do
+        self:_Connect(rgbInputs[channel].FocusLost, function()
+            local color = ParseRGBColor((rgbInputs.R.Text or "") .. "," .. (rgbInputs.G.Text or "") .. "," .. (rgbInputs.B.Text or ""))
+            if color then
+                self:_SetPickerColor(color)
+            end
+        end)
+    end
 
     function self:_UpdateThemeSwatch(key)
         local swatch = self._ThemeSwatches[key]
         local input = self._ThemeInputs[key]
         if swatch and input then
-            local color = ParseHexColor(input.Text)
+            local color = ParseColor(input.Text)
             if color then swatch.BackgroundColor3 = color end
         end
     end
@@ -522,11 +576,18 @@ function Library:_CreateSettingsPanel()
     function self:_OpenThemePicker(key, anchor)
         self._ActiveColorKey = key
         local input = self._ThemeInputs[key]
-        if input then self._PickerCustomInput.Text = input.Text end
+        if input then
+            local color = ParseColor(input.Text)
+            if color then
+                self:_SetPickerColor(color)
+            else
+                self._PickerHexInput.Text = input.Text
+            end
+        end
         picker.Visible = true
         local y = anchor.AbsolutePosition.Y - panel.AbsolutePosition.Y + anchor.AbsoluteSize.Y + 5
         local maxY = math.max(8, panel.AbsoluteSize.Y - picker.AbsoluteSize.Y - 8)
-        picker.Position = UDim2.fromOffset(math.clamp(anchor.AbsolutePosition.X - panel.AbsolutePosition.X, 8, math.max(8, panel.AbsoluteSize.X - 308)), math.clamp(y, 8, maxY))
+        picker.Position = UDim2.fromOffset(math.clamp(anchor.AbsolutePosition.X - panel.AbsolutePosition.X, 8, math.max(8, panel.AbsoluteSize.X - 328)), math.clamp(y, 8, maxY))
     end
 
     for index, key in ipairs(THEME_KEYS) do
@@ -543,7 +604,13 @@ function Library:_CreateSettingsPanel()
         AddStroke(input, self.Theme.BorderDim, 0.2, 1)
         self._ThemeInputs[key] = input
         self:_Connect(swatch.MouseButton1Click, function() self:_OpenThemePicker(key, row) end)
-        self:_Connect(input.FocusLost, function() self:_UpdateThemeSwatch(key) end)
+        self:_Connect(input.FocusLost, function()
+            local color = ParseColor(input.Text)
+            if color then
+                input.Text = ColorToHex(color)
+                self:_UpdateThemeSwatch(key)
+            end
+        end)
     end
 
     local settingsHeader = AddText(scroll, "WINDOW / TYPOGRAPHY", 9, UDim2.fromOffset(4,0), UDim2.new(1,-8,0,22))
@@ -576,18 +643,7 @@ function Library:_CreateSettingsPanel()
     self._MaxHeightInput=makeNumberRow(#THEME_KEYS+6,"MAX HEIGHT",self.MaxWindowSize.Y,"MaxHeight",300,2200,0)
     self._TextScaleInput=makeNumberRow(#THEME_KEYS+7,"TEXT SCALE",self.TextScale,"TextScale",0.8,2.2,2)
 
-    local apply = New("TextButton", {Parent=scroll, BackgroundColor3=self.Theme.ElementHover, BackgroundTransparency=0.02, BorderSizePixel=0, Size=UDim2.new(1,-4,0,38), Text="APPLY  //  CHANGES", TextColor3=self.Theme.Cyan, TextSize=9, Font=Enum.Font.GothamBold, AutoButtonColor=false, LayoutOrder=#THEME_KEYS+8, ZIndex=103})
-    AddAngularCorners(apply, self.Theme.Cyan)
-    AddStroke(apply,self.Theme.CyanDark,0.1,1)
-    local applyAccent=New("Frame",{Parent=apply,BackgroundColor3=self.Theme.Cyan,BorderSizePixel=0,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(3,38),ZIndex=104})
-    self.SettingsApply=apply
-
-    local reset = New("TextButton", {Parent=scroll, BackgroundColor3=self.Theme.Element, BackgroundTransparency=0.02, BorderSizePixel=0, Size=UDim2.new(1,-4,0,34), Text="RESET  //  DEFAULT CONFIG", TextColor3=self.Theme.TextSecondary, TextSize=8, Font=Enum.Font.GothamBold, AutoButtonColor=false, LayoutOrder=#THEME_KEYS+9, ZIndex=103})
-    AddStroke(reset, self.Theme.BorderDim, 0.08, 1)
-    AddAngularCorners(reset, self.Theme.Danger)
-    self.SettingsReset=reset
-
-    local hint=AddText(scroll,"SELECT SWATCH TO OPEN COLOR PICKER  //  HEX + LIMITS",7,UDim2.fromOffset(4,0),UDim2.new(1,-8,0,18))
+    local hint=AddText(scroll,"SELECT SWATCH TO OPEN COLOR PICKER  //  HEX / RGB + LIMITS",7,UDim2.fromOffset(4,0),UDim2.new(1,-8,0,18))
     hint.TextColor3=self.Theme.TextMuted
     hint.LayoutOrder=#THEME_KEYS+10
 
@@ -601,19 +657,70 @@ function Library:_CreateSettingsPanel()
     end
     self._RefreshSettingsInputs=refreshInputs
 
-    self:_Connect(apply.MouseEnter,function() Tween(apply,TWEEN_FAST,{BackgroundColor3=self.Theme.PanelHover,TextColor3=self.Theme.White}) end)
-    self:_Connect(apply.MouseLeave,function() Tween(apply,TWEEN_FAST,{BackgroundColor3=self.Theme.ElementHover,TextColor3=self.Theme.Cyan}) end)
-    self:_Connect(apply.MouseButton1Click,function()
+    local setOpen
+
+    -- Configuration actions live in a horizontal footer inside the scrolling area.
+    local footer = New("Frame", {
+        Parent = scroll,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, -4, 0, 42),
+        LayoutOrder = #THEME_KEYS + 11,
+        ZIndex = 103,
+    })
+    local footerLayout = New("UIListLayout", {
+        Parent = footer,
+        FillDirection = Enum.FillDirection.Horizontal,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        VerticalAlignment = Enum.VerticalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 6),
+    })
+
+    local function makeFooterButton(name, order, callback, accentColor)
+        local button = New("TextButton", {
+            Parent = footer,
+            BackgroundColor3 = self.Theme.Element,
+            BackgroundTransparency = 0.1,
+            BorderSizePixel = 0,
+            Size = UDim2.new(1/3, -4, 0, 42),
+            Text = "",
+            AutoButtonColor = false,
+            LayoutOrder = order,
+            ZIndex = 104,
+        })
+        AddStroke(button, self.Theme.BorderDim, 0.25, 1)
+        local diamond = AddText(button, "◇", 13, UDim2.fromOffset(13, 0), UDim2.fromOffset(22, 42))
+        diamond.TextColor3 = accentColor or self.Theme.Cyan
+        diamond.Font = Enum.Font.GothamBold
+        local label = AddText(button, name:upper(), 9, UDim2.fromOffset(42, 0), UDim2.new(1, -72, 1, 0))
+        label.Font = Enum.Font.GothamBold
+        local arrow = AddText(button, "›", 18, UDim2.new(1, -34, 0, 0), UDim2.fromOffset(24, 42))
+        arrow.TextColor3 = self.Theme.TextMuted
+        arrow.TextXAlignment = Enum.TextXAlignment.Right
+        self:_Connect(button.MouseEnter, function()
+            Tween(button, TWEEN_FAST, {BackgroundColor3 = self.Theme.ElementHover})
+            Tween(diamond, TWEEN_FAST, {TextColor3 = self.Theme.White})
+            Tween(arrow, TWEEN_FAST, {TextColor3 = accentColor or self.Theme.Cyan})
+        end)
+        self:_Connect(button.MouseLeave, function()
+            Tween(button, TWEEN_FAST, {BackgroundColor3 = self.Theme.Element})
+            Tween(diamond, TWEEN_FAST, {TextColor3 = accentColor or self.Theme.Cyan})
+            Tween(arrow, TWEEN_FAST, {TextColor3 = self.Theme.TextMuted})
+        end)
+        self:_Connect(button.MouseButton1Click, callback)
+        return button
+    end
+
+    self.SettingsApply = makeFooterButton("APPLY", 1, function()
         local colors={}
-        for key,input in pairs(self._ThemeInputs) do local color=ParseHexColor(input.Text); if color then colors[key]=color end end
+        for key,input in pairs(self._ThemeInputs) do local color=ParseColor(input.Text); if color then colors[key]=color end end
         self:SetTheme(colors)
         refreshInputs()
         self:Notify("CONFIGURATION","Theme applied successfully.",2)
     end)
 
-    self:_Connect(reset.MouseEnter,function() Tween(reset,TWEEN_FAST,{BackgroundColor3=self.Theme.PanelHover,TextColor3=self.Theme.White}) end)
-    self:_Connect(reset.MouseLeave,function() Tween(reset,TWEEN_FAST,{BackgroundColor3=self.Theme.Element,TextColor3=self.Theme.TextSecondary}) end)
-    self:_Connect(reset.MouseButton1Click,function()
+    self.SettingsReset = makeFooterButton("RESET DEFAULT", 2, function()
         self:SetTheme(table.clone(self._DefaultTheme))
         self.MinWindowSize = Vector2.new(self._DefaultMinWindowSize.X, self._DefaultMinWindowSize.Y)
         self.MaxWindowSize = Vector2.new(self._DefaultMaxWindowSize.X, self._DefaultMaxWindowSize.Y)
@@ -623,9 +730,15 @@ function Library:_CreateSettingsPanel()
         self:Notify("CONFIGURATION","Default configuration restored.",2)
     end)
 
+    self.SettingsReturn = makeFooterButton("RETURN", 3, function()
+        setOpen(false)
+    end)
+
+
+
     local settingsTransitionToken = 0
 
-    local function setOpen(open)
+    setOpen = function(open)
         settingsTransitionToken += 1
         local token = settingsTransitionToken
         self._SettingsOpen = open
@@ -674,12 +787,11 @@ function Library:_CreateSettingsPanel()
         end
     end
     self:_Connect(configButton.MouseButton1Click,function() setOpen(not self._SettingsOpen) end)
-    self:_Connect(closePanel.MouseButton1Click,function() setOpen(false) end)
     self:_Connect(configButton.MouseEnter,function()
         Tween(configButton,TWEEN_FAST,{BackgroundColor3=self.Theme.PanelHover})
         Tween(cfgLabel,TWEEN_FAST,{TextColor3=self.Theme.White})
         Tween(cfgDiamond,TWEEN_FAST,{BackgroundColor3=self.Theme.White})
-        Tween(cfgMark,TWEEN_FAST,{TextColor3=self.Theme.Cyan})
+        Tween(cfgMark,TWEEN_FAST,{TextColor3=self.Theme.Cyan, Rotation=0})
     end)
     self:_Connect(configButton.MouseLeave,function()
         Tween(configButton,TWEEN_FAST,{BackgroundColor3=self.Theme.Element})
@@ -1047,9 +1159,9 @@ function Library.new(title: string?)
         BorderSizePixel = 0,
         Position = UDim2.fromOffset(7, 10),
         Size = UDim2.fromOffset(20, 24),
-        Text = "⮟",
+        Text = "›",
         TextColor3 = self.Theme.Cyan,
-        TextSize = 14,
+        TextSize = 18,
         Font = Enum.Font.GothamBold,
         AutoButtonColor = false,
         ZIndex = 15,
@@ -2453,7 +2565,7 @@ function Library:SetNavigationCollapsed(value: boolean)
 
     if collapseButton then
         Tween(collapseButton, TWEEN_FAST, {
-            Rotation = value and -90 or 0,
+            Rotation = value and 90 or 0,
         })
     end
 
@@ -3430,14 +3542,15 @@ function Library.SectionMethods:AddDropdown(
 
     local arrow = AddText(
         button,
-        "v",
-        13,
+        "›",
+        18,
         UDim2.new(1, -28, 0, 0),
         UDim2.fromOffset(20, 32)
     )
 
     arrow.TextXAlignment = Enum.TextXAlignment.Right
     arrow.TextColor3 = self.Library.Theme.Cyan
+    arrow.Rotation = 0
 
     local MAX_VISIBLE_OPTIONS = 5
     local OPTION_HEIGHT = 32
@@ -3677,8 +3790,8 @@ function Library.SectionMethods:AddDropdown(
             ancestor = ancestor.Parent
         end
 
-        arrow.Text = "⮟"
-        arrow.Rotation = 180
+        arrow.Text = "›"
+        arrow.Rotation = 90
     end
 
     function component:Close()
@@ -3689,7 +3802,7 @@ function Library.SectionMethods:AddDropdown(
         self.IsOpen = false
         popup.Visible = false
 
-        arrow.Text = "⮟"
+        arrow.Text = "›"
         arrow.Rotation = 0
     end
 
@@ -5457,6 +5570,9 @@ function Library:SetTheme(theme: {[string]: any})
     end
     if self.SettingsReset then
         self.SettingsReset.TextColor3 = self.Theme.TextSecondary
+    end
+    if self.SettingsReturn then
+        self.SettingsReturn.TextColor3 = self.Theme.TextSecondary
     end
     if self.SettingsPanel then
         self.SettingsPanel.BackgroundColor3 = self.Theme.Panel
