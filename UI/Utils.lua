@@ -320,11 +320,11 @@ function Library:_CreateSettingsPanel()
         BackgroundColor3 = self.Theme.Element,
         BackgroundTransparency = 0.04,
         BorderSizePixel = 0,
-        Position = UDim2.new(0, 12, 1, -82),
-        Size = UDim2.new(1, -24, 0, 34),
-        Text = "CONFIGURATION",
+        Position = UDim2.new(0, 10, 1, -52),
+        Size = UDim2.new(1, -20, 0, 42),
+        Text = "",
         TextColor3 = self.Theme.Cyan,
-        TextSize = 8,
+        TextSize = 9,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left,
         AutoButtonColor = false,
@@ -339,13 +339,32 @@ function Library:_CreateSettingsPanel()
         BackgroundTransparency = 0.05,
         BorderSizePixel = 0,
         Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.fromOffset(3, 34),
+        Size = UDim2.fromOffset(3, 42),
         ZIndex = 26,
     })
     -- Angular accent; no rounded decoration to match the main window.
-    AddLine(configButton, UDim2.fromOffset(8, 33), UDim2.fromOffset(24, 1), self.Theme.CyanDark)
+    AddLine(configButton, UDim2.fromOffset(8, 41), UDim2.fromOffset(28, 1), self.Theme.CyanDark)
 
-    local cfgMark = AddText(configButton, ">", 9, UDim2.new(1, -30, 0, 0), UDim2.fromOffset(20, 34))
+    -- Angular diamond marker, matching the Tab navigation language.
+    local cfgDiamond = New("Frame", {
+        Parent = configButton,
+        BackgroundColor3 = self.Theme.Cyan,
+        BackgroundTransparency = 0.05,
+        BorderSizePixel = 0,
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, 17, 0.5, 0),
+        Size = UDim2.fromOffset(7, 7),
+        Rotation = -45,
+        ZIndex = 26,
+    })
+    self.ConfigDiamond = cfgDiamond
+
+    local cfgLabel = AddText(configButton, "CONFIGURATION", 9, UDim2.fromOffset(34, 0), UDim2.new(1, -72, 1, 0))
+    cfgLabel.TextColor3 = self.Theme.Cyan
+    cfgLabel.Font = Enum.Font.GothamBold
+    cfgLabel.ZIndex = 26
+
+    local cfgMark = AddText(configButton, ">", 9, UDim2.new(1, -30, 0, 0), UDim2.fromOffset(20, 42))
     cfgMark.TextColor3 = self.Theme.TextMuted
     cfgMark.TextXAlignment = Enum.TextXAlignment.Right
     cfgMark.ZIndex = 26
@@ -604,35 +623,70 @@ function Library:_CreateSettingsPanel()
         self:Notify("CONFIGURATION","Default configuration restored.",2)
     end)
 
+    local settingsTransitionToken = 0
+
     local function setOpen(open)
-        self._SettingsOpen=open
+        settingsTransitionToken += 1
+        local token = settingsTransitionToken
+        self._SettingsOpen = open
+
         if open then
-            panel.Visible=true
-            panel.Position=UDim2.fromOffset(0,58)
-            panel.Size=UDim2.new(1,0,1,-58)
-            if self.TabContainer then self.TabContainer.Visible=false end
-            if self.NavigationSearchResults then self.NavigationSearchResults.Visible=false end
-            if self.Sidebar then self.Sidebar.Visible=false end
-            if self.Content then self.Content.Visible=false end
-            panel.Active=true
-            Tween(panel,TWEEN_SMOOTH,{BackgroundTransparency=0.015})
+            -- Keep the old page mounted underneath the config surface.
+            -- This prevents clicks from reaching it and also gives us a clean
+            -- crossfade when leaving Configuration.
+            panel.Visible = true
+            panel.Active = true
+            panel.BackgroundTransparency = 1
+            panel.Position = UDim2.fromOffset(0, 58)
+            panel.Size = UDim2.new(1, 0, 1, -58)
+
+            if self.TabContainer then self.TabContainer.Visible = false end
+            if self.NavigationSearchResults then self.NavigationSearchResults.Visible = false end
+            if self.Sidebar then self.Sidebar.Visible = false end
+            if self.Content then self.Content.Visible = false end
+
+            Tween(panel, TWEEN_SMOOTH, {BackgroundTransparency = 0.015})
         else
-            picker.Visible=false
-            local tween=Tween(panel,TWEEN_SMOOTH,{BackgroundTransparency=1})
+            picker.Visible = false
+
+            -- Reveal the existing Navigation + Section page underneath the
+            -- configuration surface. Because the panel is still above them,
+            -- the user sees a smooth crossfade instead of a hard pop.
+            if self.Sidebar then self.Sidebar.Visible = true end
+            if self.Content then self.Content.Visible = true end
+            if self.TabContainer and not self.NavigationCollapsed then
+                self.TabContainer.Visible = true
+            end
+
+            panel.Active = true
+            local tween = Tween(panel, TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                BackgroundTransparency = 1,
+            })
+
             tween.Completed:Connect(function()
-                if not self._SettingsOpen then
-                    panel.Visible=false
-                    if self.Sidebar then self.Sidebar.Visible=true end
-                    if self.Content then self.Content.Visible=true end
-                    if self.TabContainer and not self.NavigationCollapsed then self.TabContainer.Visible=true end
+                if settingsTransitionToken ~= token or self._SettingsOpen then
+                    return
                 end
+
+                panel.Visible = false
+                panel.Active = false
             end)
         end
     end
     self:_Connect(configButton.MouseButton1Click,function() setOpen(not self._SettingsOpen) end)
     self:_Connect(closePanel.MouseButton1Click,function() setOpen(false) end)
-    self:_Connect(configButton.MouseEnter,function() Tween(configButton,TWEEN_FAST,{BackgroundColor3=self.Theme.PanelHover,TextColor3=self.Theme.White}) end)
-    self:_Connect(configButton.MouseLeave,function() Tween(configButton,TWEEN_FAST,{BackgroundColor3=self.Theme.Element,TextColor3=self.Theme.Cyan}) end)
+    self:_Connect(configButton.MouseEnter,function()
+        Tween(configButton,TWEEN_FAST,{BackgroundColor3=self.Theme.PanelHover})
+        Tween(cfgLabel,TWEEN_FAST,{TextColor3=self.Theme.White})
+        Tween(cfgDiamond,TWEEN_FAST,{BackgroundColor3=self.Theme.White})
+        Tween(cfgMark,TWEEN_FAST,{TextColor3=self.Theme.Cyan})
+    end)
+    self:_Connect(configButton.MouseLeave,function()
+        Tween(configButton,TWEEN_FAST,{BackgroundColor3=self.Theme.Element})
+        Tween(cfgLabel,TWEEN_FAST,{TextColor3=self.Theme.Cyan})
+        Tween(cfgDiamond,TWEEN_FAST,{BackgroundColor3=self.Theme.Cyan})
+        Tween(cfgMark,TWEEN_FAST,{TextColor3=self.Theme.TextMuted})
+    end)
 end
 
 --//==============================================================
@@ -1115,7 +1169,7 @@ function Library.new(title: string?)
 
         Position = UDim2.fromOffset(10, 84),
 
-        Size = UDim2.new(1, -20, 1, -126),
+        Size = UDim2.new(1, -20, 1, -136),
 
         CanvasSize = UDim2.fromOffset(0, 0),
 
@@ -1191,7 +1245,7 @@ function Library.new(title: string?)
         sidebar,
         "ENDMIN1STRATOR  //  UTILITY",
         8,
-        UDim2.fromOffset(20, -108),
+        UDim2.new(0, 20, 1, -72),
         UDim2.new(1, -40, 0, 18)
     )
 
@@ -1202,7 +1256,7 @@ function Library.new(title: string?)
         sidebar,
         "SYSTEM BUILD  //  01",
         8,
-        UDim2.fromOffset(20, -90),
+        UDim2.new(0, 20, 1, -54),
         UDim2.new(1, -40, 0, 18)
     )
 
