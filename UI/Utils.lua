@@ -1882,7 +1882,26 @@ function Library:SetVisible(value: boolean)
         self:_CloseDropdowns()
         if self._SettingsOpen then
             self._SettingsOpen = false
-            self.SettingsPanel.Visible = false
+            if self.SettingsPanel then
+                self.SettingsPanel.Visible = false
+                self.SettingsPanel.Active = false
+            end
+
+            -- Configuration temporarily hides the main UI. Restore it before
+            -- the window is closed so reopening can never come back blank.
+            if self.Sidebar then
+                self.Sidebar.Visible = true
+            end
+            if self.Content then
+                self.Content.Visible = true
+            end
+            if self.TabContainer then
+                self.TabContainer.Visible = not self.NavigationCollapsed
+            end
+            if self.NavigationSearchResults then
+                self.NavigationSearchResults.Visible = (not self.NavigationCollapsed)
+                    and self.NavigationSearchText ~= ""
+            end
         end
 
         -- Softer shutdown: fade content first, then slightly shrink the window.
@@ -2714,113 +2733,39 @@ function TabMethods:AddSection(name: string)
 
         self.Collapsed = value
 
-        -- Fade component text before collapsing the holder so the UI does not
-        -- visually jump upward while text is still fully visible.
-        if value then
-            for _, object in ipairs(self.Holder:GetDescendants()) do
-                if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
-                    if object:GetAttribute("SectionTextTransparency") == nil then
-                        object:SetAttribute("SectionTextTransparency", object.TextTransparency)
-                    end
-                    Tween(object, TWEEN_FAST, {TextTransparency = 1})
-                end
-            end
-
-            task.delay(0.16, function()
-                if self.Collapsed then
-                    self.Holder.Visible = false
-                end
-            end)
-        else
-            self.Holder.Visible = true
-
-            for _, object in ipairs(self.Holder:GetDescendants()) do
-                if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
-                    local target = object:GetAttribute("SectionTextTransparency")
-                    if target ~= nil then
-                        Tween(object, TWEEN_FAST, {TextTransparency = target})
-                    end
-                end
-            end
-        end
+        -- Section collapse is intentionally immediate. Navigation collapse
+        -- keeps its tweened transition, but sections should snap cleanly so
+        -- AutomaticSize/UIListLayout cannot push visible text during a tween.
+        self.Holder.Visible = not value
 
         if self.CollapseButton then
-            Tween(self.CollapseButton, TWEEN_FAST, {
-                Rotation = value and -90 or 0,
-                TextColor3 = value and self.Library.Theme.Cyan or self.Library.Theme.TextMuted,
-            })
+            self.CollapseButton.Rotation = value and -90 or 0
+            self.CollapseButton.TextColor3 = value
+                and self.Library.Theme.Cyan
+                or self.Library.Theme.TextMuted
         end
 
         if self.ActiveAccent then
-            Tween(self.ActiveAccent, TWEEN_FAST, {
-                BackgroundTransparency = value and 0.15 or 1,
-            })
-        end
-
-        if self.ChevronLeft and self.ChevronRight then
-            Tween(self.ChevronLeft, TWEEN_FAST, {
-                Rotation = value and -45 or 45,
-                BackgroundColor3 = value and self.Library.Theme.Cyan or self.Library.Theme.TextMuted,
-            })
-            Tween(self.ChevronRight, TWEEN_FAST, {
-                Rotation = value and 45 or -45,
-                BackgroundColor3 = value and self.Library.Theme.Cyan or self.Library.Theme.TextMuted,
-            })
+            self.ActiveAccent.BackgroundTransparency = value and 0.15 or 1
         end
 
         if self.HeaderButton then
-            Tween(self.HeaderButton, TWEEN_FAST, {
-                BackgroundColor3 = self.Library.Theme.CyanDim,
-                BackgroundTransparency = value and 0.92 or 1,
-            })
+            self.HeaderButton.BackgroundColor3 = self.Library.Theme.CyanDim
+            self.HeaderButton.BackgroundTransparency = value and 0.92 or 1
+        end
+
+        if self.ChevronLeft and self.ChevronRight then
+            self.ChevronLeft.Rotation = value and -45 or 45
+            self.ChevronRight.Rotation = value and 45 or -45
+
+            local color = value
+                and self.Library.Theme.Cyan
+                or self.Library.Theme.TextMuted
+
+            self.ChevronLeft.BackgroundColor3 = color
+            self.ChevronRight.BackgroundColor3 = color
         end
     end
-
-    self.Library:_Connect(headerButton.MouseEnter, function()
-        Tween(headerButton, TWEEN_FAST, {
-            BackgroundColor3 = self.Library.Theme.PanelHover,
-            BackgroundTransparency = 0.72,
-        })
-        Tween(title, TWEEN_FAST, {TextColor3 = self.Library.Theme.White})
-        Tween(description, TWEEN_FAST, {TextColor3 = self.Library.Theme.CyanDark})
-    end)
-
-    self.Library:_Connect(headerButton.MouseLeave, function()
-        Tween(headerButton, TWEEN_FAST, {
-            BackgroundTransparency = section.Collapsed and 0.92 or 1,
-        })
-        Tween(title, TWEEN_FAST, {TextColor3 = self.Library.Theme.Text})
-        Tween(description, TWEEN_FAST, {TextColor3 = self.Library.Theme.TextMuted})
-    end)
-
-    self.Library:_Connect(headerButton.MouseButton1Click, function()
-        section:SetCollapsed(not section.Collapsed)
-    end)
-
-    self.Library:_Connect(collapseButton.MouseEnter, function()
-        Tween(collapseButton, TWEEN_FAST, {
-            BackgroundTransparency = 0.9,
-        })
-        if section.ChevronLeft and section.ChevronRight then
-            Tween(section.ChevronLeft, TWEEN_FAST, {BackgroundColor3 = self.Library.Theme.Cyan})
-            Tween(section.ChevronRight, TWEEN_FAST, {BackgroundColor3 = self.Library.Theme.Cyan})
-        end
-    end)
-
-    self.Library:_Connect(collapseButton.MouseLeave, function()
-        Tween(collapseButton, TWEEN_FAST, {
-            BackgroundTransparency = 1,
-        })
-        if section.ChevronLeft and section.ChevronRight then
-            local c = section.Collapsed and self.Library.Theme.Cyan or self.Library.Theme.TextMuted
-            Tween(section.ChevronLeft, TWEEN_FAST, {BackgroundColor3 = c})
-            Tween(section.ChevronRight, TWEEN_FAST, {BackgroundColor3 = c})
-        end
-    end)
-
-    self.Library:_Connect(collapseButton.MouseButton1Click, function()
-        section:SetCollapsed(not section.Collapsed)
-    end)
 
     table.insert(self.Sections, section)
     self.Library:_RefreshNavigationSearch()
