@@ -99,10 +99,11 @@ return {
                     local UseConsumable = Replicated:FindFirstChild("UseConsumable", true)
                     local PlayerStats = Player:FindFirstChild("PlayerStats")
                     local Inventory = PlayerStats:FindFirstChild("Inventory")
-                    if UseConsumable and PlayerStats and Inventory and AICUI.GetItem(Inventory.Value,"Teleport Crystal") > 0 then
-                        UseConsumable:InvokeServer("Teleport Crystal")
-                    elseif AICUI.GetItem(Inventory.Value,"Teleport Crystal") <= 0 then
-                        NotifyAction("Party", "Insufficient Teleport Crystal in inventory.")
+                    local TeleportCrystal, Amount = AICUI.GetItem(Inventory.Value,"Teleport Crystal")
+                    if UseConsumable and PlayerStats and Inventory and Amount > 0 then
+                        UseConsumable:InvokeServer(TeleportCrystal)
+                    elseif Amount <= 0 then
+                        NotifyAction("Party", "Insufficient "..TeleportCrystal.." in inventory.")
                     end
                 else
                     -- assert(TeleportEvent, "no TeleportEvent remote")
