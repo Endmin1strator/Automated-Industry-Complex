@@ -93,26 +93,33 @@ return {
         local function RequestTeleport(LeaderName)
             return pcall(function()
                 local ChatEvent = Replicated:FindFirstChild("ChatEvent", true)
-                -- local TeleportEvent = Replicated:FindFirstChild("TeleportEvent", true)
+                local TeleportEvent = Replicated:FindFirstChild("TeleportEvent", true)
 
-                if workspace.GameLoader.Options.Floor.Value ~= 1 then
-                    local UseConsumable = Replicated:FindFirstChild("UseConsumable", true)
-                    local PlayerStats = Player:FindFirstChild("PlayerStats")
-                    local Inventory = PlayerStats:FindFirstChild("Inventory")
-                    local TeleportCrystal, Amount = AICUI.GetItem(Inventory.Value,"Teleport Crystal")
-                    if UseConsumable and PlayerStats and Inventory and Amount > 0 then
-                        UseConsumable:InvokeServer(TeleportCrystal)
-                    elseif Amount <= 0 then
-                        NotifyAction("Party", "Insufficient "..TeleportCrystal.." in inventory.")
-                    end
-                else
-                    -- assert(TeleportEvent, "no TeleportEvent remote")
-                    -- TeleportEvent:FireServer(0)
-                    task.delay(0.5, function()
-                        assert(ChatEvent, "no ChatEvent remote")
-                        ChatEvent:FireServer("Party", "tp friend " .. LeaderName)
-                    end)     
-                end
+                assert(TeleportEvent, "no TeleportEvent remote")
+                TeleportEvent:FireServer(0)
+                task.delay(0.5, function()
+                    assert(ChatEvent, "no ChatEvent remote")
+                    ChatEvent:FireServer("Party", "tp friend " .. LeaderName)
+                end)    
+                    
+                -- if workspace.GameLoader.Options.Floor.Value ~= 1 then
+                --     local UseConsumable = Replicated:FindFirstChild("UseConsumable", true)
+                --     local PlayerStats = Player:FindFirstChild("PlayerStats")
+                --     local Inventory = PlayerStats:FindFirstChild("Inventory")
+                --     local TeleportCrystal, Amount = AICUI.GetItem(Inventory.Value,"Teleport Crystal")
+                --     if UseConsumable and PlayerStats and Inventory and Amount > 0 then
+                --         UseConsumable:InvokeServer(TeleportCrystal)
+                --     elseif Amount <= 0 then
+                --         NotifyAction("Party", "Insufficient "..TeleportCrystal.." in inventory.")
+                --     end
+                -- else
+                --     -- assert(TeleportEvent, "no TeleportEvent remote")
+                --     -- TeleportEvent:FireServer(0)
+                --     task.delay(0.5, function()
+                --         assert(ChatEvent, "no ChatEvent remote")
+                --         ChatEvent:FireServer("Party", "tp friend " .. LeaderName)
+                --     end)     
+                -- end
             end)
         end
 
