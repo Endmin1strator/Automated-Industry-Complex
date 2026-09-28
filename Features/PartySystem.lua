@@ -101,7 +101,7 @@ return {
                     local Inventory = PlayerStats:FindFirstChild("Inventory")
                     if UseConsumable and PlayerStats and Inventory and AICUI.GetItem(Inventory.Value,"Teleport Crystal") > 0 then
                         UseConsumable:InvokeServer("Teleport Crystal")
-                    else AICUI.GetItem(Inventory.Value,"Teleport Crystal") <= 0 then
+                    elseif AICUI.GetItem(Inventory.Value,"Teleport Crystal") <= 0 then
                         NotifyAction("Party", "Insufficient Teleport Crystal in inventory.")
                     end
                     return
