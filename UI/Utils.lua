@@ -813,7 +813,6 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
 
     self.CurrentTab        = nil
     self.Visible           = true
-    self.Minimized         = false
     self.Destroyed         = false
     self.NavigationCollapsed = false
     self.WindowSize        = Vector2.new(WINDOW_SIZE.X, WINDOW_SIZE.Y)
@@ -921,15 +920,14 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
     local resizeHandle = New("TextButton", {
         Name = "ResizeHandle",
         Parent = window,
-        BackgroundColor3 = self.Theme.Element,
-        BackgroundTransparency = 0.72,
+        BackgroundTransparency = 1,
         BorderSizePixel = 0,
         AnchorPoint = Vector2.new(1, 1),
         Position = UDim2.new(1, 0, 1, 0),
-        Size = UDim2.fromOffset(30, 30),
+        Size = UDim2.fromOffset(24, 24),
         Text = "",
         AutoButtonColor = false,
-        ZIndex = 41,
+        ZIndex = 40,
     })
 
     -- Subtle diagonal resize grip.
@@ -942,10 +940,6 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
             0.15
         )
     end
-
-    AddAngularCorners(resizeHandle, self.Theme.CyanDark)
-    self:_Connect(resizeHandle.MouseEnter, function() Tween(resizeHandle, TWEEN_FAST, {BackgroundTransparency = 0.35}) end)
-    self:_Connect(resizeHandle.MouseLeave, function() Tween(resizeHandle, TWEEN_FAST, {BackgroundTransparency = 0.72}) end)
 
     self.ResizeHandle = resizeHandle
 
@@ -1069,28 +1063,6 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
 
     self.StatusDot = statusDot
 
-    -- Minimize
-    local minimize = New("TextButton", {
-        Name = "Minimize",
-        Parent = header,
-        BackgroundColor3 = self.Theme.Element,
-        BackgroundTransparency = 0.08,
-        BorderSizePixel = 0,
-        Position = UDim2.new(1, -86, 0, 10),
-        Size = UDim2.fromOffset(34, 34),
-        Text = "—",
-        TextColor3 = self.Theme.TextSecondary,
-        TextSize = 17,
-        Font = Enum.Font.GothamBold,
-        AutoButtonColor = false,
-        ZIndex = 15,
-    })
-    self.MinimizeButton = minimize
-    AddAngularCorners(minimize, self.Theme.BorderDim)
-
-    self:_Connect(minimize.MouseEnter, function() Tween(minimize, TWEEN_FAST, {BackgroundColor3 = self.Theme.ElementHover, TextColor3 = self.Theme.Cyan}) end)
-    self:_Connect(minimize.MouseLeave, function() Tween(minimize, TWEEN_FAST, {BackgroundColor3 = self.Theme.Element, TextColor3 = self.Theme.TextSecondary}) end)
-
     -- Close
     local close = New("TextButton", {
         Name = "Close",
@@ -1138,10 +1110,6 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
 
     self:_Connect(close.MouseButton1Click, function()
         self:SetVisible(false)
-    end)
-
-    self:_Connect(minimize.MouseButton1Click, function()
-        self:ToggleMinimize()
     end)
 
     -- Settings is created after the Navigation footer so its trigger lives at the bottom of the sidebar.
@@ -1520,19 +1488,19 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
 
         Position = UDim2.new(1, -24, 1, -24),
 
-        Size = UDim2.fromOffset(58, 40),
+        Size = UDim2.fromOffset(54, 54),
 
         BackgroundColor3 = self.Theme.Panel,
 
-        BackgroundTransparency = 0.03,
+        BackgroundTransparency = 0.05,
 
         BorderSizePixel = 0,
 
-        Text = "◇  OPEN",
+        Text = "◇",
 
         TextColor3 = self.Theme.Cyan,
 
-        TextSize = 8,
+        TextSize = 26,
 
         Font = Enum.Font.GothamBold,
 
@@ -1545,8 +1513,8 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
 
     self.ReopenButton = reopen
 
-    AddStroke(reopen, self.Theme.Border, 0.08, 1)
-    AddAngularCorners(reopen, self.Theme.CyanDark)
+    AddStroke(reopen, self.Theme.CyanDark, 0.1, 1)
+    AddCorner(reopen, 2)
 
     self:_Connect(reopen.MouseEnter, function()
         Tween(reopen, TWEEN_FAST, {
@@ -1735,10 +1703,6 @@ function Library:_MakeResizable(handle: GuiObject, target: GuiObject)
     self:_Connect(handle.InputBegan, function(input)
         if input.UserInputType ~= Enum.UserInputType.MouseButton1
             and input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-
-        if self.Minimized then
             return
         end
 
@@ -2036,44 +2000,6 @@ end
 --// Set Visible
 --//==============================================================
 
-function Library:SetMinimized(value: boolean)
-    if self.Destroyed or not self.Window then return end
-    value = value and true or false
-    if self.Minimized == value then return end
-
-    self.Minimized = value
-
-    if value then
-        self._PreMinimizeSize = Vector2.new(self.WindowSize.X, self.WindowSize.Y)
-        if self.ResizeHandle then self.ResizeHandle.Visible = false end
-        if self.Sidebar then self.Sidebar.Visible = false end
-        if self.Content then self.Content.Visible = false end
-        if self.SettingsPanel then self.SettingsPanel.Visible = false end
-        if self.NavigationSearchResults then self.NavigationSearchResults.Visible = false end
-        self.MinimizeButton.Text = "□"
-        Tween(self.Window, TWEEN_SMOOTH, {Size = UDim2.fromOffset(self.WindowSize.X, 58)})
-    else
-        local restore = self._PreMinimizeSize or self.WindowSize
-        restore = Vector2.new(math.clamp(restore.X, self.MinWindowSize.X, self.MaxWindowSize.X), math.clamp(restore.Y, self.MinWindowSize.Y, self.MaxWindowSize.Y))
-        self.WindowSize = restore
-        self.MinimizeButton.Text = "—"
-        Tween(self.Window, TWEEN_SMOOTH, {Size = UDim2.fromOffset(restore.X, restore.Y)})
-        task.delay(0.16, function()
-            if self.Destroyed or self.Minimized then return end
-            if self.ResizeHandle then self.ResizeHandle.Visible = true end
-            if self.Sidebar then self.Sidebar.Visible = true end
-            if self.Content then self.Content.Visible = true end
-            if self.TabContainer then self.TabContainer.Visible = not self.NavigationCollapsed end
-            if self.NavigationSearchResults then self.NavigationSearchResults.Visible = (not self.NavigationCollapsed) and self.NavigationSearchText ~= "" end
-            self:_UpdateScale()
-        end)
-    end
-end
-
-function Library:ToggleMinimize()
-    self:SetMinimized(not self.Minimized)
-end
-
 function Library:SetVisible(value: boolean)
     if self.Destroyed then
         return
@@ -2091,8 +2017,6 @@ function Library:SetVisible(value: boolean)
 
     if value then
         self.ReopenButton.Visible = false
-        self.Minimized = false
-        self._PreMinimizeSize = nil
 
         if self._introPlaying then
             return
@@ -2109,18 +2033,6 @@ function Library:SetVisible(value: boolean)
 
         self:_FadeWindow(0)
     else
-        if self.Minimized then
-            local restore = self._PreMinimizeSize or self.WindowSize
-            self.WindowSize = Vector2.new(
-                math.clamp(restore.X, self.MinWindowSize.X, self.MaxWindowSize.X),
-                math.clamp(restore.Y, self.MinWindowSize.Y, self.MaxWindowSize.Y)
-            )
-            self.Window.Size = UDim2.fromOffset(self.WindowSize.X, self.WindowSize.Y)
-        end
-
-        self.Minimized = false
-        self._PreMinimizeSize = nil
-        if self.ResizeHandle then self.ResizeHandle.Visible = true end
         self:_CloseDropdowns()
         if self._SettingsOpen then
             self._SettingsOpen = false
@@ -4984,13 +4896,16 @@ function Library:AddPin(name: string?)
     component.SearchSource = nil
     component.CountSource = nil
     component.MaxResults = 12
+    component.Minimized = false
+    component.Visible = true
 
     local panel = New("Frame", {
         Name = "PinPanel",
         Parent = self.ScreenGui,
         AnchorPoint = Vector2.new(1, 0),
         Position = UDim2.new(1, -16, 0, 130),
-        Size = UDim2.fromOffset(278, 0),
+        Size = UDim2.new(0, 194, 0, 0),
+        ClipsDescendants = false,
         AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundColor3 = self.Theme.Panel,
         BackgroundTransparency = 0.06,
@@ -4998,9 +4913,9 @@ function Library:AddPin(name: string?)
         ZIndex = 40,
     })
 
-    AddStroke(panel, self.Theme.Border, 0.08, 1)
-    AddAngularCorners(panel, self.Theme.CyanDark)
-    AddPadding(panel, 10, 10, 10, 10)
+    AddCorner(panel, 6)
+    AddStroke(panel, self.Theme.BorderDim)
+    AddPadding(panel, 8, 8, 8, 8)
 
     New("UIListLayout", {
         Parent = panel,
@@ -5013,62 +4928,64 @@ function Library:AddPin(name: string?)
     local header = New("Frame", {
         Parent = panel,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 34),
+        Size = UDim2.new(1, 0, 0, 24),
         LayoutOrder = 1,
         ZIndex = 41,
     })
 
-    local marker = AddText(header, "◇", 15, UDim2.fromOffset(8, 0), UDim2.fromOffset(24, 34))
-    marker.TextColor3 = self.Theme.Cyan
-    marker.Font = Enum.Font.GothamBold
-    marker.ZIndex = 43
-
-    local title = AddText(header, (name or "Pinned Items"):upper(), 9, UDim2.fromOffset(36, 2), UDim2.new(1, -105, 0, 18))
-    title.TextColor3 = self.Theme.White
-    title.Font = Enum.Font.GothamBold
+    local title = AddText(header, name or "Pinned Items", 13, UDim2.new(0, 0, 0, 0), UDim2.new(1, -82, 1, 0))
+    title.TextColor3 = self.Theme.Cyan
     title.ZIndex = 42
 
-    local popButton = New("TextButton", {
-        Parent = header,
-        AnchorPoint = Vector2.new(1, 0.5),
-        Position = UDim2.new(1, -2, 0.5, 0),
-        Size = UDim2.fromOffset(26, 24),
-        BackgroundColor3 = self.Theme.Element,
-        BackgroundTransparency = 0.2,
-        BorderSizePixel = 0,
-        Text = "›",
-        TextColor3 = self.Theme.TextMuted,
-        TextSize = 18,
-        Font = Enum.Font.GothamMedium,
-        AutoButtonColor = false,
-        ZIndex = 42,
-    })
+    local function HeaderButton(text, xOffset, color)
+        local button = New("TextButton", {
+            Parent = header,
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, xOffset, 0.5, 0),
+            Size = UDim2.new(0, 20, 0, 18),
+            BackgroundColor3 = self.Theme.Element,
+            BackgroundTransparency = 0.15,
+            BorderSizePixel = 0,
+            Text = text,
+            TextColor3 = color or self.Theme.TextMuted,
+            TextSize = 11,
+            Font = Enum.Font.GothamBold,
+            AutoButtonColor = false,
+            ZIndex = 42,
+        })
+        AddCorner(button, 3)
+        AddStroke(button, self.Theme.BorderDim, 0.35, 1)
+        return button
+    end
 
-    AddStroke(popButton, self.Theme.BorderDim, 0.25, 1)
-    AddAngularCorners(popButton, self.Theme.CyanDark)
+    local closeButton = HeaderButton("×", -2, self.Theme.Danger)
+    local minimizeButton = HeaderButton("—", -24, self.Theme.TextMuted)
+    local popButton = HeaderButton("<>", -46, self.Theme.TextMuted)
+
+    component.CloseButton = closeButton
+    component.MinimizeButton = minimizeButton
 
     --// A dropdown is unusable here: an inventory can hold hundreds of entries,
     --// so this filters by substring and shows only the first few matches.
     local searchBox = New("TextBox", {
         Parent = panel,
-        Size = UDim2.new(1, 0, 0, 28),
+        Size = UDim2.new(1, 0, 0, 22),
         LayoutOrder = 2,
         BackgroundColor3 = self.Theme.Element,
         BackgroundTransparency = 0.15,
         BorderSizePixel = 0,
         Text = "",
-        PlaceholderText = "SEARCH / ADD ITEM...",
+        PlaceholderText = "search item...",
         PlaceholderColor3 = self.Theme.TextMuted,
         TextColor3 = self.Theme.Text,
-        TextSize = 8,
+        TextSize = 12,
         Font = Enum.Font.GothamMedium,
         ClearTextOnFocus = false,
         ZIndex = 41,
     })
 
-    AddStroke(searchBox, self.Theme.BorderDim, 0.2, 1)
-    AddAngularCorners(searchBox, self.Theme.BorderDim)
-    AddPadding(searchBox, 8, 8, 0, 0)
+    AddCorner(searchBox, 4)
+    AddPadding(searchBox, 6, 6, 0, 0)
 
     local resultHolder = New("Frame", {
         Parent = panel,
@@ -5101,10 +5018,49 @@ function Library:AddPin(name: string?)
         Padding = UDim.new(0, 3),
     })
 
-    local emptyLabel = AddText(panel, "◇  NO PINNED ITEMS", 7, UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 16))
+    local emptyLabel = AddText(panel, "no pinned items", 11, UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 16))
     emptyLabel.TextColor3 = self.Theme.TextMuted
     emptyLabel.LayoutOrder = 5
     emptyLabel.ZIndex = 41
+
+    local pinReopen = New("TextButton", {
+        Name = "PinReopen",
+        Parent = self.ScreenGui,
+        AnchorPoint = Vector2.new(0, 0),
+        Position = UDim2.fromOffset(0, 0),
+        Size = UDim2.fromOffset(72, 28),
+        BackgroundColor3 = self.Theme.Panel,
+        BackgroundTransparency = 0.05,
+        BorderSizePixel = 0,
+        Text = "◇ OPEN",
+        TextColor3 = self.Theme.Cyan,
+        TextSize = 11,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = false,
+        Visible = false,
+        ZIndex = 80,
+    })
+    AddCorner(pinReopen, 3)
+    AddStroke(pinReopen, self.Theme.CyanDark, 0.1, 1)
+    component.ReopenButton = pinReopen
+
+    local resizeHandle = New("TextButton", {
+        Name = "PinResizeHandle",
+        Parent = self.ScreenGui,
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.fromOffset(0, 0),
+        Size = UDim2.fromOffset(18, 18),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Text = "↘",
+        TextColor3 = self.Theme.TextMuted,
+        TextSize = 13,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = false,
+        Visible = true,
+        ZIndex = 81,
+    })
+    component.ResizeHandle = resizeHandle
 
     --// Counts pushed in with UpdateCounts only arrive when the caller notices
     --// a change. An item pinned just now, or restored from a saved list, has
@@ -5148,30 +5104,21 @@ function Library:AddPin(name: string?)
         for index, entry in ipairs(component.Items) do
             local row = New("Frame", {
                 Parent = itemHolder,
-                Size = UDim2.new(1, 0, 0, 30),
-                BackgroundColor3 = self.Theme.Element,
+                Size = UDim2.new(1, 0, 0, 20),
+                BackgroundColor3 = self.Theme.PanelLight,
                 BackgroundTransparency = 0.25,
                 BorderSizePixel = 0,
                 LayoutOrder = index,
                 ZIndex = 42,
             })
 
-            AddStroke(row, self.Theme.BorderDim, 0.35, 1)
-            AddAngularCorners(row, self.Theme.BorderDim)
+            AddCorner(row, 4)
 
-            local rowIndex = AddText(row, string.format("%02d", index), 7, UDim2.fromOffset(8, 0), UDim2.fromOffset(22, 30))
-            rowIndex.TextColor3 = self.Theme.CyanDark
-            rowIndex.Font = Enum.Font.Code
-
-            local rowName = AddText(row, entry.Name, 8, UDim2.fromOffset(42, 0), UDim2.new(1, -132, 1, 0))
+            local rowName = AddText(row, entry.Name, 11, UDim2.new(0, 6, 0, 0), UDim2.new(1, -96, 1, 0))
             rowName.TextColor3 = self.Theme.Text
             rowName.ZIndex = 43
 
-            local countBadge = New("Frame", {Parent = row, Position = UDim2.new(1, -68, 0, 5), Size = UDim2.fromOffset(48, 20), BackgroundColor3 = self.Theme.Background, BorderSizePixel = 0, ZIndex = 44})
-            AddStroke(countBadge, self.Theme.BorderDim, 0.25, 1)
-            AddAngularCorners(countBadge, self.Theme.CyanDark)
-
-            local count = AddText(countBadge, tostring(entry.Count or 0), 8, UDim2.fromScale(0, 0), UDim2.fromScale(1, 1))
+            local count = AddText(row, tostring(entry.Count or 0), 11, UDim2.new(1, -92, 0, 0), UDim2.new(0, 34, 1, 0))
             count.TextColor3 = (entry.Count or 0) > 0 and self.Theme.Cyan or self.Theme.TextMuted
             count.TextXAlignment = Enum.TextXAlignment.Right
             count.ZIndex = 43
@@ -5181,7 +5128,7 @@ function Library:AddPin(name: string?)
                     Parent = row,
                     AnchorPoint = Vector2.new(1, 0.5),
                     Position = UDim2.new(1, offset, 0.5, 0),
-                    Size = UDim2.fromOffset(18, 22),
+                    Size = UDim2.new(0, 16, 0, 16),
                     BackgroundTransparency = 1,
                     Text = text,
                     TextColor3 = colour,
@@ -5192,9 +5139,9 @@ function Library:AddPin(name: string?)
                 })
             end
 
-            local up = SmallButton("↑", -44, self.Theme.TextMuted)
-            local down = SmallButton("↓", -25, self.Theme.TextMuted)
-            local remove = SmallButton("×", -5, self.Theme.Danger)
+            local up = SmallButton("^", -38, self.Theme.TextMuted)
+            local down = SmallButton("v", -21, self.Theme.TextMuted)
+            local remove = SmallButton("x", -4, self.Theme.Danger)
 
             self:_Connect(up.MouseButton1Click, function()
                 component:MoveUp(entry.Name)
@@ -5410,7 +5357,7 @@ function Library:AddPin(name: string?)
     function component:SetFloating(value: boolean)
         self.Floating = value and true or false
 
-        popButton.Text = self.Floating and "‹" or "›"
+        popButton.Text = self.Floating and ">|" or "<>"
         popButton.TextColor3 = self.Floating and self.Library.Theme.Cyan or self.Library.Theme.TextMuted
 
         if not self.Floating then
@@ -5462,13 +5409,75 @@ function Library:AddPin(name: string?)
         end
     end
 
+    local function UpdatePinControls()
+        if not panel.Parent then
+            return
+        end
+
+        local pos = panel.AbsolutePosition
+        local size = panel.AbsoluteSize
+        resizeHandle.Position = UDim2.fromOffset(pos.X + size.X, pos.Y + size.Y)
+        resizeHandle.Visible = component.Visible and not component.Minimized
+
+        if not component.Visible then
+            pinReopen.Position = UDim2.fromOffset(pos.X, pos.Y)
+            pinReopen.Visible = true
+        else
+            pinReopen.Visible = false
+        end
+    end
+
+    function component:SetMinimized(value: boolean)
+        value = value and true or false
+        if self.Minimized == value then
+            return
+        end
+
+        self.Minimized = value
+        searchBox.Visible = not value
+        resultHolder.Visible = not value and resultHolder.Visible
+        itemHolder.Visible = not value
+        emptyLabel.Visible = not value and #self.Items == 0
+        resizeHandle.Visible = self.Visible and not value
+
+        if value then
+            minimizeButton.Text = "□"
+        else
+            minimizeButton.Text = "—"
+        end
+
+        UpdatePinControls()
+    end
+
+    function component:ToggleMinimize()
+        self:SetMinimized(not self.Minimized)
+    end
+
     function component:SetVisible(value: boolean)
-        panel.Visible = value and true or false
+        self.Visible = value and true or false
+        panel.Visible = self.Visible
+        pinReopen.Visible = not self.Visible
+        resizeHandle.Visible = self.Visible and not self.Minimized
+        UpdatePinControls()
     end
 
     function component:Destroy()
         panel:Destroy()
+        pinReopen:Destroy()
+        resizeHandle:Destroy()
     end
+
+    self:_Connect(minimizeButton.MouseButton1Click, function()
+        component:ToggleMinimize()
+    end)
+
+    self:_Connect(closeButton.MouseButton1Click, function()
+        component:SetVisible(false)
+    end)
+
+    self:_Connect(pinReopen.MouseButton1Click, function()
+        component:SetVisible(true)
+    end)
 
     self:_Connect(popButton.MouseButton1Click, function()
         component:SetFloating(not component.Floating)
@@ -5477,6 +5486,47 @@ function Library:AddPin(name: string?)
             task.spawn(component.OnChanged, component)
         end
     end)
+
+    local resizing = false
+    local resizeStart: Vector2
+    local startWidth: number
+
+    self:_Connect(resizeHandle.InputBegan, function(input)
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1
+            and input.UserInputType ~= Enum.UserInputType.Touch then
+            return
+        end
+
+        resizing = true
+        resizeStart = input.Position
+        startWidth = panel.AbsoluteSize.X
+    end)
+
+    self:_Connect(UserInputService.InputChanged, function(input)
+        if not resizing then
+            return
+        end
+
+        if input.UserInputType ~= Enum.UserInputType.MouseMovement
+            and input.UserInputType ~= Enum.UserInputType.Touch then
+            return
+        end
+
+        local delta = input.Position.X - resizeStart.X
+        local width = math.clamp(startWidth + delta, 170, 360)
+        panel.Size = UDim2.new(0, width, 0, 0)
+        UpdatePinControls()
+    end)
+
+    self:_Connect(UserInputService.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            resizing = false
+        end
+    end)
+
+    self:_Connect(panel:GetPropertyChangedSignal("AbsolutePosition"), UpdatePinControls)
+    self:_Connect(panel:GetPropertyChangedSignal("AbsoluteSize"), UpdatePinControls)
 
     --// Dragging works in both modes, and dragging while attached pops it out,
     --// which is the gesture someone will reach for first. It is kept on
@@ -5527,6 +5577,7 @@ function Library:AddPin(name: string?)
 
     component:SetFloating(false)
     RefreshItems()
+    UpdatePinControls()
 
     self.Pins = self.Pins or {}
     table.insert(self.Pins, component)
