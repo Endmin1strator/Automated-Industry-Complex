@@ -38,6 +38,7 @@ return {
             Busy = false,
             CooldownUntil = 0,
             LastCheck = 0,
+            AttemptedToFindTeleporter = 0
         }
 
         local State = AICFeature.S.Party
@@ -92,10 +93,22 @@ return {
         local function RequestTeleport(LeaderName)
             return pcall(function()
                 local ChatEvent = Replicated:FindFirstChild("ChatEvent", true)
-                local TeleportEvent = Replicated:FindFirstChild("TeleportEvent", true)
+                -- local TeleportEvent = Replicated:FindFirstChild("TeleportEvent", true)
 
-                assert(TeleportEvent, "no TeleportEvent remote")
-                TeleportEvent:FireServer(0)
+                if workspace.GameLoader.Options.Floor.Value ~= 1 then
+                    local UseConsumable = Replicated:FindFirstChild("UseConsumable", true)
+                    local PlayerStats = Player:FindFirstChild("PlayerStats")
+                    local Inventory = PlayerStats:FindFirstChild("Inventory")
+                    if UseConsumable and PlayerStats and Inventory and AICUI.GetItem(Inventory.Value,"Teleport Crystal") > 0 then
+                        UseConsumable:InvokeServer("Teleport Crystal")
+                    else AICUI.GetItem(Inventory.Value,"Teleport Crystal") <= 0 then
+                        NotifyAction("Party", "Insufficient Teleport Crystal in inventory.")
+                    end
+                    return
+                end
+
+                -- assert(TeleportEvent, "no TeleportEvent remote")
+                -- TeleportEvent:FireServer(0)
                 task.delay(0.5, function()
                     assert(ChatEvent, "no ChatEvent remote")
                     ChatEvent:FireServer("Party", "tp friend " .. LeaderName)
