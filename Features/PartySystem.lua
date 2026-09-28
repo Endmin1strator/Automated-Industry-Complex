@@ -104,15 +104,14 @@ return {
                     elseif AICUI.GetItem(Inventory.Value,"Teleport Crystal") <= 0 then
                         NotifyAction("Party", "Insufficient Teleport Crystal in inventory.")
                     end
-                    return
+                else
+                    -- assert(TeleportEvent, "no TeleportEvent remote")
+                    -- TeleportEvent:FireServer(0)
+                    task.delay(0.5, function()
+                        assert(ChatEvent, "no ChatEvent remote")
+                        ChatEvent:FireServer("Party", "tp friend " .. LeaderName)
+                    end)     
                 end
-
-                -- assert(TeleportEvent, "no TeleportEvent remote")
-                -- TeleportEvent:FireServer(0)
-                task.delay(0.5, function()
-                    assert(ChatEvent, "no ChatEvent remote")
-                    ChatEvent:FireServer("Party", "tp friend " .. LeaderName)
-                end)
             end)
         end
 
