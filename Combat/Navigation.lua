@@ -313,7 +313,7 @@ return {
                 return nil
             end
         
-            local Threats = AICCombat.GetLivingGoblins()
+            local Threats = AICCombat.GetRetreatThreats()
         
             if #Threats == 0 then
                 return nil
@@ -422,7 +422,7 @@ return {
                 return nil
             end
         
-            local Goblins = AICCombat.GetLivingGoblins()
+            local Goblins = AICCombat.GetRetreatThreats()
         
             if #Goblins == 0 then
                 return nil
@@ -532,35 +532,13 @@ return {
             end
         
             local Origin = RootPart.Position
-            local Nearest = nil
-            local NearestDistance = math.huge
-        
-            local MobFolder = workspace:FindFirstChild("Mobs")
-        
-            if not MobFolder then
-                return nil
-            end
-        
-            for _, Mob in MobFolder:GetChildren() do
-                if Mob:IsA("Model") then
-                    local MobRoot = Mob:FindFirstChild("HumanoidRootPart")
-                    local MobHumanoid = Mob:FindFirstChildOfClass("Humanoid")
-        
-                    if MobRoot and MobHumanoid and MobHumanoid.Health > 0 then
-                        local Distance = AICCombatUtils.GetHorizontalDistance(Origin, MobRoot.Position)
-        
-                        if Distance < NearestDistance then
-                            NearestDistance = Distance
-                            Nearest = MobRoot
-                        end
-                    end
-                end
-            end
-        
+            local NearestModel = AICCombat.GetNearestThreat()
+            local Nearest = NearestModel and NearestModel:FindFirstChild("HumanoidRootPart")
+
             if not Nearest then
                 return nil
             end
-        
+
             local Offset = Origin - Nearest.Position
             local Flat = Vector3.new(Offset.X, 0, Offset.Z)
         
@@ -576,36 +554,107 @@ return {
         --// what to attack, not what can hurt us: a mob outside it swings just as hard,
         --// and keying "am I safe to stand still" off the priority list meant the
         --// script would hold position while something not on the list beat on it.
-        function AICCombat.GetNearestHostileDistance()
-            local Character, Humanoid, RootPart = Runtime:GetCharacter()
-            if not RootPart then
-                return math.huge
-            end
-        
-            local MobFolder = workspace:FindFirstChild("Mobs")
-        
-            if not MobFolder then
-                return math.huge
-            end
-        
-            local Nearest = math.huge
-        
-            for _, Mob in MobFolder:GetChildren() do
-                if Mob:IsA("Model") then
-                    local MobRoot = Mob:FindFirstChild("HumanoidRootPart")
-                    local MobHumanoid = Mob:FindFirstChildOfClass("Humanoid")
-        
-                    if MobRoot and MobHumanoid and MobHumanoid.Health > 0 then
-                        local Distance = AICCombatUtils.GetHorizontalDistance(RootPart.Position, MobRoot.Position)
-        
-                        if Distance < Nearest then
-                            Nearest = Distance
-                        end
+        local function IsAliveModel(Model)
+            local ModelRoot = Model and Model:FindFirstChild("HumanoidRootPart")
+            local ModelHumanoid = Model and Model:FindFirstChildOfClass("Humanoid")
+
+            return ModelRoot ~= nil and ModelHumanoid ~= nil and ModelHumanoid.Health > 0
+        end
+
+        --// Players worth running from: the duel opponent while in a duel,
+        --// otherwise every player on the target list.
+        function AICCombat.GetHostilePlayerCharacters()
+            local Result = {}
+            local Opponents = AICCombat.GetOwnDuelOpponents()
+
+            if Opponents then
+                for _, Opponent in ipairs(Opponents) do
+                    if IsAliveModel(Opponent.Character) then
+                        table.insert(Result, Opponent.Character)
                     end
                 end
+
+                return Result
             end
-        
-            return Nearest
+
+            for _, PlayerCharacter in ipairs(AICCombat.GetPriorityPlayerCharacters()) do
+                if IsAliveModel(PlayerCharacter) then
+                    table.insert(Result, PlayerCharacter)
+                end
+            end
+
+            return Result
+        end
+
+        --// Everything a retreat steers away from: priority mobs plus hostile
+        --// players. A player swings just as hard as a mob.
+        function AICCombat.GetRetreatThreats()
+            local Threats = table.clone(AICCombat.GetLivingGoblins())
+
+            for _, PlayerCharacter in ipairs(AICCombat.GetHostilePlayerCharacters()) do
+                table.insert(Threats, PlayerCharacter)
+            end
+
+            return Threats
+        end
+
+        --// Nearest living mob of any kind, or hostile player. Returns the
+        --// model, its horizontal distance and whether it is a player.
+        function AICCombat.GetNearestThreat()
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            if not RootPart then
+                return nil, math.huge, false
+            end
+
+            local Nearest, NearestDistance, NearestIsPlayer = nil, math.huge, false
+
+            local function Consider(Model, IsPlayer)
+                if not Model:IsA("Model") or not IsAliveModel(Model) then
+                    return
+                end
+
+                local Distance = AICCombatUtils.GetHorizontalDistance(
+                    RootPart.Position,
+                    Model.HumanoidRootPart.Position
+                )
+
+                if Distance < NearestDistance then
+                    Nearest, NearestDistance, NearestIsPlayer = Model, Distance, IsPlayer
+                end
+            end
+
+            local MobFolder = workspace:FindFirstChild("Mobs")
+
+            for _, Mob in (MobFolder and MobFolder:GetChildren() or {}) do
+                Consider(Mob, false)
+            end
+
+            for _, PlayerCharacter in ipairs(AICCombat.GetHostilePlayerCharacters()) do
+                Consider(PlayerCharacter, true)
+            end
+
+            return Nearest, NearestDistance, NearestIsPlayer
+        end
+
+        function AICCombat.GetNearestHostileDistance()
+            local _, Distance = AICCombat.GetNearestThreat()
+            return Distance
+        end
+
+        --// While retreating, a threat inside attack range is hit rather than
+        --// only run from. Returns the threat when it is that close.
+        function AICCombat.GetFightBackThreat()
+            local Threat, Distance = AICCombat.GetNearestThreat()
+
+            if not Threat then
+                return nil
+            end
+
+            if Distance > AICCombat.GetCombatAttackRange(Threat) then
+                return nil
+            end
+
+            return Threat, Distance
         end
         function AICCombat.GetNearestLivingGoblinDistance()
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
@@ -648,7 +697,7 @@ return {
             local Origin = RootPart.Position
             local Away = Vector3.zero
         
-            for _, Goblin in AICCombat.GetLivingGoblins() do
+            for _, Goblin in AICCombat.GetRetreatThreats() do
                 local MobRoot = Goblin:FindFirstChild("HumanoidRootPart")
         
                 if MobRoot then
@@ -726,12 +775,26 @@ return {
             --// the configured nearby distance. Enemy skill retreat is different:
             --// if a mob is actively using a skill, keep the skill-escape logic
             --// even when that mob is farther than the normal 30-stud trigger.
-            if not IsEnemySkill then
+            --// A duel is never waited out standing still. Against another
+            --// player the character may only stop once they are farther than
+            --// RETREAT_PLAYER_SAFE_DISTANCE; against mobs the old trigger holds.
+            local NearestThreat, NearestThreatDistance, NearestIsPlayer = AICCombat.GetNearestThreat()
+
+            if not IsEnemySkill and not AICCombat.IsInDuel() then
                 --// Any living mob counts here, not just the ones we would attack.
-                local NearestMobDistance = AICCombat.GetNearestHostileDistance()
-                if NearestMobDistance > CONFIG.RETREAT_NEARBY_MOB_DISTANCE then
+                local SafeDistance = NearestIsPlayer
+                    and (tonumber(CONFIG.RETREAT_PLAYER_SAFE_DISTANCE) or 50)
+                    or CONFIG.RETREAT_NEARBY_MOB_DISTANCE
+
+                if NearestThreatDistance > SafeDistance then
                     Humanoid.AutoRotate = false
                     Humanoid:Move(Vector3.zero)
+
+                    --// Keep watching whatever is out there until healed.
+                    if NearestThreat then
+                        AICCombat.FaceGoblin(NearestThreat)
+                    end
+
                     return false
                 end
             end
@@ -796,18 +859,21 @@ return {
             if RetreatPosition then
                 AICCombat.S.RetreatNoPositionSince = nil
         
-                --// Face the actual retreat direction instead of the target.
                 Humanoid.AutoRotate = false
                 Humanoid:MoveTo(RetreatPosition)
-        
+
                 local RootPosition = RootPart.Position
                 local RetreatDirection = Vector3.new(
                     RetreatPosition.X - RootPosition.X,
                     0,
                     RetreatPosition.Z - RootPosition.Z
                 )
-        
-                if FaceOrientation and RetreatDirection.Magnitude > 0.01 then
+
+                --// Back away facing the nearest threat so it can be hit if it
+                --// closes in; with nothing in face range, face the way we run.
+                if NearestThreat and NearestThreatDistance <= CONFIG.COMBAT_FACE_RANGE then
+                    AICCombat.FaceGoblin(NearestThreat)
+                elseif FaceOrientation and RetreatDirection.Magnitude > 0.01 then
                     FaceOrientation.CFrame = CFrame.lookAt(
                         RootPosition,
                         RootPosition + RetreatDirection.Unit
@@ -852,6 +918,11 @@ return {
                 if RawTarget then
                     Humanoid.AutoRotate = false
                     Humanoid:MoveTo(RawTarget)
+
+                    if NearestThreat and NearestThreatDistance <= CONFIG.COMBAT_FACE_RANGE then
+                        AICCombat.FaceGoblin(NearestThreat)
+                    end
+
                     AICCombatUtils.DoJumpIfObstacle(RawTarget)
                     return true
                 end
