@@ -19,8 +19,8 @@ return {
         end
 
         function Feature:CreateUI()
-            if Context.UIRef.FeatureSection then
-                self.Button = Context.UIRef.FeatureSection:AddButton("Reset Stats", function()
+            if Context.UIRef.StatusSection then
+                self.Button = Context.UIRef.StatusSection:AddButton("Reset Stats", function()
                     task.spawn(function()
                         local PlayerStats = Player:WaitForChild("PlayerStats")
                         local StatsEvent = Replicated:FindFirstChild("StatsEvent", true)
