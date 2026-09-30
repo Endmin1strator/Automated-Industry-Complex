@@ -62,7 +62,7 @@ return {
 
             SafeBoosterReset = {
                 Enabled = false,
-            }
+            },
 
             ResetStats = {
                 Enabled = true,
