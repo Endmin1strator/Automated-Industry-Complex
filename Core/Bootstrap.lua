@@ -1,6 +1,6 @@
 return {
     Name = "Bootstrap",
-    Dependencies = {"Runtime", "ProfileManager", "Components", "ProfileSettings", "Waypoints", "Farmzone", "Deadzone", "DebugVisualizer", "CombatUtils", "Targeting", "Navigation", "Combat", "AutoFarming", "AutoBlock", "AutoPatrol", "ReturnToFarmZone", "AntiAFK", "AutoRefill"},
+    Dependencies = {"Runtime", "ProfileManager", "Components", "ProfileSettings", "Waypoints", "Farmzone", "Deadzone", "DebugVisualizer", "CombatUtils", "Targeting", "Navigation", "Combat", "AutoFarming", "AutoBlock", "AutoPatrol", "ReturnToFarmZone", "AntiAFK", "AutoRefill", "SafeBoosterReset"},
     Start = function(Context)
         local Runtime = Context.Runtime
         local Services = Context.Services
