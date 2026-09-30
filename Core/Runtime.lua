@@ -522,6 +522,11 @@ return {
                 Button = nil,
                 Status = nil,
             },
+            SafeBoosterReset = {
+                Enabled = false,
+                Button = nil,
+                Status = nil,
+            },
             ResetStats = {
                 Enabled = true,
                 Button = nil,
