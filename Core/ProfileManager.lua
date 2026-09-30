@@ -39,6 +39,7 @@ return {
             DebugVisualizer = "k",
             PartySystem = "l",
             WaypointLoop = "m",
+            SafeBoosterReset = "n",
         }
 
         AICProfile.S.ActiveProfileName = nil
