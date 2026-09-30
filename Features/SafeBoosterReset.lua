@@ -26,7 +26,7 @@ return {
 		--local UI = Context.UI
 		--local PatrolState = Context.PatrolState
 		--local MiningFeature = Context.MiningFeature
-		--local NotifyAction = Context.NotifyAction
+		local NotifyAction = Context.NotifyAction
 
 		local Feature = {
 			Name = "SafeBoosterReset",
@@ -50,7 +50,8 @@ return {
 						return
 					end
 
-					if Value.Value ~= 0 then
+					if Value.Value <= 0 then
+						NotifyAction("SAFE BOOSTER RESET", "Boost expired, no action.")
 						return
 					end
 
