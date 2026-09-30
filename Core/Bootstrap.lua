@@ -126,6 +126,7 @@ return {
             AICFeature.RegenStamina()
         end)
         AICFeature.AutoRefillBooster()
+        AICFeature.SafeBoosterReset()
         
         
         
