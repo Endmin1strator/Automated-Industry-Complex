@@ -39,6 +39,7 @@ local REMOTE_MODULES = {
     "Features/AutoFind.lua",
     "Features/SafeCombat.lua",
     "Features/ResetOnBoostOut.lua",
+    "Features/SafeBoosterReset.lua",
     "Features/ResetStats.lua",
     "Features/DebugVisualizer.lua",
     "Features/Waypoints.lua",
