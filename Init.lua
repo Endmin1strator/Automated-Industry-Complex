@@ -86,6 +86,7 @@ local START_ORDER = {
     "AutoPatrol",
     "ReturnToFarmZone",
     "ResetOnBoostOut",
+    "SafeBoosterReset",
     "ResetStats",
     "DebugVisualizer",
     "AutoHeal",
