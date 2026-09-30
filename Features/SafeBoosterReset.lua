@@ -1,7 +1,7 @@
 return {
 	Name = "SafeBoosterReset",
 	IsFeature = true,
-	Dependencies = {"Runtime", "ProfileManager", "Components"},
+	Dependencies = {"Runtime", "SaveConfig", "ProfileManager", "Components"},
 	Start = function(Context)
 		local Runtime = Context.Runtime
 		local Services = Context.Services
@@ -15,6 +15,7 @@ return {
 		--local HttpService = Services.HttpService
 		--local CONFIG = Context.CONFIG
 		local FeatureState = Context.Feature
+		local SaveConfig = Context.SaveConfig
 		--local AICConfig = Context.AICConfig
 		local AICProfile = Context.AICProfile
 		--local AICCombatUtils = Context.AICCombatUtils
@@ -82,16 +83,26 @@ return {
 		function Feature:Update()
 		end
 
-		function Feature:SetEnabled(Value)
+		function Feature:SetEnabled(Value, Save)
 			self.Enabled = Value == true
 			FeatureState.SafeBoosterReset.Enabled = self.Enabled
+			if SaveConfig.SafeBoosterReset then
+				SaveConfig.SafeBoosterReset.Enabled = self.Enabled
+			end
+
+			if self.Button then
+				self.Button:Set(self.Enabled, false)
+			end
+
+			if Save ~= false and AICProfile.SaveActiveProfile then
+				AICProfile.SaveActiveProfile()
+			end
 		end
 
 		function Feature:CreateUI()
 			if Context.UIRef.FeatureSection then
 				self.Button = AICUI.CreateFeature("Safe Booster Reset", self.Enabled, function(Value)
 					self:SetEnabled(Value)
-					AICProfile.SaveActiveProfile()
 				end)
 				FeatureState.SafeBoosterReset.Button = self.Button
 			end
