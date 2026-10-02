@@ -240,6 +240,15 @@ return {
         
             return Success
         end
+        --// Distance used for attack decisions. In water it is 3D: a diver
+        --// straight below is horizontally "in range" but the swing misses.
+        function AICCombat.GetCombatDistance(TargetMob, Offset)
+            if CONFIG.DISTANCE_Y_CALCULATE or AICCombat.IsWaterCombat(TargetMob) then
+                return Offset.Magnitude
+            end
+
+            return Vector3.new(Offset.X, 0, Offset.Z).Magnitude
+        end
         function AICCombat.CanCombatAttack(TargetMob, now)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             if not TargetMob or not RootPart then
@@ -252,13 +261,8 @@ return {
                 return false
             end
         
-            local Offset = MobRoot.Position - RootPart.Position
-            local Distance = Vector3.new(Offset.X, 0, Offset.Z).Magnitude
-        
-            if CONFIG.DISTANCE_Y_CALCULATE then
-                Distance = Offset.Magnitude
-            end
-        
+            local Distance = AICCombat.GetCombatDistance(TargetMob, MobRoot.Position - RootPart.Position)
+
             return Distance <= AICCombat.GetCombatAttackRange(TargetMob)
                 and now >= AICCombat.S.COMBAT_NEXT_ATTACK_TIME
         end
@@ -274,13 +278,8 @@ return {
                 return
             end
         
-            local Offset = MobRoot.Position - RootPart.Position
-            local Distance = Vector3.new(Offset.X, 0, Offset.Z).Magnitude
-        
-            if CONFIG.DISTANCE_Y_CALCULATE then
-                Distance = Offset.Magnitude
-            end
-        
+            local Distance = AICCombat.GetCombatDistance(TargetMob, MobRoot.Position - RootPart.Position)
+
             local EnemySkill = AICCombat.IsEnemyUsingSkill(TargetMob)
             local PlayerHP = AICCombat.GetCombatHealthPercent()
         

@@ -1,9 +1,10 @@
 -- ProfileManager owns profile storage, serialization, import/export, and profile state.
 return {
     Name = "ProfileManager",
-    Dependencies = {"Runtime"},
+    Dependencies = {"Runtime", "SaveConfig"},
     Start = function(Context)
         local Runtime = Context.Runtime
+        local SaveConfig = Context.SaveConfig
         local AICProfile = Context.AICProfile
         local AICConfig = Context.AICConfig
         local AICCombat = Context.AICCombat
@@ -23,24 +24,15 @@ return {
         --// Not keyed by PlaceId: pinned items follow the player between places.
         local PINNED_FILE = PROFILE_FOLDER .. "/PinnedItems.json"
 
-        --// Short keys for feature toggles in exported/imported profile text.
-        --// Must match AFV2 so saves move between the two builds.
-        local COMPACT_FEATURE_KEYS = {
-            AutoFarm = "a",
-            AutoBlock = "b",
-            SafeCombat = "c",
-            AutoFind = "d",
-            IgnoreFarmZone = "e",
-            AutoPatrol = "f",
-            ReturnToFarmZone = "g",
-            AutoSkill = "h",
-            ResetOnBoostOut = "i",
-            ResetStats = "j",
-            DebugVisualizer = "k",
-            PartySystem = "l",
-            WaypointLoop = "m",
-            SafeBoosterReset = "n",
-        }
+        --// Short keys for feature toggles in exported/imported profile text,
+        --// taken from SaveConfig.Features so a new toggle exports on its own.
+        local COMPACT_FEATURE_KEYS = {}
+
+        for _, Entry in ipairs(SaveConfig.Features) do
+            if Entry.Key then
+                COMPACT_FEATURE_KEYS[Entry.Name] = Entry.Key
+            end
+        end
 
         AICProfile.S.ActiveProfileName = nil
         AICProfile.S.ProfileSaveQueued = false
@@ -135,11 +127,77 @@ return {
                         or {}
                 ),
                 FEATURES = {},
-                SETTINGS = {
-                    REACH_DISTANCE = BasePlaceConfig.REACH_DISTANCE or 5,
-                    AUTOBLOCK = BasePlaceConfig.AUTOBLOCK == true,
-                },
+                SETTINGS = AICProfile.BuildDefaultSettings(),
             }
+        end
+
+        --// A new profile starts from defaults, except the pinned panel,
+        --// which is global and never reset by a profile.
+        function AICProfile.BuildDefaultSettings()
+            local Settings = {}
+
+            for _, Entry in ipairs(SaveConfig.Settings) do
+                if not Entry.Global then
+                    local Fallback = Entry.Scope == "Place" and BasePlaceConfig[Entry.Key] or nil
+                    Settings[Entry.Key] = SaveConfig.GetSettingDefault(Entry, Fallback)
+                end
+            end
+
+            return Settings
+        end
+
+        function AICProfile.CaptureSettings(FarmConfig)
+            local Settings = {}
+
+            for _, Entry in ipairs(SaveConfig.Settings) do
+                local Value
+
+                if Entry.Scope == "Place" then
+                    Value = FarmConfig[Entry.Key]
+                elseif Entry.Key == "PINNED_STATE" and UIRef.PinPanel then
+                    --// Read from the panel, so a drag or a pop out is captured
+                    --// without the panel having to announce every change.
+                    Value = UIRef.PinPanel:GetState()
+                else
+                    Value = CONFIG[Entry.Key]
+                end
+
+                Settings[Entry.Key] = SaveConfig.NormalizeSetting(Entry, Value)
+            end
+
+            return Settings
+        end
+
+        --// Place-scoped settings are written onto FarmConfig, the rest onto
+        --// CONFIG. A missing entry falls back to the default.
+        function AICProfile.ApplySettings(Stored, FarmConfig)
+            Stored = type(Stored) == "table" and Stored or {}
+
+            for _, Entry in ipairs(SaveConfig.Settings) do
+                local Value = Stored[Entry.Key]
+
+                if Entry.Scope == "Place" then
+                    FarmConfig[Entry.Key] = SaveConfig.NormalizeSetting(Entry, Value, FarmConfig[Entry.Key])
+                elseif Entry.Global then
+                    --// Pinned items are shared across every PlaceId and live
+                    --// in their own file. A profile's copy only seeds that
+                    --// file once, for saves made before pins were global.
+                    if not AICProfile.S.HasGlobalPinnedState and type(Value) == "table" then
+                        CONFIG[Entry.Key] = SaveConfig.NormalizeSetting(Entry, Value)
+                        AICProfile.WritePinnedState(CONFIG[Entry.Key])
+                    end
+                else
+                    CONFIG[Entry.Key] = SaveConfig.NormalizeSetting(Entry, Value)
+                end
+            end
+        end
+
+        function AICProfile.ResetSettings()
+            for _, Entry in ipairs(SaveConfig.Settings) do
+                if Entry.Scope ~= "Place" and not Entry.Global then
+                    CONFIG[Entry.Key] = SaveConfig.GetSettingDefault(Entry)
+                end
+            end
         end
 
         function AICProfile.ReadProfileStore()
@@ -211,27 +269,11 @@ return {
 
         --// { Name, UserId } of the party Leader, or {} when none is set.
         function AICProfile.NormalizePartyLeader(Leader)
-            if type(Leader) ~= "table" or type(Leader.Name) ~= "string" or Leader.Name == "" then
-                return {}
-            end
-
-            return {
-                Name = Leader.Name,
-                UserId = tonumber(Leader.UserId),
-            }
+            return SaveConfig.NormalizeSetting(SaveConfig.GetSetting("PARTY_LEADER"), Leader)
         end
 
         function AICProfile.NormalizePinnedState(State)
-            if type(State) ~= "table" then
-                return {}
-            end
-
-            return {
-                Items = type(State.Items) == "table" and State.Items or {},
-                Floating = State.Floating == true,
-                X = tonumber(State.X),
-                Y = tonumber(State.Y),
-            }
+            return SaveConfig.NormalizeSetting(SaveConfig.GetSetting("PINNED_STATE"), State)
         end
 
         function AICProfile.ReadPinnedState()
@@ -300,56 +342,71 @@ return {
         end
 
         function AICProfile.CaptureFeatureState()
-            local Result = {
-                AutoFarm = AICFeature.S.Enabled,
-            }
+            local Result = {}
 
-            for Name, Data in pairs(Feature) do
-                if type(Data) == "table" and type(Data.Enabled) == "boolean" then
-                    Result[Name] = Data.Enabled
-                end
+            for _, Entry in ipairs(SaveConfig.Features) do
+                local Data = Feature[Entry.Name]
+                Result[Entry.Name] = Data and Data.Enabled == true
             end
+
+            --// AutoFarm runs off AICFeature.S.Enabled; the Feature entry only
+            --// mirrors it for the toggle.
+            Result.AutoFarm = AICFeature.S.Enabled == true
 
             return Result
         end
 
+        --// Every saved toggle is set, and one the profile does not mention
+        --// goes back to its default. Keeping the old value instead let a
+        --// toggle from the previous profile leak into the one being loaded.
         function AICProfile.ApplyFeatureState(State)
-            if type(State) ~= "table" then
-                return
+            State = type(State) == "table" and State or {}
+
+            for _, Entry in ipairs(SaveConfig.Features) do
+                local Data = Feature[Entry.Name]
+                local Value = State[Entry.Name]
+
+                --// AutoBlock's fallback is the place's AUTOBLOCK setting,
+                --// which ApplyProfileData has already put on the toggle.
+                if type(Value) ~= "boolean" then
+                    if Entry.Name == "AutoBlock" then
+                        Value = Data.Enabled == true
+                    else
+                        Value = Entry.Default
+                    end
+                end
+
+                Data.Enabled = Value
             end
 
-            if type(State.AutoFarm) == "boolean" then
-                AICFeature.S.Enabled = State.AutoFarm
-            end
+            AICFeature.S.Enabled = Feature.AutoFarm.Enabled
 
-            for Name, Data in pairs(Feature) do
-                if type(Data) == "table"
-                    and type(State[Name]) == "boolean"
-                then
-                    Data.Enabled = State[Name]
+            --// Modules keep their own copy of the toggle; bring them in line.
+            for _, Entry in ipairs(SaveConfig.Features) do
+                local Module = Context.Modules[Entry.Name]
+
+                if type(Module) == "table" and Module.Enabled ~= nil and Entry.Name ~= "AutoBlock" then
+                    Module.Enabled = Feature[Entry.Name].Enabled
                 end
             end
 
-            if type(State.AutoBlock) == "boolean" then
-                AICFeature.S.BlockEnabled = State.AutoBlock
+            --// Toggles that also drive state outside Feature.
+            AICFeature.S.BlockEnabled = Feature.AutoBlock.Enabled
 
-                local AutoBlock = Context.Modules.AutoBlock
-                if AutoBlock and AutoBlock.SetEnabled then
-                    AutoBlock:SetEnabled(State.AutoBlock, false)
-                end
+            local AutoBlock = Context.Modules.AutoBlock
+            if AutoBlock and AutoBlock.SetEnabled then
+                AutoBlock:SetEnabled(Feature.AutoBlock.Enabled, false)
             end
 
-            if type(State.SafeCombat) == "boolean" then
-                AICCombat.S.SafeCombatPositionEnabled = State.SafeCombat
-            end
-
-            if type(State.AutoFind) == "boolean" then
-                AICFeature.S.WaypointEnabled = not State.AutoFind
-            end
+            AICCombat.S.SafeCombatPositionEnabled = Feature.SafeCombat.Enabled
+            AICFeature.S.WaypointEnabled = not Feature.AutoFind.Enabled
         end
 
         function AICProfile.CaptureCurrentProfile(Name)
             local FarmConfig = AICConfig.NormalizePlaceConfig(Runtime:GetPlaceConfig())
+
+            --// The Auto Block toggle is the live value of the place setting.
+            FarmConfig.AUTOBLOCK = AICFeature.S.BlockEnabled == true
 
             return {
                 Name = Name or AICProfile.S.ActiveProfileName or "",
@@ -360,22 +417,7 @@ return {
                 DEADZONES = AICConfig.SerializeZoneList(FarmConfig.DEADZONES),
                 DEFAULT_TARGET_PRIORITY = table.clone(CONFIG.TARGET_ENTITY_PRIORITY or {}),
                 FEATURES = AICProfile.CaptureFeatureState(),
-                SETTINGS = {
-                    REACH_DISTANCE = tonumber(FarmConfig.REACH_DISTANCE) or 5,
-                    AUTOBLOCK = AICFeature.S.BlockEnabled == true,
-                    RETREAT_HEALTH_PERCENT = math.clamp(tonumber(CONFIG.RETREAT_HEALTH_PERCENT) or 40, 30, 80),
-                    AUTO_HEAL_HEALTH_PERCENT = math.clamp(tonumber(CONFIG.AUTO_HEAL_HEALTH_PERCENT) or 65, 30, 80),
-                    SAFE_ENEMY_RANGE = math.clamp(tonumber(CONFIG.SAFE_ENEMY_RANGE) or 4, 0, 30),
-                    TARGET_HP_MODE = tostring(CONFIG.TARGET_HP_MODE or "Disabled"),
-                    EXECUTE_CHARGE_HP_PERCENT = math.clamp(tonumber(CONFIG.EXECUTE_CHARGE_HP_PERCENT) or 0, 0, 90),
-                    --// Read from the panel when it exists, so a drag or a pop out is
-                    --// captured without the panel having to announce every change.
-                    PINNED_STATE = UIRef.PinPanel
-                        and UIRef.PinPanel:GetState()
-                        or CONFIG.PINNED_STATE,
-                    BLOCK_WHITELIST = table.clone(CONFIG.BLOCK_WHITELIST or {}),
-                    PARTY_LEADER = AICProfile.NormalizePartyLeader(CONFIG.PARTY_LEADER),
-                },
+                SETTINGS = AICProfile.CaptureSettings(FarmConfig),
             }
         end
 
@@ -642,85 +684,10 @@ return {
             FarmConfig.WAYPOINTS = AICConfig.CloneVectorList(Data.WAYPOINTS or FarmConfig.WAYPOINTS)
             FarmConfig.FARM_ZONES = AICConfig.CloneZoneList(Data.FARM_ZONES or FarmConfig.FARM_ZONES)
             FarmConfig.DEADZONES = AICConfig.CloneZoneList(Data.DEADZONES or FarmConfig.DEADZONES)
-            FarmConfig.REACH_DISTANCE = tonumber(Data.SETTINGS and Data.SETTINGS.REACH_DISTANCE)
-                or tonumber(FarmConfig.REACH_DISTANCE)
-                or 5
-            if Data.SETTINGS and type(Data.SETTINGS.AUTOBLOCK) == "boolean" then
-                FarmConfig.AUTOBLOCK = Data.SETTINGS.AUTOBLOCK
-            else
-                FarmConfig.AUTOBLOCK = FarmConfig.AUTOBLOCK == true
-            end
+            AICProfile.ApplySettings(Data.SETTINGS, FarmConfig)
 
-            CONFIG.RETREAT_HEALTH_PERCENT = math.clamp(
-                type(Data.SETTINGS and Data.SETTINGS.RETREAT_HEALTH_PERCENT) == "number"
-                    and Data.SETTINGS.RETREAT_HEALTH_PERCENT
-                    or 40,
-                30,
-                80
-            )
-
-            CONFIG.AUTO_HEAL_HEALTH_PERCENT = math.clamp(
-                type(Data.SETTINGS and Data.SETTINGS.AUTO_HEAL_HEALTH_PERCENT) == "number"
-                    and Data.SETTINGS.AUTO_HEAL_HEALTH_PERCENT
-                    or 65,
-                30,
-                80
-            )
-
-            CONFIG.SAFE_ENEMY_RANGE = math.clamp(
-                type(Data.SETTINGS and Data.SETTINGS.SAFE_ENEMY_RANGE) == "number"
-                    and Data.SETTINGS.SAFE_ENEMY_RANGE
-                    or 4,
-                0,
-                30
-            )
-
-            --// Anything unrecognised falls back to Disabled rather than leaving the
-            --// selector showing a mode the code does not implement.
-            local StoredMode = Data.SETTINGS and Data.SETTINGS.TARGET_HP_MODE
-
-            if StoredMode == "Highest HP" or StoredMode == "Lowest HP" then
-                CONFIG.TARGET_HP_MODE = StoredMode
-            else
-                CONFIG.TARGET_HP_MODE = "Disabled"
-            end
-
-            CONFIG.EXECUTE_CHARGE_HP_PERCENT = math.clamp(
-                type(Data.SETTINGS and Data.SETTINGS.EXECUTE_CHARGE_HP_PERCENT) == "number"
-                    and Data.SETTINGS.EXECUTE_CHARGE_HP_PERCENT
-                    or 0,
-                0,
-                90
-            )
-
-            --// Pinned items are shared across every PlaceId and live in their
-            --// own file. A profile's copy is only used to seed that file once,
-            --// for saves made before pins were global.
-            local StoredPinned = Data.SETTINGS and Data.SETTINGS.PINNED_STATE
-
-            if not AICProfile.S.HasGlobalPinnedState and type(StoredPinned) == "table" then
-                CONFIG.PINNED_STATE = AICProfile.NormalizePinnedState(StoredPinned)
-                AICProfile.WritePinnedState(CONFIG.PINNED_STATE)
-            end
-
-            local StoredWhitelist = Data.SETTINGS and Data.SETTINGS.BLOCK_WHITELIST
-            local Whitelist = {}
-
-            if type(StoredWhitelist) == "table" then
-                for _, Entry in ipairs(StoredWhitelist) do
-                    local Id = AICFeature.NormalizeUserId(Entry)
-
-                    if Id then
-                        table.insert(Whitelist, Id)
-                    end
-                end
-            end
-
-            CONFIG.BLOCK_WHITELIST = Whitelist
-            CONFIG.PARTY_LEADER = AICProfile.NormalizePartyLeader(Data.SETTINGS and Data.SETTINGS.PARTY_LEADER)
-
-                PlaceConfig = AICConfig.NormalizePlaceConfig(FarmConfig)
-                Runtime:SetPlaceConfig(PlaceConfig)
+            PlaceConfig = AICConfig.NormalizePlaceConfig(FarmConfig)
+            Runtime:SetPlaceConfig(PlaceConfig)
 
             CONFIG.TARGET_ENTITY_PRIORITY = table.clone(
                 Data.DEFAULT_TARGET_PRIORITY
@@ -873,14 +840,8 @@ return {
             CONFIG.CURRENT_WAYPOINT_TARGET = 1
             AICFeature.S.WaypointWaitUntil = nil
             if AICFeature.ResetWaypointLoop then AICFeature.ResetWaypointLoop() end
-            CONFIG.RETREAT_HEALTH_PERCENT = 40
-            CONFIG.AUTO_HEAL_HEALTH_PERCENT = 65
-            CONFIG.SAFE_ENEMY_RANGE = 4
-            CONFIG.TARGET_HP_MODE = "Disabled"
-            CONFIG.BLOCK_WHITELIST = {}
-            CONFIG.PARTY_LEADER = {}
-            CONFIG.EXECUTE_CHARGE_HP_PERCENT = 0
-            --// PINNED_STATE is global, not part of the place defaults.
+            --// PINNED_STATE is global, so ResetSettings leaves it alone.
+            AICProfile.ResetSettings()
 
             AICCombat.ResetTargetReposition()
             AICFeature.S.DeadzoneEscapePosition = nil

@@ -15,7 +15,6 @@ return {
         local AICFeature = Context.AICFeature
         local AICUI = Context.AICUI
         local AICProfile = Context.AICProfile
-        local SaveConfig = Context.SaveConfig
         local UIRef = Context.UIRef
         local NotifyAction = Context.NotifyAction
 
@@ -38,10 +37,6 @@ return {
             self.Enabled = Value == true
             AICFeature.S.BlockEnabled = self.Enabled
             Feature.AutoBlock.Enabled = self.Enabled
-
-            if SaveConfig.AutoBlock then
-                SaveConfig.AutoBlock.Enabled = self.Enabled
-            end
 
             if self.Button then
                 self.Button:Set(self.Enabled, false)

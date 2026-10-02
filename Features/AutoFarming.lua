@@ -640,8 +640,15 @@ return {
                 AICCombatUtils.DoJumpIfObstacle(target)
             end
 
-            --// Swim Recovery
-            if Humanoid:GetState() == Enum.HumanoidStateType.Swimming then
+            --// Swim Recovery. A fight that moved into the water (a player who
+            --// jumped in, or us knocked in mid-duel) carries on: SwimChase
+            --// already steered this frame, and returning here skipped the
+            --// attack below, so the character only ever bobbed at the surface.
+            local FightingInWater = AICCombat.S.ClosestTarget
+                and AICCombat.IsWaterCombat(AICCombat.S.ClosestTarget)
+
+            if Humanoid:GetState() == Enum.HumanoidStateType.Swimming and not FightingInWater then
+                Humanoid.Jump = true
                 AICCombatUtils.DoJump()
                 return
             end
@@ -735,37 +742,15 @@ return {
                 return
             end
 
-            UIRef.ExecuteChargeSlider = UIRef.FeatureSection:AddSlider(
-                "Execute Charge at HP%",
-                math.clamp(tonumber(CONFIG.EXECUTE_CHARGE_HP_PERCENT) or 0, 0, 90),
-                0,
-                90,
-                function(Value)
-                    CONFIG.EXECUTE_CHARGE_HP_PERCENT = math.clamp(math.floor(tonumber(Value) or 0), 0, 90)
-                    AICProfile.QueueProfileSave()
-                end
+            --// Ranges and defaults come from SaveConfig.Settings.
+            UIRef.ExecuteChargeSlider = AICUI.AddSettingSlider(
+                UIRef.FeatureSection, "Execute Charge at HP%", "EXECUTE_CHARGE_HP_PERCENT", true
             )
-
-            UIRef.RetreatHealthSlider = UIRef.FeatureSection:AddSlider(
-                "Retreat At HP%",
-                math.clamp(tonumber(CONFIG.RETREAT_HEALTH_PERCENT) or 40, 30, 80),
-                30,
-                80,
-                function(Value)
-                    CONFIG.RETREAT_HEALTH_PERCENT = math.clamp(math.floor(tonumber(Value) or 40), 30, 80)
-                    AICProfile.QueueProfileSave()
-                end
+            UIRef.RetreatHealthSlider = AICUI.AddSettingSlider(
+                UIRef.FeatureSection, "Retreat At HP%", "RETREAT_HEALTH_PERCENT", true
             )
-
-            UIRef.AutoHealHealthSlider = UIRef.FeatureSection:AddSlider(
-                "Auto Heal at HP%",
-                math.clamp(tonumber(CONFIG.AUTO_HEAL_HEALTH_PERCENT) or 65, 30, 80),
-                30,
-                80,
-                function(Value)
-                    CONFIG.AUTO_HEAL_HEALTH_PERCENT = math.clamp(math.floor(tonumber(Value) or 65), 30, 80)
-                    AICProfile.QueueProfileSave()
-                end
+            UIRef.AutoHealHealthSlider = AICUI.AddSettingSlider(
+                UIRef.FeatureSection, "Auto Heal at HP%", "AUTO_HEAL_HEALTH_PERCENT", true
             )
         end
 

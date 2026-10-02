@@ -34,7 +34,7 @@ UIRef.WaypointSection:AddButton("Add Waypoint Here", function()
         return
     end
 
-    table.insert(Runtime:GetPlaceConfig().WAYPOINTS, GetRootPart().Position)
+    table.insert(Runtime:GetPlaceConfig().WAYPOINTS, AICConfig.RoundVector3(GetRootPart().Position))
     CONFIG.CURRENT_WAYPOINT_TARGET = math.clamp(
         CONFIG.CURRENT_WAYPOINT_TARGET,
         1,

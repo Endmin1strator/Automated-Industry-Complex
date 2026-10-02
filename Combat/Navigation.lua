@@ -1136,17 +1136,27 @@ return {
                 WaypointSpacing = 4,
             })
         
+            --// ComputeAsync yields, and every heartbeat is its own thread, so
+            --// without this a slow solve stacked up one request per frame.
+            if AICCombat.S.TargetPathComputing then
+                return AICCombat.S.TargetPath ~= nil and AICCombat.S.TargetPathMob == Goblin
+            end
+
+            AICCombat.S.TargetPathComputing = true
+
             local Success = pcall(function()
                 Path:ComputeAsync(RootPart.Position, Destination)
             end)
-        
+
+            AICCombat.S.TargetPathComputing = false
+
             if not Success or Path.Status ~= Enum.PathStatus.Success then
                 AICCombat.ResetTargetPath()
                 return false
             end
-        
+
             local Waypoints = Path:GetWaypoints()
-        
+
             if #Waypoints < 2 then
                 AICCombat.ResetTargetPath()
                 return false
@@ -1225,7 +1235,13 @@ return {
                 then
                     AICCombatUtils.DoJump()
                 end
-        
+
+                --// Hung on a corner between two path points: the path is
+                --// fine, the body is caught on the edge. A hop frees it.
+                if AICCombatUtils.IsStuck() then
+                    AICCombatUtils.DoJump()
+                end
+
                 Humanoid.AutoRotate = false
                 Humanoid:MoveTo(Waypoint.Position)
                 AICCombat.FaceGoblin(Goblin)
@@ -1236,6 +1252,272 @@ return {
             --// whether we should attack or make a final adjustment.
             AICCombat.ResetTargetPath()
             return false
+        end
+
+        --// ============================================================
+        --// CHASE MOVEMENT
+        --// ============================================================
+        --// Every approach to a target goes through ChaseMoveTo. It walks
+        --// straight while that works, switches to pathfinding for a while
+        --// when a wall is just ahead or the character stalls, and sidesteps
+        --// out of the corner when it stalls even on the path. A plain MoveTo
+        --// used to run into the same wall until the target was given up.
+        function AICCombat.ResetChase()
+            AICCombat.S.ChaseMob = nil
+            AICCombat.S.ChasePathUntil = 0
+            AICCombat.S.ChaseUnstickUntil = 0
+            AICCombat.S.ChaseUnstickPosition = nil
+            AICCombat.S.ChaseBlockedCheckTime = 0
+            AICCombat.S.ChaseBlocked = false
+            AICCombat.S.ChaseBestDistance = math.huge
+            AICCombat.S.ChaseUnstickCount = 0
+        end
+
+        AICCombat.ResetChase()
+
+        local function GetChaseObstacleParams(Goblin)
+            local Character = Runtime:GetCharacter()
+            local Filter = { Character, Goblin, AICCombatUtils.S.DebugFolder }
+
+            --// Mobs and players move; they are walked around by the detour
+            --// and blade logic, not treated as walls.
+            local MobFolder = workspace:FindFirstChild("Mobs")
+            if MobFolder then
+                table.insert(Filter, MobFolder)
+            end
+
+            for _, OtherPlayer in ipairs(Players:GetPlayers()) do
+                if OtherPlayer.Character and OtherPlayer.Character ~= Character then
+                    table.insert(Filter, OtherPlayer.Character)
+                end
+            end
+
+            local Params = RaycastParams.new()
+            Params.FilterType = Enum.RaycastFilterType.Exclude
+            Params.FilterDescendantsInstances = Filter
+            Params.IgnoreWater = true
+            return Params
+        end
+
+        --// Whether the body would hit something solid in the next few studs
+        --// toward Destination. Cached briefly; it runs every frame of a chase.
+        function AICCombat.IsChaseLineBlocked(Goblin, Destination, now)
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            if not RootPart then
+                return false
+            end
+
+            if now - AICCombat.S.ChaseBlockedCheckTime < (tonumber(CONFIG.CHASE_BLOCK_CHECK_INTERVAL) or 0.12) then
+                return AICCombat.S.ChaseBlocked
+            end
+
+            AICCombat.S.ChaseBlockedCheckTime = now
+
+            local Offset = Destination - RootPart.Position
+            local Flat = Vector3.new(Offset.X, 0, Offset.Z)
+
+            if Flat.Magnitude <= 0.5 then
+                AICCombat.S.ChaseBlocked = false
+                return false
+            end
+
+            local Probe = math.min(Flat.Magnitude, tonumber(CONFIG.CHASE_BLOCK_PROBE_DISTANCE) or 6)
+            --// Raised off the feet so a slope or a step the jump logic
+            --// handles is not read as a wall.
+            local Origin = CFrame.new(RootPart.Position + Vector3.new(0, 0.5, 0))
+            local Size = Vector3.new(2.2, 2.5, 2.2)
+            local Hit = workspace:Blockcast(Origin, Size, Flat.Unit * Probe, GetChaseObstacleParams(Goblin))
+
+            AICCombat.S.ChaseBlocked = Hit ~= nil
+                and not AICCombatUtils.IsJumpableObstacleAhead(Destination)
+            return AICCombat.S.ChaseBlocked
+        end
+
+        local function MoveStraight(Humanoid, Goblin, Destination)
+            Humanoid.AutoRotate = false
+            Humanoid:MoveTo(Destination)
+            AICCombat.FaceGoblin(Goblin)
+            AICCombatUtils.DoJumpIfObstacle(Destination)
+        end
+
+        --// Sidesteps are only worth repeating while they lead somewhere. Once
+        --// several in a row have not brought the target closer, the caller
+        --// falls back to its own handling, which marks a target with no
+        --// route as unreachable instead of dancing in the corner forever.
+        local function TrackChaseProgress(Destination)
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            local Distance = AICCombatUtils.GetHorizontalDistance(RootPart.Position, Destination)
+
+            if Distance < AICCombat.S.ChaseBestDistance - 2 then
+                AICCombat.S.ChaseBestDistance = Distance
+                AICCombat.S.ChaseUnstickCount = 0
+            end
+        end
+
+        local function StartUnstick(Destination, now)
+            AICCombatUtils.ResetStuckTracker()
+
+            if AICCombat.S.ChaseUnstickCount >= (tonumber(CONFIG.CHASE_MAX_UNSTICKS) or 4) then
+                return false
+            end
+
+            local Position = AICCombatUtils.GetUnstickPosition(Destination)
+
+            if not Position then
+                return false
+            end
+
+            AICCombat.S.ChaseUnstickCount += 1
+            AICCombat.S.ChaseUnstickPosition = Position
+            AICCombat.S.ChaseUnstickUntil = now + (tonumber(CONFIG.CHASE_UNSTICK_TIME) or 0.6)
+            AICCombat.ResetTargetPath()
+            return true
+        end
+
+        function AICCombat.ChaseMoveTo(Goblin, Destination)
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            if not Humanoid or not RootPart or not Goblin or not Destination then
+                return false
+            end
+
+            local now = os.clock()
+
+            if AICCombat.S.ChaseMob ~= Goblin then
+                AICCombat.ResetChase()
+                AICCombat.S.ChaseMob = Goblin
+            end
+
+            TrackChaseProgress(Destination)
+
+            --// Pressed up against the target in melee is not a corner. The
+            --// body blocks the walk, which the stuck tracker would otherwise
+            --// read as a stall and start pathing and sidestepping mid-fight.
+            local GoblinRoot = Goblin:FindFirstChild("HumanoidRootPart")
+
+            if GoblinRoot
+                and AICCombatUtils.GetHorizontalDistance(RootPart.Position, GoblinRoot.Position)
+                    <= CONFIG.GOBLIN_REACH_DISTANCE
+            then
+                AICCombatUtils.ResetStuckTracker()
+                AICCombat.ResetTargetPath()
+                MoveStraight(Humanoid, Goblin, Destination)
+                return true
+            end
+
+            --// Mid-sidestep: finish it before trying the target again.
+            if now < AICCombat.S.ChaseUnstickUntil and AICCombat.S.ChaseUnstickPosition then
+                Humanoid.AutoRotate = false
+                Humanoid:MoveTo(AICCombat.S.ChaseUnstickPosition)
+                AICCombat.FaceGoblin(Goblin)
+                AICCombatUtils.DoJump()
+                return true
+            end
+
+            local InPathMode = now < AICCombat.S.ChasePathUntil
+
+            if AICCombatUtils.IsStuck() then
+                if InPathMode then
+                    --// Stalled even on the path: get out of the corner first.
+                    if StartUnstick(Destination, now) then
+                        return AICCombat.ChaseMoveTo(Goblin, Destination)
+                    end
+
+                    AICCombatUtils.DoJump()
+                else
+                    AICCombatUtils.ResetStuckTracker()
+                end
+
+                AICCombat.S.ChasePathUntil = now + (tonumber(CONFIG.CHASE_PATH_HOLD) or 2.5)
+                InPathMode = true
+            elseif not InPathMode and AICCombat.IsChaseLineBlocked(Goblin, Destination, now) then
+                AICCombat.S.ChasePathUntil = now + (tonumber(CONFIG.CHASE_PATH_HOLD) or 2.5)
+                InPathMode = true
+            end
+
+            if not InPathMode then
+                AICCombat.ResetTargetPath()
+                MoveStraight(Humanoid, Goblin, Destination)
+                return true
+            end
+
+            if AICCombat.MoveAlongTargetPath(Goblin, Destination) then
+                return true
+            end
+
+            --// A solve for this target is still running: keep the last
+            --// heading rather than stopping dead for a frame.
+            if AICCombat.S.TargetPathComputing then
+                MoveStraight(Humanoid, Goblin, Destination)
+                return true
+            end
+
+            --// No route from here. A sidestep often opens one up.
+            if StartUnstick(Destination, now) then
+                return AICCombat.ChaseMoveTo(Goblin, Destination)
+            end
+
+            return false
+        end
+
+        --// ============================================================
+        --// WATER COMBAT
+        --// ============================================================
+        --// Ground navigation refuses water outright, so a fight that ends up
+        --// in it is handled here. While swimming the Humanoid follows the
+        --// full 3D move direction, which is what lets the character dive to
+        --// a target below the surface; Jump makes it rise.
+        function AICCombat.IsWaterCombat(Goblin)
+            if not Goblin then
+                return false
+            end
+
+            --// Only PvP is fought in the water. Swimming toward a mob on land
+            --// keeps the old jump-out recovery, which lets pathfinding take
+            --// over instead of paddling against the bank.
+            if not Players:GetPlayerFromCharacter(Goblin) then
+                return false
+            end
+
+            --// Knocked in mid-fight, or the player is in the water: swim.
+            return AICCombatUtils.IsSelfSwimming()
+                or AICCombatUtils.IsModelInWater(Goblin)
+        end
+
+        function AICCombat.SwimChase(Goblin)
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            local MobRoot = Goblin and Goblin:FindFirstChild("HumanoidRootPart")
+            if not Humanoid or not RootPart or not MobRoot then
+                return false
+            end
+
+            AICCombat.ResetTargetPath()
+
+            local Offset = MobRoot.Position - RootPart.Position
+            local Arrival = tonumber(CONFIG.SWIM_ARRIVAL_DISTANCE) or 5
+            local Margin = tonumber(CONFIG.SWIM_SURFACE_MARGIN) or 2
+
+            Humanoid.AutoRotate = false
+            AICCombat.FaceGoblin(Goblin)
+
+            if not AICCombatUtils.IsSelfSwimming() then
+                --// Still on land: walk in after them. Pathfinding would
+                --// refuse the water, so this is a straight line.
+                Humanoid:MoveTo(MobRoot.Position)
+                AICCombatUtils.DoJumpIfObstacle(MobRoot.Position)
+                return true
+            end
+
+            if Offset.Magnitude <= Arrival then
+                Humanoid:Move(Vector3.zero)
+            else
+                Humanoid:Move(Offset.Unit, false)
+            end
+
+            --// Rise toward a target above us, including one back on land.
+            --// Jump in water swims upward rather than leaving the surface.
+            Humanoid.Jump = Offset.Y > Margin
+
+            return true
         end
         
         --// ============================================================
@@ -1372,7 +1654,14 @@ return {
                 AICCombat.ResetTargetPath()
                 return
             end
-        
+
+            --// In the water every ground rule (paths, water checks, safe
+            --// spots on land) says no, so swimming fights use their own mover.
+            if AICCombat.IsWaterCombat(Goblin) then
+                AICCombat.SwimChase(Goblin)
+                return
+            end
+
             local MobHumanoid = Goblin:FindFirstChildOfClass("Humanoid")
             local MobRoot     = Goblin:FindFirstChild("HumanoidRootPart")
         
@@ -1414,11 +1703,9 @@ return {
                 local SafeEnemyOffset = SafeEnemyRangePosition - RootPart.Position
                 local SafeEnemyDistance = Vector3.new(SafeEnemyOffset.X, 0, SafeEnemyOffset.Z).Magnitude
         
-                if SafeEnemyDistance > CONFIG.SAFE_ENEMY_RANGE_ARRIVAL then
-                    AICCombat.ResetTargetPath()
-                    Humanoid.AutoRotate = false
-                    Humanoid:MoveTo(SafeEnemyRangePosition)
-                    AICCombat.FaceGoblin(Goblin)
+                if SafeEnemyDistance > CONFIG.SAFE_ENEMY_RANGE_ARRIVAL
+                    and AICCombat.ChaseMoveTo(Goblin, SafeEnemyRangePosition)
+                then
                     return
                 end
             end
@@ -1427,10 +1714,11 @@ return {
             --// simply move directly toward the target.
             if not AICCombat.S.SafeCombatPositionEnabled then
                 AICCombat.ResetTargetReposition()
-                AICCombat.ResetTargetPath()
-                Humanoid.AutoRotate = false
-                Humanoid:MoveTo(MobRoot.Position)
-                AICCombat.FaceGoblin(Goblin)
+
+                if not AICCombat.ChaseMoveTo(Goblin, MobRoot.Position) then
+                    Humanoid.AutoRotate = true
+                    Humanoid:Move(Vector3.zero)
+                end
                 return
             end
         
@@ -1526,14 +1814,11 @@ return {
         
                 local DirectPathBlocked = AICCombat.IsSafeCombatDirectPathBlocked(Goblin, SafeCombatPosition, now)
         
-                if not DirectPathBlocked then
-                    AICCombat.ResetTargetPath()
+                if not DirectPathBlocked
+                    and AICCombat.ChaseMoveTo(Goblin, SafeCombatPosition)
+                then
                     AICCombat.S.TargetUnreachableSince = nil
                     AICCombat.S.TargetApproachPosition = nil
-        
-                    Humanoid.AutoRotate = false
-                    Humanoid:MoveTo(SafeCombatPosition)
-                    AICCombat.FaceGoblin(Goblin)
                     return
                 end
             end
@@ -1595,10 +1880,7 @@ return {
         
                 if ApproachDistance <= CONFIG.APPROACH_ARRIVAL_DISTANCE then
                     AICCombat.S.TargetApproachPosition = nil
-                else
-                    Humanoid.AutoRotate = false
-                    Humanoid:MoveTo(AICCombat.S.TargetApproachPosition)
-                    AICCombat.FaceGoblin(Goblin)
+                elseif AICCombat.ChaseMoveTo(Goblin, AICCombat.S.TargetApproachPosition) then
                     return
                 end
             end
@@ -1610,11 +1892,9 @@ return {
             if AICCombat.IsSafeCombatPathClear(MobRoot.Position, Goblin)
                 and not AICCombatUtils.IsPathThroughWater(MobRoot.Position)
                 and not AICCombatUtils.IsPathThroughDeadzone(MobRoot.Position)
+                and AICCombat.ChaseMoveTo(Goblin, MobRoot.Position)
             then
                 AICCombat.S.TargetUnreachableSince = nil
-                Humanoid.AutoRotate = false
-                Humanoid:MoveTo(MobRoot.Position)
-                AICCombat.FaceGoblin(Goblin)
                 return
             end
         

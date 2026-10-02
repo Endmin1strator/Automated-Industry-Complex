@@ -1,7 +1,7 @@
 -- AutoFarm bootstrap.
 -- Every module returns {Name, Dependencies, Start(Context)}.
 
-local TITLE = "AUTOMATED INDUSTRY COMPLEX v2.61"
+local TITLE = "AUTOMATED INDUSTRY COMPLEX v2.62"
 local UTILS_PATH = "UI/Utils.lua"
 
 --// A failed download is retried this many times before giving up.
@@ -18,90 +18,62 @@ local ROOT =
     and script
     or nil
 
-local REMOTE_MODULES = {
-    "Core/Runtime.lua",
+--// Every module, in start order. This is the only list to touch when a
+--// module is added: it is both what gets downloaded and the order modules
+--// start in (dependencies still start first), so the controls each module
+--// adds always appear in the same place in the window. A saved toggle also
+--// needs its line in Core/SaveConfig.lua.
+local MODULES = {
     "Core/SaveConfig.lua",
+    "Core/Runtime.lua",
     "Core/ProfileManager.lua",
-    "Core/Heartbeat.lua",
-    "Core/Bootstrap.lua",
+    "UI/Components.lua",
+
+    "Combat/CombatUtils.lua",
+    "Features/EnemyPriority.lua",
+    "Combat/Targeting.lua",
+    "Combat/Navigation.lua",
+    "Combat/Combat.lua",
 
     "Features/AutoFarming.lua",
     "Features/AutoBlock.lua",
-    "Features/AutoCraft.lua",
-    "Features/AutoPatrol.lua",
-    "Features/ReturnToFarmZone.lua",
-    "Features/IgnoreFarmZone.lua",
-    "Features/AutoHeal.lua",
-    "Features/AutoRefill.lua",
-    "Features/AntiAFK.lua",
-    "Features/EnemyPriority.lua",
+    "Features/SafeCombat.lua",
     "Features/AutoSkill.lua",
     "Features/AutoFind.lua",
-    "Features/SafeCombat.lua",
-    "Features/ResetOnBoostOut.lua",
+    "Features/IgnoreFarmZone.lua",
+    "Features/AutoPatrol.lua",
+    "Features/ReturnToFarmZone.lua",
+    "Features/AutoRefill.lua",
     "Features/SafeBoosterReset.lua",
     "Features/ResetStats.lua",
     "Features/DebugVisualizer.lua",
+    "Features/AutoHeal.lua",
+    "Features/AntiAFK.lua",
+    "Features/AutoCraft.lua",
+    "Features/PartySystem.lua",
+    "Features/ProfileSettings.lua",
     "Features/Waypoints.lua",
     "Features/Farmzone.lua",
     "Features/Deadzone.lua",
-    "Features/ProfileSettings.lua",
-    "Features/PartySystem.lua",
     "Features/RespawnTimers.lua",
     "Features/WaypointLoop.lua",
 
-    "Combat/Combat.lua",
-    "Combat/CombatUtils.lua",
-    "Combat/Targeting.lua",
-    "Combat/Navigation.lua",
-
-    "UI/Components.lua",
+    "Core/Bootstrap.lua",
+    "Core/Heartbeat.lua",
 }
+
+--// Module name from its path: "Features/AutoFarming.lua" -> "AutoFarming".
+--// Every module's Name matches its file name.
+local START_ORDER = {}
+
+for _, Path in ipairs(MODULES) do
+    table.insert(START_ORDER, string.match(Path, "([^/]+)%.lua$"))
+end
 
 --// Modules that are not specs. UI/Utils is the UI library that Runtime
 --// loads itself.
 local NON_SPEC_MODULES = {
     ["UI/Utils.lua"] = true,
-}
-
---// Start order. Dependencies still start first, but modules are otherwise
---// started in this order instead of pairs() order, so the controls each
---// module adds always appear in the same place in the window.
-local START_ORDER = {
-    "Runtime",
-    "SaveConfig",
-    "ProfileManager",
-    "Components",
-    "CombatUtils",
-    "EnemyPriority",
-    "Targeting",
-    "Navigation",
-    "Combat",
-    "AutoFarming",
-    "AutoBlock",
-    "SafeCombat",
-    "AutoSkill",
-    "AutoFind",
-    "IgnoreFarmZone",
-    "AutoPatrol",
-    "ReturnToFarmZone",
-    "ResetOnBoostOut",
-    "SafeBoosterReset",
-    "ResetStats",
-    "DebugVisualizer",
-    "AutoHeal",
-    "AutoRefill",
-    "AntiAFK",
-    "AutoCraft",
-    "PartySystem",
-    "ProfileSettings",
-    "Waypoints",
-    "Farmzone",
-    "Deadzone",
-    "RespawnTimers",
-    "WaypointLoop",
-    "Bootstrap",
-    "Heartbeat",
 }
 
 local function collect(Container, Prefix, Output)
@@ -214,7 +186,7 @@ local function loadLocal()
 end
 
 local function loadRemote()
-    local Paths = table.clone(REMOTE_MODULES)
+    local Paths = table.clone(MODULES)
     table.insert(Paths, 1, UTILS_PATH)
 
     local Bodies, GetPending = fetchParallel(Paths)
@@ -251,7 +223,7 @@ local function loadRemote()
 
     local Specs = {}
 
-    for _, Path in ipairs(REMOTE_MODULES) do
+    for _, Path in ipairs(MODULES) do
         local Body = Bodies[Path]
 
         if not Body then

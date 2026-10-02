@@ -5,110 +5,67 @@ return {
 	Start = function(Context)
 		local Runtime = Context.Runtime
 		local Services = Context.Services
-		--local Players = Services.Players
 		local Player = Context.Player
-		--local PlayerGui = Context.PlayerGui
 		local Replicated = Services.Replicated
-		--local StarterGui = Services.StarterGui
-		--local RunService = Services.RunService
-		--local PathfindingService = Services.PathfindingService
-		--local HttpService = Services.HttpService
-		--local CONFIG = Context.CONFIG
 		local FeatureState = Context.Feature
-		local SaveConfig = Context.SaveConfig
-		--local AICConfig = Context.AICConfig
-		local AICProfile = Context.AICProfile
-		--local AICCombatUtils = Context.AICCombatUtils
-		--local AICCombat = Context.AICCombat
 		local AICFeature = Context.AICFeature
-		local AICUI      = Context.AICUI
-		--local AICDebug = Context.AICDebug
-		--local UIRef = Context.UIRef
-		--local UI = Context.UI
-		--local PatrolState = Context.PatrolState
-		--local MiningFeature = Context.MiningFeature
+		local AICUI = Context.AICUI
 		local NotifyAction = Context.NotifyAction
 
 		local Feature = {
 			Name = "SafeBoosterReset",
 			IsFeature = true,
-			Enabled = false,
 		}
+
+		--// The connection stays alive for the whole session, so the toggle
+		--// has to be read at fire time, not here.
+		local function SafeBoosterReset(Boost)
+			if not FeatureState.SafeBoosterReset.Enabled then
+				return
+			end
+
+			if Boost.Value <= 0 then
+				NotifyAction("SAFE BOOSTER RESET", "Boost expired, no action.")
+				return
+			end
+
+			local DamageTags = Replicated:FindFirstChild("PlayerDamageTags")
+			if DamageTags and DamageTags:FindFirstChild(Player.Name .. "MobDamaged") then
+				return
+			end
+
+			local _, Humanoid = Runtime:GetCharacter()
+
+			if Humanoid then
+				Humanoid.Health = 0
+			end
+		end
 
 		function Feature.SafeBoosterReset()
 			task.spawn(function()
-				local PlayerStats = Player:FindFirstChild("PlayerStats")
-				if not PlayerStats then
-					repeat task.wait(1) until Player:FindFirstChild("PlayerStats")
-					PlayerStats = Player:FindFirstChild("PlayerStats")
-				end
+				local PlayerStats = Player:WaitForChild("PlayerStats")
 				local ExpBoost = PlayerStats:FindFirstChild("Boost")
 
-				--// Resetting on boost-out is opt-in. The connection stays alive for the
-				--// whole session, so the toggle has to be read at fire time, not here.
-				local function SafeBoosterReset(Value)
-					if not FeatureState.SafeBoosterReset.Enabled then
-						return
-					end
-
-					if Value.Value <= 0 then
-						NotifyAction("SAFE BOOSTER RESET", "Boost expired, no action.")
-						return
-					end
-
-					local DamageTag = Replicated.PlayerDamageTags:FindFirstChild(Player.Name.."MobDamaged")
-					if DamageTag then
-						return
-					end
-
-					local _, Humanoid = Runtime:GetCharacter()
-
-					if Humanoid then
-						Humanoid.Health = 0
-					end
-				end
-
 				if ExpBoost then
-					AICFeature.S.BoosterConnections[#AICFeature.S.BoosterConnections + 1] =
+					table.insert(
+						AICFeature.S.BoosterConnections,
 						ExpBoost:GetPropertyChangedSignal("Value"):Connect(function()
 							SafeBoosterReset(ExpBoost)
-						end
+						end)
 					)
 				end
 			end)
 		end
 
-		AICFeature.SafeBoosterReset = function(...) return Feature.SafeBoosterReset(...) end
+		AICFeature.SafeBoosterReset = Feature.SafeBoosterReset
 
 		function Feature:Update()
 		end
 
-		function Feature:SetEnabled(Value, Save)
-			self.Enabled = Value == true
-			FeatureState.SafeBoosterReset.Enabled = self.Enabled
-			if SaveConfig.SafeBoosterReset then
-				SaveConfig.SafeBoosterReset.Enabled = self.Enabled
-			end
-
-			if self.Button then
-				self.Button:Set(self.Enabled, false)
-			end
-
-			if Save ~= false and AICProfile.SaveActiveProfile then
-				AICProfile.SaveActiveProfile()
-			end
-		end
-
-		function Feature:CreateUI()
-			if Context.UIRef.FeatureSection then
-				self.Button = AICUI.CreateFeature("Safe Booster Reset", self.Enabled, function(Value)
-					self:SetEnabled(Value)
-				end)
-				FeatureState.SafeBoosterReset.Button = self.Button
-			end
-		end
-
-		Feature:CreateUI()
+		--// The value is saved through Feature.SafeBoosterReset.Enabled like
+		--// every other toggle and restored on load by updateFeatureButtons.
+		AICUI.BindFeatureToggle("SafeBoosterReset", "Safe Booster Reset")
+		Feature.SafeBoosterReset()
 
 		return Feature
 	end,

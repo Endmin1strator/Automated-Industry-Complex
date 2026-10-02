@@ -2,8 +2,9 @@
 -- Shared runtime state, services, configuration, and composition context.
 return {
     Name = "Runtime",
-    Dependencies = {},
+    Dependencies = {"SaveConfig"},
     Start = function(Context)
+        local SaveConfig = Context.SaveConfig
         local Players            = game:GetService("Players")
         local Replicated         = game:GetService("ReplicatedStorage")
         local StarterGui         = game:GetService("StarterGui")
@@ -113,42 +114,27 @@ return {
                 [2] = "Leader Goblin",
             },
         
-            --// Below this share of its health a target is finished off instead of
-            --// retreated from. An enemy skill still overrides it, since eating the
-            --// skill to land one more hit is not a trade worth making.
-            EXECUTE_CHARGE_HP_PERCENT = 0,
-        
+            --// Saved settings (EXECUTE_CHARGE_HP_PERCENT, TARGET_HP_MODE,
+            --// BLOCK_WHITELIST, PARTY_LEADER, PINNED_STATE, SAFE_ENEMY_RANGE,
+            --// RETREAT_HEALTH_PERCENT, AUTO_HEAL_HEALTH_PERCENT) take their
+            --// defaults from SaveConfig.Settings below, not from here.
+
             --// Roblox disconnects an idle client after about twenty minutes. The
             --// script drives the character, not the mouse, so the idle timer keeps
             --// running. Nudged well inside that window.
             ANTI_AFK_INTERVAL = 480,
-        
-            --// Tie break between mobs of equal priority.
-            --// "Disabled" keeps the original nearest-first behaviour.
-            TARGET_HP_MODE = "Disabled",
-        
-            --// UserIds that are allowed to share the server. Auto Block ignores
-            --// these players entirely and only reacts to anyone else.
-            BLOCK_WHITELIST = {},
 
-            --// Party System. The Leader is followed between servers with the
-            --// game's ChatEvent "tp friend <Name>" command. Empty table = no Leader.
-            PARTY_LEADER = {},
+            --// Party System timing. The Leader itself is a saved setting.
             PARTY_CHECK_INTERVAL = 1,
             PARTY_TP_ATTEMPTS = 3,
             PARTY_TP_ATTEMPT_TIMEOUT = 15,
             PARTY_RESPAWN_TIMEOUT = 10,
             PARTY_FAILED_COOLDOWN = 60,
-        
-            --// Saved arrangement of the pinned item panel: which items, whether it
-            --// has been popped out of the window, and where it was left.
-            PINNED_STATE = {},
-        
+
             GOBLIN_REACH_DISTANCE = 8,
             PLAYER_ATTACK_DISTANCE = 12,
             ENEMY_ATTACK_SAFE_DISTANCE = 2,
             ENEMY_BLADE_PADDING = 2,
-            SAFE_ENEMY_RANGE = 4,
             GROUP_DANGER_DISTANCE = 22,
             THREAT_DETECTION_DISTANCE = 12,
             THREAT_ANGLE = 65,
@@ -157,9 +143,7 @@ return {
             --// While retreating from a player the character keeps moving until
             --// they are at least this far away. In a duel it never stops.
             RETREAT_PLAYER_SAFE_DISTANCE = 50,
-            RETREAT_HEALTH_PERCENT = 40,
-            AUTO_HEAL_HEALTH_PERCENT = 65,
-        
+
             DEADZONE_ESCAPE_DISTANCE = 45,
             DEADZONE_ESCAPE_DIRECTIONS = 16,
             DEADZONE_ESCAPE_INTERVAL = 0.3,
@@ -328,6 +312,22 @@ return {
             --// actively trying to. Checked over this window.
             STUCK_SAMPLE_INTERVAL = 0.35,
             STUCK_MIN_PROGRESS = 0.6,
+
+            --// Chasing a target. A straight walk is used while it works; a
+            --// wall just ahead or a stall switches to pathfinding for a while,
+            --// and a stall on the path itself sidesteps out of the corner.
+            CHASE_BLOCK_PROBE_DISTANCE = 6,
+            CHASE_BLOCK_CHECK_INTERVAL = 0.12,
+            CHASE_PATH_HOLD = 2.5,
+            CHASE_UNSTICK_TIME = 0.6,
+            CHASE_MAX_UNSTICKS = 4,
+            UNSTICK_PROBE_DISTANCE = 9,
+            UNSTICK_MIN_FREE = 3,
+
+            --// Fighting in water. Distances are measured in 3D there, since a
+            --// diver straight below is close on the map but out of reach.
+            SWIM_ARRIVAL_DISTANCE = 5,
+            SWIM_SURFACE_MARGIN = 2,
         
             FARM_RETURN_CANDIDATES = 24,
             FARM_RETURN_RADIUS_MIN = 10,
@@ -358,6 +358,14 @@ return {
             UI_ACCENT = Color3.fromRGB(112, 126, 255),
         }
         
+        --// Saved settings start at their SaveConfig defaults. Place-scoped
+        --// ones live on the place config instead.
+        for _, Entry in ipairs(SaveConfig.Settings) do
+            if Entry.Scope ~= "Place" then
+                CONFIG[Entry.Key] = SaveConfig.GetSettingDefault(Entry)
+            end
+        end
+
         local PLACE_CONFIG = {
             [10299594856] = { --// Event Floor
                 DEFAULT_TARGET_PRIORITY = {
@@ -466,98 +474,17 @@ return {
         local FaceOrientation
         local InputBindableFunction
         
-        local Feature = {
-            AutoFarm = {
-                Enabled = true,
+        --// One entry per saved toggle in SaveConfig.Features. Modules read and
+        --// write Feature[Name].Enabled and park their toggle on .Button.
+        local Feature = {}
+
+        for _, Entry in ipairs(SaveConfig.Features) do
+            Feature[Entry.Name] = {
+                Enabled = Entry.Default,
                 Button = nil,
                 Status = nil,
-            },
-            AutoBlock = {
-                Enabled = true,
-                Button = nil,
-                Status = nil,
-            },
-            SafeCombat = {
-                Enabled = true,
-                Button = nil,
-                Status = nil,
-            },
-            AutoFind = {
-                Enabled = false,
-                Button = nil,
-                Status = nil,
-            },
-            IgnoreFarmZone = {
-                Enabled = false,
-                Button = nil,
-                Status = nil,
-            },
-            AutoPatrol = {
-                Enabled = false,
-                Button = nil,
-                Status = nil,
-            },
-            WaypointLoop = {
-                Enabled = false,
-                Button = nil,
-                Status = nil,
-            },
-            PartySystem = {
-                Enabled = false,
-                Button = nil,
-                Status = nil,
-            },
-            ReturnToFarmZone = {
-                Enabled = true,
-                Button = nil,
-                Status = nil,
-            },
-            AutoSkill = {
-                Enabled = true,
-                Button = nil,
-                Status = nil,
-            },
-            ResetOnBoostOut = {
-                Enabled = true,
-                Button = nil,
-                Status = nil,
-            },
-            SafeBoosterReset = {
-                Enabled = false,
-                Button = nil,
-                Status = nil,
-            },
-            ResetStats = {
-                Enabled = true,
-                Button = nil,
-                Status = nil,
-            },
-            DebugVisualizer = {
-                Enabled = CONFIG.DEBUG_VISUALIZE_WAYPOINTS,
-                Button = nil,
-                Status = nil,
-            },
-            DebugWaypoints = {
-                Enabled = true,
-                Button = nil,
-                Status = nil,
-            },
-            DebugFarmZones = {
-                Enabled = true,
-                Button = nil,
-                Status = nil,
-            },
-            DebugDeadzones = {
-                Enabled = true,
-                Button = nil,
-                Status = nil,
-            },
-            DebugRadiusLabels = {
-                Enabled = true,
-                Button = nil,
-                Status = nil,
-            },
-        }
+            }
+        end
         
         local MiningFeature = {
             AutoMining = {
@@ -864,32 +791,50 @@ return {
             Config.WAYPOINT_ZONES = Pairs
         end
 
+        --// Every stored position keeps two decimal places. Raw floats like
+        --// 1773.4182739257812 bloat the save and the export text for no
+        --// precision anyone can walk to.
+        AICConfig.VECTOR_DECIMALS = 2
+
+        function AICConfig.RoundNumber(Value)
+            local Scale = 10 ^ AICConfig.VECTOR_DECIMALS
+            return math.round((tonumber(Value) or 0) * Scale) / Scale
+        end
+
+        function AICConfig.RoundVector3(Value)
+            return Vector3.new(
+                AICConfig.RoundNumber(Value.X),
+                AICConfig.RoundNumber(Value.Y),
+                AICConfig.RoundNumber(Value.Z)
+            )
+        end
+
         function AICConfig.EncodeVector3(Value)
             if typeof(Value) ~= "Vector3" then
                 return { X = 0, Y = 0, Z = 0 }
             end
-        
+
             return {
-                X = Value.X,
-                Y = Value.Y,
-                Z = Value.Z,
+                X = AICConfig.RoundNumber(Value.X),
+                Y = AICConfig.RoundNumber(Value.Y),
+                Z = AICConfig.RoundNumber(Value.Z),
             }
         end
-        
+
         function AICConfig.DecodeVector3(Value)
             if typeof(Value) == "Vector3" then
-                return Value
+                return AICConfig.RoundVector3(Value)
             end
-        
+
             if type(Value) ~= "table" then
                 return Vector3.zero
             end
-        
-            return Vector3.new(
+
+            return AICConfig.RoundVector3(Vector3.new(
                 tonumber(Value.X) or 0,
                 tonumber(Value.Y) or 0,
                 tonumber(Value.Z) or 0
-            )
+            ))
         end
         
         function AICConfig.CloneVectorList(List)

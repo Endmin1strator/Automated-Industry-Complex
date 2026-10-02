@@ -61,6 +61,147 @@ return {
         function AICCombatUtils.IsStuck()
             return AICCombatUtils.S.StuckStrikes >= 2
         end
+        --// Called once a stuck has been acted on, so the same stall is not
+        --// reported again before the new movement had a chance to work.
+        function AICCombatUtils.ResetStuckTracker()
+            AICCombatUtils.S.StuckSamplePosition = nil
+            AICCombatUtils.S.StuckStrikes = 0
+        end
+
+        --// A short sidestep out of a corner. Probes at body height around the
+        --// heading to Destination and keeps the most open direction that still
+        --// lands on allowed ground. Directions closer to the heading win ties,
+        --// and the preferred side alternates per call so two attempts in a
+        --// row do not both bounce off the same wall.
+        local UNSTICK_ANGLES = { 60, 90, 120, 150, 180 }
+
+        function AICCombatUtils.GetUnstickPosition(Destination)
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            if not RootPart or not Destination then
+                return nil
+            end
+
+            local Offset = Destination - RootPart.Position
+            local Heading = Vector3.new(Offset.X, 0, Offset.Z)
+            Heading = Heading.Magnitude > 0.01 and Heading.Unit or RootPart.CFrame.LookVector
+
+            local Probe = tonumber(CONFIG.UNSTICK_PROBE_DISTANCE) or 9
+            local MinFree = tonumber(CONFIG.UNSTICK_MIN_FREE) or 3
+
+            local Params = RaycastParams.new()
+            Params.FilterType = Enum.RaycastFilterType.Exclude
+            Params.FilterDescendantsInstances = { Character, AICCombatUtils.S.DebugFolder }
+
+            AICCombatUtils.S.UnstickSide = -(AICCombatUtils.S.UnstickSide or 1)
+
+            local BestPosition, BestFree = nil, MinFree
+
+            for _, Angle in ipairs(UNSTICK_ANGLES) do
+                for _, Sign in ipairs({ AICCombatUtils.S.UnstickSide, -AICCombatUtils.S.UnstickSide }) do
+                    local Radians = math.rad(Angle * Sign)
+                    local Direction = (CFrame.Angles(0, Radians, 0) * CFrame.lookAt(Vector3.zero, Heading)).LookVector
+                    local Hit = workspace:Raycast(RootPart.Position, Direction * Probe, Params)
+                    local Free = Hit and (Hit.Position - RootPart.Position).Magnitude - 1.5 or Probe
+                    local Candidate = RootPart.Position + Direction * Free
+
+                    if Free > BestFree
+                        and AICCombatUtils.IsInsideFarmArea(Candidate)
+                        and not AICCombatUtils.IsInsideFarmDeadzone(Candidate)
+                    then
+                        BestFree = Free
+                        BestPosition = Candidate
+                    end
+
+                    if Angle == 180 then
+                        break
+                    end
+                end
+
+                --// Something clearly open close to the heading beats a wider
+                --// gap that sends the character backwards.
+                if BestFree >= Probe * 0.8 then
+                    break
+                end
+            end
+
+            return BestPosition
+        end
+
+        --// Water is read from the terrain voxels, not a downward ray: the ray
+        --// stops at the surface, so it cannot tell a swimmer from someone
+        --// standing on a dock, and it reports nothing for a diver below it.
+        function AICCombatUtils.IsPointInWater(Position)
+            if not Position then
+                return false
+            end
+
+            local Terrain = workspace.Terrain
+            local Half = Vector3.new(2, 2, 2)
+            local Region = Region3.new(Position - Half, Position + Half):ExpandToGrid(4)
+
+            local Ok, Materials, Occupancies = pcall(function()
+                return Terrain:ReadVoxels(Region, 4)
+            end)
+
+            if not Ok or not Materials then
+                return false
+            end
+
+            local Size = Materials.Size
+
+            for X = 1, Size.X do
+                for Y = 1, Size.Y do
+                    for Z = 1, Size.Z do
+                        if Materials[X][Y][Z] == Enum.Material.Water
+                            and Occupancies[X][Y][Z] > 0
+                        then
+                            return true
+                        end
+                    end
+                end
+            end
+
+            return false
+        end
+
+        function AICCombatUtils.IsHumanoidSwimming(Humanoid)
+            return Humanoid ~= nil
+                and Humanoid:GetState() == Enum.HumanoidStateType.Swimming
+        end
+
+        --// A character counts as in the water while swimming or while its root
+        --// sits in a water voxel. Another player's state is not always
+        --// replicated, so the voxel test is what finds a diver.
+        --// Asked several times per frame for the same target, so the voxel
+        --// read is reused for a moment. Weak keys let dead models go.
+        local WATER_CACHE_INTERVAL = 0.1
+        AICCombatUtils.S.WaterModelCache = setmetatable({}, { __mode = "k" })
+
+        function AICCombatUtils.IsModelInWater(Model)
+            local ModelRoot = Model and Model:FindFirstChild("HumanoidRootPart")
+
+            if not ModelRoot then
+                return false
+            end
+
+            local now = os.clock()
+            local Cached = AICCombatUtils.S.WaterModelCache[Model]
+
+            if Cached and now - Cached.Time < WATER_CACHE_INTERVAL then
+                return Cached.Value
+            end
+
+            local Value = AICCombatUtils.IsHumanoidSwimming(Model:FindFirstChildOfClass("Humanoid"))
+                or AICCombatUtils.IsPointInWater(ModelRoot.Position)
+
+            AICCombatUtils.S.WaterModelCache[Model] = { Time = now, Value = Value }
+            return Value
+        end
+
+        function AICCombatUtils.IsSelfSwimming()
+            local Character, Humanoid = Runtime:GetCharacter()
+            return AICCombatUtils.IsHumanoidSwimming(Humanoid)
+        end
         function AICCombatUtils.DoJumpIfObstacle(TargetPosition)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             if not Humanoid then
@@ -293,12 +434,16 @@ return {
                 table.insert(RaycastParams.FilterDescendantsInstances, AICCombatUtils.S.DebugFolder)
             end
         
+            --// Water is not a wall. Without this a target under the surface
+            --// was "hidden" behind the water it was swimming in.
+            RaycastParams.IgnoreWater = true
+
             local Result = workspace:Raycast(Origin, Direction, RaycastParams)
-        
+
             if not Result then
                 return true
             end
-        
+
             return Result.Instance:IsDescendantOf(Goblin)
         end
         

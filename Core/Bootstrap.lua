@@ -1,6 +1,6 @@
 return {
     Name = "Bootstrap",
-    Dependencies = {"Runtime", "ProfileManager", "Components", "ProfileSettings", "Waypoints", "Farmzone", "Deadzone", "DebugVisualizer", "CombatUtils", "Targeting", "Navigation", "Combat", "AutoFarming", "AutoBlock", "AutoPatrol", "ReturnToFarmZone", "AntiAFK", "AutoRefill", "SafeBoosterReset"},
+    Dependencies = {"Runtime", "ProfileManager", "Components", "ProfileSettings", "Waypoints", "Farmzone", "Deadzone", "DebugVisualizer", "CombatUtils", "Targeting", "Navigation", "Combat", "AutoFarming", "AutoBlock", "AutoPatrol", "ReturnToFarmZone", "AntiAFK"},
     Start = function(Context)
         local Runtime = Context.Runtime
         local Services = Context.Services
@@ -125,8 +125,6 @@ return {
             AICFeature.CreateToggleContainer()
             AICFeature.RegenStamina()
         end)
-        AICFeature.AutoRefillBooster()
-        AICFeature.SafeBoosterReset()
         
         
         

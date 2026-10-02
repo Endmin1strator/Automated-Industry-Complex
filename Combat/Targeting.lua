@@ -505,7 +505,11 @@ return {
                 return false
             end
         
-            if AICCombatUtils.IsWaterAtPosition(MobRoot.Position, Mob) then
+            --// Mobs in water stay off limits. A player who jumps in is still
+            --// a target: SwimChase follows them under the surface.
+            if not Players:GetPlayerFromCharacter(Mob)
+                and AICCombatUtils.IsWaterAtPosition(MobRoot.Position, Mob)
+            then
                 return false
             end
         
@@ -1009,15 +1013,8 @@ return {
 
         function Module:CreateUI()
             if UIRef.TargetSection then
-                UIRef.SafeEnemyRangeSlider = UIRef.TargetSection:AddSlider(
-                    "Safe Enemy Range",
-                    math.clamp(tonumber(CONFIG.SAFE_ENEMY_RANGE) or 4, 0, 30),
-                    0,
-                    30,
-                    function(Value)
-                        CONFIG.SAFE_ENEMY_RANGE = math.clamp(tonumber(Value) or 4, 0, 30)
-                        AICProfile.QueueProfileSave()
-                    end
+                UIRef.SafeEnemyRangeSlider = AICUI.AddSettingSlider(
+                    UIRef.TargetSection, "Safe Enemy Range", "SAFE_ENEMY_RANGE"
                 )
             end
         end

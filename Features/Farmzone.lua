@@ -58,7 +58,7 @@ UIRef.FarmzoneSection:AddButton("Add Farm Zone Here", function()
     local Radius = UIRef.FarmRadiusSlider:Get()
 
     table.insert(Runtime:GetPlaceConfig().FARM_ZONES, {
-        Center = GetRootPart().Position,
+        Center = AICConfig.RoundVector3(GetRootPart().Position),
         Radius = Radius,
     })
 

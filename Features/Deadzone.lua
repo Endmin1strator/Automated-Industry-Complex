@@ -188,7 +188,7 @@ return {
             end
 
             table.insert(GetDeadzones(), {
-                Center = RootPart.Position,
+                Center = AICConfig.RoundVector3(RootPart.Position),
                 Radius = UIRef.DeadzoneRadiusSlider:Get(),
             })
 

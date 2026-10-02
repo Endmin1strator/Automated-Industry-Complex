@@ -1,6 +1,6 @@
 return {
     Name = "Components",
-    Dependencies = {"Runtime"},
+    Dependencies = {"Runtime", "SaveConfig"},
     Start = function(Context)
         local Runtime = Context.Runtime
         local Services = Context.Services
@@ -33,10 +33,65 @@ return {
         end
         function AICUI.SetFeatureComponent(Name, Value)
             local Data = FeatureState[Name]
-        
-            if Data and Data.Button then
+
+            --// Some entries park a plain TextButton here (Reset Stats), which
+            --// has no state to set. Indexing .Set on an Instance would throw.
+            if Data
+                and type(Data.Button) == "table"
+                and type(Data.Button.Set) == "function"
+            then
                 Data.Button:Set(Value, false)
             end
+        end
+
+        --// A feature toggle bound to a SaveConfig.Features entry: it shows the
+        --// saved value, writes Feature[Name].Enabled, saves the profile, and
+        --// is refreshed by updateFeatureButtons on every profile load. A
+        --// module only supplies its label and what else should happen.
+        function AICUI.BindFeatureToggle(Name, Label, OnChanged, Section)
+            local State = FeatureState[Name]
+            assert(State, "Feature not declared in SaveConfig.Features: " .. tostring(Name))
+
+            Section = Section or UIRef.FeatureSection
+            if not Section then
+                return nil
+            end
+
+            State.Button = Section:AddToggle(Label, State.Enabled, function(Value)
+                State.Enabled = Value == true
+
+                if OnChanged then
+                    OnChanged(State.Enabled)
+                end
+
+                AICProfile.SaveActiveProfile()
+            end)
+
+            return State.Button
+        end
+
+        --// A slider bound to a numeric SaveConfig.Settings entry, using its
+        --// range. Whole rounds the value down to an integer.
+        function AICUI.AddSettingSlider(Section, Label, Key, Whole)
+            local Entry = Context.SaveConfig.GetSetting(Key)
+            assert(Entry, "Setting not declared in SaveConfig.Settings: " .. tostring(Key))
+
+            return Section:AddSlider(
+                Label,
+                Context.SaveConfig.NormalizeSetting(Entry, CONFIG[Key]),
+                Entry.Min,
+                Entry.Max,
+                function(Value)
+                    local Number = tonumber(Value) or Entry.Default
+
+                    if Whole then
+                        Number = math.floor(Number)
+                    end
+
+                    CONFIG[Key] = Context.SaveConfig.NormalizeSetting(Entry, Number)
+                    AICProfile.QueueProfileSave()
+                end
+            )
         end
         function AICUI.RefreshTargetDropdown()
             AICCombat.S.DetectedEntities = AICCombat.GetDetectedEnemyEntities()
@@ -106,25 +161,18 @@ return {
                 AICUI.RefreshWhitelistPlayerDropdown()
             end
         
-            AICUI.SetFeatureComponent("AutoFarm", AICFeature.S.Enabled)
-            AICUI.SetFeatureComponent("AutoBlock", FeatureState.AutoBlock.Enabled)
-            AICUI.SetFeatureComponent("SafeCombat", FeatureState.SafeCombat.Enabled)
-            AICUI.SetFeatureComponent("AutoSkill", FeatureState.AutoSkill.Enabled)
-            AICUI.SetFeatureComponent("AutoFind", FeatureState.AutoFind.Enabled)
-            AICUI.SetFeatureComponent("IgnoreFarmZone", FeatureState.IgnoreFarmZone.Enabled)
-            AICUI.SetFeatureComponent("AutoPatrol", FeatureState.AutoPatrol.Enabled)
-            AICUI.SetFeatureComponent("ReturnToFarmZone", FeatureState.ReturnToFarmZone.Enabled)
-            AICUI.SetFeatureComponent("ResetOnBoostOut", FeatureState.ResetOnBoostOut.Enabled)
-            AICUI.SetFeatureComponent("PartySystem", FeatureState.PartySystem.Enabled)
-            AICUI.SetFeatureComponent("WaypointLoop", FeatureState.WaypointLoop.Enabled)
+            --// Every saved toggle, so a new one in SaveConfig.Features is
+            --// refreshed without being listed here. Missing this list entry
+            --// is why Safe Booster Reset showed off after a reload.
+            FeatureState.AutoFarm.Enabled = AICFeature.S.Enabled
+
+            for _, Entry in ipairs(Context.SaveConfig.Features) do
+                AICUI.SetFeatureComponent(Entry.Name, FeatureState[Entry.Name].Enabled)
+            end
 
             if AICUI.RefreshPartyUI then
                 AICUI.RefreshPartyUI()
             end
-            if FeatureState.DebugWaypoints.Button then FeatureState.DebugWaypoints.Button:Set(FeatureState.DebugWaypoints.Enabled, false) end
-            if FeatureState.DebugFarmZones.Button then FeatureState.DebugFarmZones.Button:Set(FeatureState.DebugFarmZones.Enabled, false) end
-            if FeatureState.DebugDeadzones.Button then FeatureState.DebugDeadzones.Button:Set(FeatureState.DebugDeadzones.Enabled, false) end
-            if FeatureState.DebugRadiusLabels.Button then FeatureState.DebugRadiusLabels.Button:Set(FeatureState.DebugRadiusLabels.Enabled, false) end
         end
         function AICUI.updateButton()
             FeatureState.AutoFarm.Enabled = AICFeature.S.Enabled
@@ -135,7 +183,7 @@ return {
                 return "0, 0, 0"
             end
         
-            return string.format("%.1f, %.1f, %.1f", Position.X, Position.Y, Position.Z)
+            return string.format("%.2f, %.2f, %.2f", Position.X, Position.Y, Position.Z)
         end
         function AICUI.BuildWaypointLabels()
         local PlaceConfig = Runtime:GetPlaceConfig()
@@ -363,7 +411,7 @@ return {
             if RootPart then
                 local Position = RootPart.Position
                 UIRef.PositionLabel.Text = string.format(
-                    "POSITION       %.1f, %.1f, %.1f",
+                    "POSITION       %.2f, %.2f, %.2f",
                     Position.X,
                     Position.Y,
                     Position.Z
