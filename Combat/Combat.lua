@@ -42,14 +42,25 @@ return {
             end
         
             local RootPosition = RootPart.Position
+
+            --// Lead the target by its own velocity. Aiming at where it was
+            --// left the character always a step behind a mob circling it.
+            local Velocity = MobRoot.AssemblyLinearVelocity
             local TargetPosition = MobRoot.Position
-        
+                + Vector3.new(Velocity.X, 0, Velocity.Z) * (tonumber(CONFIG.FACE_LEAD_TIME) or 0)
+
             local Direction = Vector3.new(
                 TargetPosition.X - RootPosition.X,
                 0,
                 TargetPosition.Z - RootPosition.Z
             )
-        
+
+            --// Lead overshooting a target right on top of us flips the aim;
+            --// fall back to its actual position.
+            if Direction.Magnitude <= 1 then
+                Direction = Vector3.new(MobRoot.Position.X - RootPosition.X, 0, MobRoot.Position.Z - RootPosition.Z)
+            end
+
             if Direction.Magnitude <= 0.01 then
                 return
             end
@@ -57,12 +68,29 @@ return {
             if not FaceOrientation then
                 return
             end
-        
+
+            Direction = Direction.Unit
+
+            --// AutoRotate turns toward the walk direction and fights the
+            --// alignment, which is what let a mob slip behind us.
+            if Humanoid then
+                Humanoid.AutoRotate = false
+            end
+
+            local Look = RootPart.CFrame.LookVector
+            local FlatLook = Vector3.new(Look.X, 0, Look.Z)
+            local Error = FlatLook.Magnitude > 0.01
+                and math.deg(math.acos(math.clamp(FlatLook.Unit:Dot(Direction), -1, 1)))
+                or 180
+
+            --// A big miss snaps round in one step; small ones ease, which
+            --// keeps the stance from twitching on every tiny adjustment.
+            FaceOrientation.RigidityEnabled = Error > (tonumber(CONFIG.FACE_SNAP_ANGLE) or 35)
             FaceOrientation.CFrame = CFrame.lookAt(
                 RootPosition,
                 RootPosition + Direction
             )
-        
+
             FaceOrientation.Enabled = true
         end
         function AICCombat.GetCombatHealthPercent()
@@ -206,24 +234,9 @@ return {
                 return
             end
         
-            local TargetRoot = TargetMob:FindFirstChild("HumanoidRootPart")
-            if not TargetRoot then
-                return
-            end
-        
-            local Offset = TargetRoot.Position - RootPart.Position
-            local Flat = Vector3.new(Offset.X, 0, Offset.Z)
-            if Flat.Magnitude <= 0.01 then
-                return
-            end
-        
-            if FaceOrientation then
-                FaceOrientation.CFrame = CFrame.lookAt(
-                    RootPart.Position,
-                    RootPart.Position + Flat.Unit
-                )
-                FaceOrientation.Enabled = true
-            end
+            --// One facing rule for approach and attack, so the two cannot
+            --// pull the character toward slightly different headings.
+            AICCombat.FaceGoblin(TargetMob)
         end
         function AICCombat.InvokeCombatInput(InputName)
             local InputBindableFunction = Runtime:GetInputBindableFunction()

@@ -56,8 +56,12 @@ return {
                 FaceOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
                 FaceOrientation.Attachment0 = AICFeature.S.FaceAttachment
                 FaceOrientation.RigidityEnabled = false
-                FaceOrientation.Responsiveness = 25
+                --// Fast enough to track a mob circling at melee range; 25
+                --// trailed visibly behind it. FaceGoblin switches to rigid
+                --// for large corrections.
+                FaceOrientation.Responsiveness = CONFIG.FACE_RESPONSIVENESS
                 FaceOrientation.MaxTorque = math.huge
+                FaceOrientation.MaxAngularVelocity = math.huge
                 if FaceOrientation then
                     FaceOrientation.Enabled = false
                 end

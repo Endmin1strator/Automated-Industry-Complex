@@ -1716,8 +1716,8 @@ return {
                 AICCombat.ResetTargetReposition()
 
                 if not AICCombat.ChaseMoveTo(Goblin, MobRoot.Position) then
-                    Humanoid.AutoRotate = true
                     Humanoid:Move(Vector3.zero)
+                    AICCombat.FaceGoblin(Goblin)
                 end
                 return
             end
@@ -1765,15 +1765,16 @@ return {
                             Humanoid:MoveTo(MovePosition)
                             AICCombat.FaceGoblin(Goblin)
                         else
-                            Humanoid.AutoRotate = true
                             Humanoid:Move(Vector3.zero)
                             AICCombat.FaceGoblin(Goblin)
                         end
                     end
                 else
-                    --FaceOrientation.Enabled = false
-                    Humanoid.AutoRotate = true
+                    --// Standing inside the blade with nowhere to push: keep
+                    --// facing the mob. Handing rotation back to AutoRotate
+                    --// here is where a mob walking round us got behind us.
                     Humanoid:Move(Vector3.zero)
+                    AICCombat.FaceGoblin(Goblin)
                 end
         
                 return
@@ -1901,8 +1902,9 @@ return {
             --// The mob is still a valid target even when the safe-position solver
             --// cannot find a perfect attack point. Keep the target locked while the
             --// pathfinding/reposition logic retries instead of dropping visibility.
-            Humanoid.AutoRotate = true
+            --// Waiting still faces it, so it cannot walk round behind us.
             Humanoid:Move(Vector3.zero)
+            AICCombat.FaceGoblin(Goblin)
         
             if now - AICCombat.S.TargetUnreachableSince >= CONFIG.TARGET_UNREACHABLE_TIMEOUT then
                 --// Nothing worked: no safe spot, no path to one, no path to the mob

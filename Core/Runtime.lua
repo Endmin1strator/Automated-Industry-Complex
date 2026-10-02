@@ -324,6 +324,14 @@ return {
             UNSTICK_PROBE_DISTANCE = 9,
             UNSTICK_MIN_FREE = 3,
 
+            --// Facing the target. The aim leads a moving target by this many
+            --// seconds of its velocity, so a mob walking around us is faced
+            --// where it is going rather than where it was. A heading error
+            --// above the snap angle turns rigidly (instantly) instead of easing.
+            FACE_RESPONSIVENESS = 200,
+            FACE_LEAD_TIME = 0.12,
+            FACE_SNAP_ANGLE = 35,
+
             --// Fighting in water. Distances are measured in 3D there, since a
             --// diver straight below is close on the map but out of reach.
             SWIM_ARRIVAL_DISTANCE = 5,
