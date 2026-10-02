@@ -335,6 +335,12 @@ return {
             FACE_RESPONSIVENESS = 200,
             FACE_LEAD_TIME = 0.12,
             FACE_SNAP_ANGLE = 35,
+            --// Bounds on the lead: none closer than MIN_DISTANCE, velocity
+            --// capped at MAX_SPEED, and never more than MAX_RATIO of the
+            --// distance to the target.
+            FACE_LEAD_MIN_DISTANCE = 6,
+            FACE_LEAD_MAX_SPEED = 20,
+            FACE_LEAD_MAX_RATIO = 0.35,
 
             --// Fighting in water. Distances are measured in 3D there, since a
             --// diver straight below is close on the map but out of reach.

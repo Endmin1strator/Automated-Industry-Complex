@@ -43,25 +43,14 @@ return {
         
             local RootPosition = RootPart.Position
 
-            --// Lead the target by its own velocity. Aiming at where it was
-            --// left the character always a step behind a mob circling it.
-            local Velocity = MobRoot.AssemblyLinearVelocity
-            local TargetPosition = MobRoot.Position
-                + Vector3.new(Velocity.X, 0, Velocity.Z) * (tonumber(CONFIG.FACE_LEAD_TIME) or 0)
-
-            local Direction = Vector3.new(
-                TargetPosition.X - RootPosition.X,
+            local TrueDirection = Vector3.new(
+                MobRoot.Position.X - RootPosition.X,
                 0,
-                TargetPosition.Z - RootPosition.Z
+                MobRoot.Position.Z - RootPosition.Z
             )
+            local Distance = TrueDirection.Magnitude
 
-            --// Lead overshooting a target right on top of us flips the aim;
-            --// fall back to its actual position.
-            if Direction.Magnitude <= 1 then
-                Direction = Vector3.new(MobRoot.Position.X - RootPosition.X, 0, MobRoot.Position.Z - RootPosition.Z)
-            end
-
-            if Direction.Magnitude <= 0.01 then
+            if Distance <= 0.01 then
                 return
             end
 
@@ -69,7 +58,40 @@ return {
                 return
             end
 
-            Direction = Direction.Unit
+            TrueDirection = TrueDirection.Unit
+
+            --// Lead the target by its own velocity, so a mob circling us is
+            --// faced where it is going rather than where it was. The lead is
+            --// bounded three ways, because an unbounded one aimed players
+            --// (running ~35 studs/s) past us or 40-55 degrees off them:
+            --//   - none at close range, where fast turning already keeps up
+            --//   - speed capped, so a dash or knockback cannot fling the aim
+            --//   - at most a share of the distance, so the aim stays within
+            --//     ~20 degrees of the target and never triggers a snap itself
+            local Direction = TrueDirection
+
+            if Distance > (tonumber(CONFIG.FACE_LEAD_MIN_DISTANCE) or 6) then
+                local Velocity = MobRoot.AssemblyLinearVelocity
+                local FlatVelocity = Vector3.new(Velocity.X, 0, Velocity.Z)
+                local MaxSpeed = tonumber(CONFIG.FACE_LEAD_MAX_SPEED) or 20
+
+                if FlatVelocity.Magnitude > MaxSpeed then
+                    FlatVelocity = FlatVelocity.Unit * MaxSpeed
+                end
+
+                local Lead = FlatVelocity * (tonumber(CONFIG.FACE_LEAD_TIME) or 0)
+                local MaxLead = Distance * (tonumber(CONFIG.FACE_LEAD_MAX_RATIO) or 0.35)
+
+                if Lead.Magnitude > MaxLead then
+                    Lead = Lead.Unit * MaxLead
+                end
+
+                local Aim = TrueDirection * Distance + Lead
+
+                if Aim.Magnitude > 0.01 then
+                    Direction = Aim.Unit
+                end
+            end
 
             --// AutoRotate turns toward the walk direction and fights the
             --// alignment, which is what let a mob slip behind us.
@@ -79,8 +101,10 @@ return {
 
             local Look = RootPart.CFrame.LookVector
             local FlatLook = Vector3.new(Look.X, 0, Look.Z)
+            --// Measured against where the target actually is, not the led
+            --// aim, so a shifting lead cannot toggle the snap every frame.
             local Error = FlatLook.Magnitude > 0.01
-                and math.deg(math.acos(math.clamp(FlatLook.Unit:Dot(Direction), -1, 1)))
+                and math.deg(math.acos(math.clamp(FlatLook.Unit:Dot(TrueDirection), -1, 1)))
                 or 180
 
             --// A big miss snaps round in one step; small ones ease, which
