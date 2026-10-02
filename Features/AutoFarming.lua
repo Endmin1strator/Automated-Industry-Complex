@@ -164,6 +164,49 @@ return {
             return true
         end
 
+        --// Drinks the last used potion when it is off cooldown. The weapon
+        --// is sheathed first, which costs a frame: true means this frame was
+        --// spent sheathing and the caller should yield it. Shared by the
+        --// retreat and by healing while walking the waypoint route.
+        local function TryConsumePotion(now, PlayerStats, InputBindableFunction, MainWeld)
+            local UseConsumable = Replicated:FindFirstChild("UseConsumable", true)
+            local LastConsumed = PlayerStats and PlayerStats:FindFirstChild("LastConsumed")
+
+            if not UseConsumable
+                or not LastConsumed
+                or LastConsumed.Value == ""
+                or now - AICFeature.S.LAST_CONSUME_TIME < CONFIG.CONSUME_INTERVAL
+            then
+                return false
+            end
+
+            --// Sheathe only when a potion is actually about to be drunk. The old
+            --// build sheathed on every retreat frame and drew again as soon as
+            --// the retreat ended, which is where the constant draw/sheathe came
+            --// from, and each toggle also threw away the frame it happened on.
+            if InputBindableFunction
+                and (AICFeature.S.Equipped or (MainWeld.Part1 and MainWeld.Part1.Name ~= "UpperTorso"))
+                and now - AICFeature.S.LAST_EQUIP_TIME >= CONFIG.EQUIP_TOGGLE_COOLDOWN
+            then
+                AICFeature.S.Equipped = false
+                AICFeature.S.LAST_EQUIP_TIME = now
+
+                InputBindableFunction:Invoke(
+                    "EquipButton",
+                    Enum.UserInputState.Begin
+                )
+
+                return true
+            end
+
+            if not AICFeature.S.Equipped then
+                AICFeature.S.LAST_CONSUME_TIME = now
+                UseConsumable:InvokeServer(LastConsumed.Value)
+            end
+
+            return false
+        end
+
         function Feature:Update(dt)
             -- Keep walkspeed / position UI in sync every frame (was RenderUpdate)
             Feature:RenderUpdate(dt)
@@ -282,7 +325,25 @@ return {
             --// the dodge partway through.
             local EnemyUsingSkill = AICCombat.UpdateSkillThreat(now)
 
+            --// Still walking the waypoint route. There the route itself is the
+            --// way out: low health keeps walking and drinks on the move, and a
+            --// skill is dodged and then the route resumes.
+            local RouteActive = not FeatureState.AutoFind.Enabled
+                and PlaceConfig ~= nil
+                and type(PlaceConfig.WAYPOINTS) == "table"
+                and (tonumber(CONFIG.CURRENT_WAYPOINT_TARGET) or 1) <= #PlaceConfig.WAYPOINTS
+
+            --// Why we are retreating. A skill dodge ends with the skill; only a
+            --// health retreat waits for health to come back. Both used to wait
+            --// for health, so one boss skill that dropped us under the recover
+            --// line kept the character fleeing long after the skill was over.
+            --// The reason only counts while retreating, so one left behind by
+            --// a respawn or another path clearing RETREATING cannot stick.
             if EnemyUsingSkill then
+                if not (AICCombat.S.RETREATING and AICCombat.S.RetreatReason == "Health") then
+                    AICCombat.S.RetreatReason = "Skill"
+                end
+
                 AICCombat.S.RETREATING = true
             end
 
@@ -307,12 +368,20 @@ return {
             --// Retreat is a health decision only. The old build also entered retreat
             --// whenever WalkSpeed had not been raised yet, but RenderStepped restores
             --// WalkSpeed every frame, so that clause only produced random retreats.
+            local Recovered = Humanoid.Health >= Humanoid.MaxHealth * (RecoverHealthPercent / 100)
+
             if ExecuteCharge then
                 AICCombat.S.RETREATING = false
-            elseif EmergencyHealth then
+                AICCombat.S.RetreatReason = nil
+            elseif EmergencyHealth and not RouteActive then
                 AICCombat.S.RETREATING = true
-            elseif AICCombat.S.RETREATING and Humanoid.Health >= Humanoid.MaxHealth * (RecoverHealthPercent / 100) and not EnemyUsingSkill then
+                AICCombat.S.RetreatReason = "Health"
+            elseif AICCombat.S.RETREATING
+                and not EnemyUsingSkill
+                and (AICCombat.S.RetreatReason ~= "Health" or RouteActive or Recovered)
+            then
                 AICCombat.S.RETREATING = false
+                AICCombat.S.RetreatReason = nil
 
                 --// Re-acquire a valid target immediately after healing so the
                 --// combat loop does not wait for another target cycle.
@@ -322,10 +391,11 @@ return {
             end
 
             if AICCombat.S.RETREATING then
-                --// PlayerStats is already resolved above in this same handler.
-                local UseConsumable = Replicated:FindFirstChild("UseConsumable", true)
-
+                --// On the route the dodge may land outside the farm zones,
+                --// which is where the route runs.
+                AICCombatUtils.S.DodgeOffRoute = RouteActive
                 local RetreatMoved = AICCombat.RetreatFromGoblins(EnemyUsingSkill)
+                AICCombatUtils.S.DodgeOffRoute = false
 
                 --// With no mob close enough to flee from, the retreat stands still
                 --// to heal wherever it happens to be. Outside the farm zone that
@@ -364,43 +434,25 @@ return {
                     AICCombat.RetreatAttack(FightBackThreat, now)
                 end
 
-                local LastConsumed = PlayerStats and PlayerStats:FindFirstChild("LastConsumed")
-                local WantsConsume = UseConsumable
-                    and LastConsumed
-                    and LastConsumed.Value ~= ""
-                    and (EmergencyHealth or ShouldHeal)
-                    and now - AICFeature.S.LAST_CONSUME_TIME >= CONFIG.CONSUME_INTERVAL
-                    --// Never stop to drink mid-dodge. Getting out of the skill first
-                    --// is worth more than the heal, and sheathing costs an animation.
+                --// Never stop to drink mid-dodge. Getting out of the skill first
+                --// is worth more than the heal, and sheathing costs an animation.
+                local WantsConsume = (EmergencyHealth or ShouldHeal)
                     and not EnemyUsingSkill
                     and not InDuel
                     and not FightBackThreat
 
-                --// Sheathe only when a potion is actually about to be drunk. The old
-                --// build sheathed on every retreat frame and drew again as soon as
-                --// the retreat ended, which is where the constant draw/sheathe came
-                --// from, and each toggle also threw away the frame it happened on.
-                if WantsConsume
-                    and InputBindableFunction
-                    and (AICFeature.S.Equipped or (MainWeld.Part1 and MainWeld.Part1.Name ~= "UpperTorso"))
-                    and now - AICFeature.S.LAST_EQUIP_TIME >= CONFIG.EQUIP_TOGGLE_COOLDOWN
-                then
-                    AICFeature.S.Equipped = false
-                    AICFeature.S.LAST_EQUIP_TIME = now
-
-                    InputBindableFunction:Invoke(
-                        "EquipButton",
-                        Enum.UserInputState.Begin
-                    )
-
-                    return
+                if WantsConsume then
+                    TryConsumePotion(now, PlayerStats, InputBindableFunction, MainWeld)
                 end
 
-                if WantsConsume and not AICFeature.S.Equipped then
-                    AICFeature.S.LAST_CONSUME_TIME = now
-                    UseConsumable:InvokeServer(LastConsumed.Value)
-                end
+                return
+            end
 
+            --// Low on the route: no retreat, keep walking and drink on the move.
+            if RouteActive
+                and (EmergencyHealth or ShouldHeal)
+                and TryConsumePotion(now, PlayerStats, InputBindableFunction, MainWeld)
+            then
                 return
             end
 

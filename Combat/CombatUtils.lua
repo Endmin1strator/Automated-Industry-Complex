@@ -290,7 +290,15 @@ return {
             if not Position then
                 return false
             end
-        
+
+            --// Set only while a skill dodge runs on the waypoint route. The
+            --// route crosses ground outside every farm zone, and requiring a
+            --// dodge spot inside one left nowhere to go, so the character
+            --// stood in the skill. Deadzones still apply.
+            if AICCombatUtils.S.DodgeOffRoute then
+                return not AICCombatUtils.IsInsideFarmDeadzone(Position)
+            end
+
             local FarmZones = PlaceConfig.FARM_ZONES or {}
             local ActiveZone = AICCombatUtils.S.ActiveZoneIndex and FarmZones[AICCombatUtils.S.ActiveZoneIndex]
 
