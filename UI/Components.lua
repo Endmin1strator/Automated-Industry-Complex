@@ -93,34 +93,122 @@ return {
                 end
             )
         end
-        function AICUI.RefreshTargetDropdown()
-            AICCombat.S.DetectedEntities = AICCombat.GetDetectedEnemyEntities()
-        
+        --// Target pickers. Players and mobs each get their own dropdown:
+        --// the roster changes rarely and should show up at once, while mobs
+        --// spawn and die constantly and rebuilding on every one made the
+        --// list flicker and close under the cursor.
+        local TARGET_PICKERS = {
+            Player = {
+                Ref = "PlayerTargetDropdown",
+                Label = "Add Player Target",
+                Empty = "No other players",
+                GetNames = function()
+                    return AICCombat.GetDetectedPlayerTargets()
+                end,
+            },
+            Mob = {
+                Ref = "MobTargetDropdown",
+                Label = "Add Mob Target",
+                Empty = "No detected mobs",
+                GetNames = function()
+                    return AICCombat.GetDetectedMobTargets()
+                end,
+            },
+        }
+
+        --// Placeholder rows, never added as a target.
+        AICUI.S.TargetPickerPlaceholders = {}
+        for _, Picker in pairs(TARGET_PICKERS) do
+            AICUI.S.TargetPickerPlaceholders[Picker.Empty] = true
+        end
+
+        AICUI.S.TargetPickerSignature = {}
+        AICUI.S.TargetPickerQueued = {}
+
+        local function DestroyDropdown(Dropdown)
+            if Dropdown and Dropdown.Popup then
+                Dropdown.Popup:Destroy()
+            end
+
+            if Dropdown and Dropdown.Frame then
+                Dropdown.Frame:Destroy()
+            end
+        end
+
+        function AICUI.RefreshTargetPicker(Kind, Force)
+            local Picker = TARGET_PICKERS[Kind]
+            if not Picker or not UIRef.TargetSection then
+                return
+            end
+
             local Options = {}
-        
-            for _, Name in ipairs(AICCombat.S.DetectedEntities) do
+
+            for _, Name in ipairs(Picker.GetNames()) do
                 if not AICCombat.IsEntityInPriority(Name) then
                     table.insert(Options, Name)
                 end
             end
-        
+
             if #Options == 0 then
-                Options = {"No detected enemies"}
+                Options = { Picker.Empty }
             end
-        
-            if UIRef.TargetDropdown then
-                if UIRef.TargetDropdown.Popup then
-                    UIRef.TargetDropdown.Popup:Destroy()
-                end
-        
-                if UIRef.TargetDropdown.Frame then
-                    UIRef.TargetDropdown.Frame:Destroy()
-                end
+
+            local Old = UIRef[Picker.Ref]
+            local Signature = table.concat(Options, "\n")
+
+            --// Same list: leave the dropdown alone, including one left open.
+            if Old and AICUI.S.TargetPickerSignature[Kind] == Signature then
+                return
             end
-        
-            UIRef.TargetDropdown = UIRef.TargetSection:AddDropdown("Add Target", Options, function(Value)
+
+            --// Never rebuild under the cursor for a background change; try
+            --// again once it closes. A forced refresh comes from the user (a
+            --// pick fires before the dropdown closes), so it goes ahead.
+            if Old and Old.IsOpen and not Force then
+                AICUI.QueueTargetPickerRefresh(Kind)
+                return
+            end
+
+            --// A new dropdown is appended to the section, so it takes the
+            --// old one's slot to keep its place in the list.
+            local Order = Old and Old.Frame and Old.Frame.LayoutOrder
+            DestroyDropdown(Old)
+
+            local Dropdown = UIRef.TargetSection:AddDropdown(Picker.Label, Options, function(Value)
                 AICUI.S.AddPriorityTarget(Value)
             end)
+
+            if Order and Dropdown.Frame then
+                Dropdown.Frame.LayoutOrder = Order
+            end
+
+            UIRef[Picker.Ref] = Dropdown
+            AICUI.S.TargetPickerSignature[Kind] = Signature
+        end
+
+        --// Collapses a burst of changes into one rebuild after a delay.
+        function AICUI.QueueTargetPickerRefresh(Kind)
+            if AICUI.S.TargetPickerQueued[Kind] then
+                return
+            end
+
+            AICUI.S.TargetPickerQueued[Kind] = true
+
+            local Delay = Kind == "Player"
+                and CONFIG.PLAYER_TARGET_REFRESH_DELAY
+                or CONFIG.MOB_TARGET_REFRESH_DELAY
+
+            task.delay(Delay, function()
+                AICUI.S.TargetPickerQueued[Kind] = false
+                AICUI.RefreshTargetPicker(Kind)
+            end)
+        end
+
+        --// Both pickers, right away. Used after the priority list or the
+        --// profile changes, and by the Refresh button.
+        function AICUI.RefreshTargetDropdown()
+            AICUI.RefreshTargetPicker("Player", true)
+            AICUI.RefreshTargetPicker("Mob", true)
         end
         function AICUI.SyncPriorityState(RefreshDropdown)
             CONFIG.TARGET_ENTITY_PRIORITY = UIRef.PriorityComponent.Priority
@@ -424,11 +512,8 @@ return {
         --// Refresh the dropdown whenever the mob set changes.
         --// Subscribes the picker to the mob watcher. Assigned here rather than
         --// called from there, so the dependency runs UI -> Combat only.
-        AICCombat.OnMobSetChanged = function()
-            AICUI.RefreshEnemyPicker()
-        end
-        function AICUI.RefreshEnemyPicker()
-            AICUI.RefreshTargetDropdown()
+        AICCombat.OnMobSetChanged = function(Kind)
+            AICUI.QueueTargetPickerRefresh(Kind == "Player" and "Player" or "Mob")
         end
         
         

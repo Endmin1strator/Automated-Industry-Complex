@@ -187,8 +187,38 @@ return {
             return Result
         end
 
-        function AICCombat.GetDetectedEnemyEntities()
-            local MobFolder = workspace:FindFirstChild("Mobs")
+        --// Priority entries first, in priority order, then the rest by name.
+        local function SortEntityNames(EntitySet)
+            local Result = {}
+
+            for EntityName in EntitySet do
+                table.insert(Result, EntityName)
+            end
+
+            table.sort(Result, function(A, B)
+                local APriority = table.find(CONFIG.TARGET_ENTITY_PRIORITY, A)
+                local BPriority = table.find(CONFIG.TARGET_ENTITY_PRIORITY, B)
+
+                if APriority and BPriority then
+                    return APriority < BPriority
+                end
+
+                if APriority then
+                    return true
+                end
+
+                if BPriority then
+                    return false
+                end
+
+                return A < B
+            end)
+
+            return Result
+        end
+
+        --// "@Name" of every other player in the server.
+        function AICCombat.GetDetectedPlayerTargets()
             local EntitySet = {}
 
             for _, OtherPlayer in ipairs(Players:GetPlayers()) do
@@ -196,6 +226,25 @@ return {
                     EntitySet[AICCombat.GetPlayerTargetName(OtherPlayer)] = true
                 end
             end
+
+            return SortEntityNames(EntitySet)
+        end
+
+        --// Players and mobs together, for pickers that list both.
+        function AICCombat.GetDetectedEnemyEntities()
+            local Result = AICCombat.GetDetectedPlayerTargets()
+
+            for _, Name in ipairs(AICCombat.GetDetectedMobTargets()) do
+                table.insert(Result, Name)
+            end
+
+            return Result
+        end
+
+        --// Entity name of every mob currently in the Mobs folder.
+        function AICCombat.GetDetectedMobTargets()
+            local MobFolder = workspace:FindFirstChild("Mobs")
+            local EntitySet = {}
 
             for _, Mob in (MobFolder and MobFolder:GetChildren() or {}) do
                 if not Mob:IsA("Model") then
@@ -220,33 +269,8 @@ return {
         
                 EntitySet[Entity.Value] = true
             end
-        
-            local Result = {}
-        
-            for EntityName in EntitySet do
-                table.insert(Result, EntityName)
-            end
-        
-            table.sort(Result, function(A, B)
-                local APriority = table.find(CONFIG.TARGET_ENTITY_PRIORITY, A)
-                local BPriority = table.find(CONFIG.TARGET_ENTITY_PRIORITY, B)
-        
-                if APriority and BPriority then
-                    return APriority < BPriority
-                end
-        
-                if APriority then
-                    return true
-                end
-        
-                if BPriority then
-                    return false
-                end
-        
-                return A < B
-            end)
-        
-            return Result
+
+            return SortEntityNames(EntitySet)
         end
         function AICCombat.IsEntityInPriority(EntityName: string): boolean
             return table.find(CONFIG.TARGET_ENTITY_PRIORITY, EntityName) ~= nil
@@ -285,9 +309,11 @@ return {
         --// Raised whenever the set of mobs, or the entity a mob reports, changes.
         --// Nothing here knows who listens; the UI assigns OnMobSetChanged so the
         --// picker can rebuild without this module depending on the UI at all.
-        function AICCombat.NotifyMobSetChanged()
+        --// Kind is "Player" for a roster change, otherwise a mob change, so
+        --// the UI can refresh its two pickers on different schedules.
+        function AICCombat.NotifyMobSetChanged(Kind)
             if AICCombat.OnMobSetChanged then
-                AICCombat.OnMobSetChanged()
+                AICCombat.OnMobSetChanged(Kind or "Mob")
             end
         end
         function AICCombat.DisconnectMob(Mob)
@@ -1024,7 +1050,7 @@ return {
         --// Players are targets too, so the picker follows the roster, and a
         --// player who leaves is dropped at once rather than on the next scan.
         Players.PlayerAdded:Connect(function()
-            AICCombat.NotifyMobSetChanged()
+            AICCombat.NotifyMobSetChanged("Player")
         end)
 
         Players.PlayerRemoving:Connect(function(LeavingPlayer)
@@ -1039,7 +1065,7 @@ return {
                 end
             end
 
-            task.defer(AICCombat.NotifyMobSetChanged)
+            task.defer(AICCombat.NotifyMobSetChanged, "Player")
         end)
 
         AICCombat.S.ExistingMobFolder = workspace:FindFirstChild("Mobs")
@@ -1054,7 +1080,7 @@ return {
             end
 
             AICCombat.WatchMobFolder(Child)
-            AICUI.RefreshEnemyPicker()
+            AICCombat.NotifyMobSetChanged()
         end)
 
         workspace.ChildRemoved:Connect(function(Child)
@@ -1074,7 +1100,7 @@ return {
 
             table.clear(AICCombat.S.ValidMobs)
             AICCombat.S.ClosestTarget = nil
-            AICUI.RefreshEnemyPicker()
+            AICCombat.NotifyMobSetChanged()
         end)
 
         return Module

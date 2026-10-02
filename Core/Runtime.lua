@@ -241,6 +241,10 @@ return {
             INTERACTION_INTERVAL = 0.5,
             TEXT_UPDATE_INTERVAL = 0.5,
             PROFILE_SAVE_DEBOUNCE = 0.5,
+            --// Target pickers. Mob spawns and deaths are batched into one
+            --// rebuild after this many seconds; roster changes show quickly.
+            MOB_TARGET_REFRESH_DELAY = 3,
+            PLAYER_TARGET_REFRESH_DELAY = 0.5,
         
             DEBUG_VISUALIZE_WAYPOINTS = true,
             DEBUG_WAYPOINT_MAX_DISTANCE = 500,

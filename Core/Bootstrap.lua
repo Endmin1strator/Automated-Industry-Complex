@@ -227,7 +227,7 @@ return {
         end
         
         AICUI.S.AddPriorityTarget = function(EntityName)
-            if not EntityName or EntityName == "" or EntityName == "No detected enemies" then
+            if not EntityName or EntityName == "" or AICUI.S.TargetPickerPlaceholders[EntityName] then
                 return
             end
         
