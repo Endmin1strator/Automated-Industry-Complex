@@ -430,7 +430,7 @@ return {
                 end
 
                 if FightBackThreat and not EnemyUsingSkill then
-                    AICCombat.FaceGoblin(FightBackThreat)
+                    AICCombat.FaceWhileRetreating(FightBackThreat)
                     AICCombat.RetreatAttack(FightBackThreat, now)
                 end
 

@@ -344,6 +344,19 @@ return {
             FACE_LEAD_MIN_DISTANCE = 6,
             FACE_LEAD_MAX_SPEED = 20,
             FACE_LEAD_MAX_RATIO = 0.35,
+            --// Facing while retreating: no snap, a slower ease with the turn
+            --// capped at MAX_TURN_SPEED rad/s, changes under DEADBAND degrees
+            --// ignored. Switching between the threat and the run direction
+            --// needs the threat HYSTERESIS studs past the face range to let go,
+            --// and is then held HOLD seconds.
+            RETREAT_FACE_RESPONSIVENESS = 30,
+            RETREAT_FACE_MAX_TURN_SPEED = 6,
+            RETREAT_FACE_DEADBAND = 15,
+            RETREAT_FACE_HYSTERESIS = 6,
+            RETREAT_FACE_HOLD = 0.8,
+            --// Swimming tilts the facing up/down toward the target, at most
+            --// this many degrees.
+            SWIM_FACE_MAX_PITCH = 70,
 
             --// Fighting in water. Distances are measured in 3D there, since a
             --// diver straight below is close on the map but out of reach.

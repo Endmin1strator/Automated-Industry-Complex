@@ -107,6 +107,24 @@ return {
                 and math.deg(math.acos(math.clamp(FlatLook.Unit:Dot(TrueDirection), -1, 1)))
                 or 180
 
+            --// Swimming, tilt toward the target like a diver striking: nose
+            --// down at one below, up at one above. Capped short of vertical,
+            --// where lookAt has no stable "up" and the body would spin.
+            if AICCombatUtils.IsSelfSwimming() then
+                local MaxPitch = math.rad(tonumber(CONFIG.SWIM_FACE_MAX_PITCH) or 70)
+                local Pitch = math.clamp(
+                    math.atan2(MobRoot.Position.Y - RootPosition.Y, Distance),
+                    -MaxPitch,
+                    MaxPitch
+                )
+
+                Direction = Direction * math.cos(Pitch) + Vector3.yAxis * math.sin(Pitch)
+            end
+
+            --// A retreat leaves the alignment slowed down; fighting is fast.
+            FaceOrientation.Responsiveness = CONFIG.FACE_RESPONSIVENESS
+            FaceOrientation.MaxAngularVelocity = math.huge
+
             --// A big miss snaps round in one step; small ones ease, which
             --// keeps the stance from twitching on every tiny adjustment.
             FaceOrientation.RigidityEnabled = Error > (tonumber(CONFIG.FACE_SNAP_ANGLE) or 35)
@@ -115,6 +133,94 @@ return {
                 RootPosition + Direction
             )
 
+            FaceOrientation.Enabled = true
+        end
+
+        --// Facing while backing away. The retreat used to switch between the
+        --// threat and the way it runs whenever the threat crossed the face
+        --// range, and the fight-back swing turned it again in the same frame,
+        --// each through FaceGoblin's instant snap, so the character spun back
+        --// and forth. Here the turn is slow and capped, small changes are
+        --// ignored, and a switch between threat and run direction needs the
+        --// threat clearly in or out of range and is then held for a moment.
+        --// No RunDirection means the caller has to face the threat (a swing).
+        function AICCombat.FaceWhileRetreating(Threat, RunDirection)
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            local FaceOrientation = Runtime:GetFaceOrientation()
+            if not RootPart or not FaceOrientation then
+                return
+            end
+
+            local now = os.clock()
+            local RootPosition = RootPart.Position
+            local ThreatRoot = Threat and Threat:FindFirstChild("HumanoidRootPart")
+            local ThreatDirection, ThreatDistance = nil, math.huge
+
+            if ThreatRoot then
+                local Flat = Vector3.new(
+                    ThreatRoot.Position.X - RootPosition.X,
+                    0,
+                    ThreatRoot.Position.Z - RootPosition.Z
+                )
+
+                if Flat.Magnitude > 0.01 then
+                    ThreatDirection = Flat.Unit
+                    ThreatDistance = Flat.Magnitude
+                end
+            end
+
+            local FlatRun = RunDirection and Vector3.new(RunDirection.X, 0, RunDirection.Z)
+            local RunUnit = FlatRun and FlatRun.Magnitude > 0.01 and FlatRun.Unit or nil
+
+            local FacingThreat = AICCombat.S.RetreatFacingThreat == true
+            local FaceRange = CONFIG.COMBAT_FACE_RANGE
+
+            if FacingThreat then
+                FaceRange += tonumber(CONFIG.RETREAT_FACE_HYSTERESIS) or 6
+            end
+
+            local WantThreat = ThreatDirection ~= nil
+                and (not RunUnit or ThreatDistance <= FaceRange)
+
+            --// A swing turns to its threat at once; the retreat call in the
+            --// next frame then agrees with it instead of turning back.
+            local HoldOver = now - (AICCombat.S.RetreatFacingSince or 0)
+                >= (tonumber(CONFIG.RETREAT_FACE_HOLD) or 0.8)
+
+            if WantThreat ~= FacingThreat and (HoldOver or not RunUnit) then
+                FacingThreat = WantThreat
+                AICCombat.S.RetreatFacingThreat = WantThreat
+                AICCombat.S.RetreatFacingSince = now
+            end
+
+            local Direction = FacingThreat and ThreatDirection or RunUnit or ThreatDirection
+            if not Direction then
+                return
+            end
+
+            --// Keep the current heading through small changes. Only a fresh
+            --// one counts: a heading left over from an old retreat is not.
+            local Previous = AICCombat.S.RetreatFaceDirection
+            local Deadband = math.cos(math.rad(tonumber(CONFIG.RETREAT_FACE_DEADBAND) or 15))
+
+            if Previous
+                and now - (AICCombat.S.RetreatFaceTime or 0) < 0.3
+                and Previous:Dot(Direction) >= Deadband
+            then
+                Direction = Previous
+            end
+
+            AICCombat.S.RetreatFaceDirection = Direction
+            AICCombat.S.RetreatFaceTime = now
+
+            if Humanoid then
+                Humanoid.AutoRotate = false
+            end
+
+            FaceOrientation.RigidityEnabled = false
+            FaceOrientation.Responsiveness = tonumber(CONFIG.RETREAT_FACE_RESPONSIVENESS) or 30
+            FaceOrientation.MaxAngularVelocity = tonumber(CONFIG.RETREAT_FACE_MAX_TURN_SPEED) or 6
+            FaceOrientation.CFrame = CFrame.lookAt(RootPosition, RootPosition + Direction)
             FaceOrientation.Enabled = true
         end
         function AICCombat.GetCombatHealthPercent()

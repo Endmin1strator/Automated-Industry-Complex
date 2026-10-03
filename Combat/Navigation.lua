@@ -831,7 +831,7 @@ return {
 
                     --// Keep watching whatever is out there until healed.
                     if NearestThreat then
-                        AICCombat.FaceGoblin(NearestThreat)
+                        AICCombat.FaceWhileRetreating(NearestThreat)
                     end
 
                     return false
@@ -910,15 +910,7 @@ return {
 
                 --// Back away facing the nearest threat so it can be hit if it
                 --// closes in; with nothing in face range, face the way we run.
-                if NearestThreat and NearestThreatDistance <= CONFIG.COMBAT_FACE_RANGE then
-                    AICCombat.FaceGoblin(NearestThreat)
-                elseif FaceOrientation and RetreatDirection.Magnitude > 0.01 then
-                    FaceOrientation.CFrame = CFrame.lookAt(
-                        RootPosition,
-                        RootPosition + RetreatDirection.Unit
-                    )
-                    FaceOrientation.Enabled = true
-                end
+                AICCombat.FaceWhileRetreating(NearestThreat, RetreatDirection)
         
                 AICCombatUtils.DoJumpIfObstacle(RetreatPosition)
                 return true
@@ -957,10 +949,7 @@ return {
                 if RawTarget then
                     Humanoid.AutoRotate = false
                     Humanoid:MoveTo(RawTarget)
-
-                    if NearestThreat and NearestThreatDistance <= CONFIG.COMBAT_FACE_RANGE then
-                        AICCombat.FaceGoblin(NearestThreat)
-                    end
+                    AICCombat.FaceWhileRetreating(NearestThreat, RawTarget - RootPart.Position)
 
                     AICCombatUtils.DoJumpIfObstacle(RawTarget)
                     return true
