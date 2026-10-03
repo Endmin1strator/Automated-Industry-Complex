@@ -133,6 +133,9 @@ return {
 
             GOBLIN_REACH_DISTANCE = 8,
             PLAYER_ATTACK_DISTANCE = 12,
+            --// A walk passing closer than this to the target's root goes
+            --// through its body, which climbs or jumps onto it.
+            TARGET_BODY_CLEARANCE = 3.5,
             ENEMY_ATTACK_SAFE_DISTANCE = 2,
             ENEMY_BLADE_PADDING = 2,
             GROUP_DANGER_DISTANCE = 22,

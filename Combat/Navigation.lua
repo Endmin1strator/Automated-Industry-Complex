@@ -41,23 +41,27 @@ return {
                 return true
             end
         
-            local RaycastParams = RaycastParams.new()
-            RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
-            RaycastParams.FilterDescendantsInstances = {
+            --// Built as a plain table first: FilterDescendantsInstances hands
+            --// back a copy, so inserting into it afterwards changed nothing.
+            local Filter = {
                 Character,
                 Goblin,   --// เพิ่ม Goblin เข้า exclude ด้วย กันโดนตัวมอนเองที่กำลังจะเดินเข้าหา
             }
-        
+
             --// Ignore every player's character so other players do not block SafeCombat raycasts.
             for _, OtherPlayer in ipairs(Players:GetPlayers()) do
                 if OtherPlayer.Character and OtherPlayer.Character ~= Character then
-                    table.insert(RaycastParams.FilterDescendantsInstances, OtherPlayer.Character)
+                    table.insert(Filter, OtherPlayer.Character)
                 end
             end
-        
+
             if AICCombatUtils.S.DebugFolder then
-                table.insert(RaycastParams.FilterDescendantsInstances, AICCombatUtils.S.DebugFolder)
+                table.insert(Filter, AICCombatUtils.S.DebugFolder)
             end
+
+            local RaycastParams = RaycastParams.new()
+            RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+            RaycastParams.FilterDescendantsInstances = Filter
         
             local Result = workspace:Raycast(Origin, Direction, RaycastParams)
         
@@ -69,6 +73,39 @@ return {
             return true
         end
         
+        --// Whether a straight walk from us to Destination passes through the
+        --// target's body. A player standing still and facing us puts the spot
+        --// behind them on the far side, and walking there ran into them until
+        --// the character climbed or jumped on top.
+        function AICCombat.IsTargetBodyInTheWay(Destination, TargetRoot)
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            if not RootPart or not Destination or not TargetRoot then
+                return false
+            end
+
+            local Origin = RootPart.Position
+            local Segment = Vector3.new(Destination.X - Origin.X, 0, Destination.Z - Origin.Z)
+            local ToTarget = Vector3.new(TargetRoot.Position.X - Origin.X, 0, TargetRoot.Position.Z - Origin.Z)
+            local Length = Segment.Magnitude
+
+            if Length <= 0.01 then
+                return false
+            end
+
+            --// Closest point of the walk to the target, capped at its end.
+            --// A walk heading away never passes through, even when it starts
+            --// right against the body.
+            local Along = math.min(ToTarget:Dot(Segment) / Length, Length)
+
+            if Along <= 0 then
+                return false
+            end
+
+            local Miss = (ToTarget - Segment.Unit * Along).Magnitude
+
+            return Miss < (tonumber(CONFIG.TARGET_BODY_CLEARANCE) or 3.5)
+        end
+
         --// Get a safe combat position around the Target.
         --// Cheap checks are performed first. Expensive path/visibility checks are
         --// only run for the best few candidates to reduce physics-query spikes.
@@ -162,6 +199,7 @@ return {
                 for _, CandidateDistance in ipairs(CombatDistances) do
                     local CandidatePosition = TargetRoot.Position + Direction * CandidateDistance
                     if AICCombatUtils.IsInsideFarmArea(CandidatePosition)
+                        and not AICCombat.IsTargetBodyInTheWay(CandidatePosition, TargetRoot)
                         and not AICCombatUtils.IsWaterAtPosition(CandidatePosition, TargetMob)
                         and not AICCombatUtils.IsPathThroughDeadzone(CandidatePosition)
                         and AICCombat.IsPositionSafeFromBladeGroup(CandidatePosition, TargetMob)
@@ -186,6 +224,7 @@ return {
                     --// Cheap checks first. These avoid expensive raycasts for obviously
                     --// invalid positions.
                     if not AICCombatUtils.IsInsideFarmArea(CandidatePosition)
+                        or AICCombat.IsTargetBodyInTheWay(CandidatePosition, TargetRoot)
                         or AICCombatUtils.IsWaterAtPosition(CandidatePosition, TargetMob)
                         or AICCombatUtils.IsPathThroughDeadzone(CandidatePosition)
                         or not AICCombat.IsPositionSafeFromBladeGroup(CandidatePosition, TargetMob)
@@ -1191,6 +1230,18 @@ return {
         
             return true
         end
+        --// Pressed up against the target: a stall there is the body in the
+        --// way, not a ledge a hop would clear.
+        local function IsAgainstTargetBody(Goblin)
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            local GoblinRoot = Goblin and Goblin:FindFirstChild("HumanoidRootPart")
+
+            return RootPart ~= nil
+                and GoblinRoot ~= nil
+                and AICCombatUtils.GetHorizontalDistance(RootPart.Position, GoblinRoot.Position)
+                    <= (tonumber(CONFIG.TARGET_BODY_CLEARANCE) or 3.5)
+        end
+
         function AICCombat.MoveAlongTargetPath(Goblin, Destination)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             if not RootPart or not Goblin or not Destination then
@@ -1231,14 +1282,17 @@ return {
                 --// Only take them when something is actually in the way, or when the
                 --// character has stopped making progress.
                 if Waypoint.Action == Enum.PathWaypointAction.Jump
-                    and (AICCombatUtils.IsJumpableObstacleAhead(Waypoint.Position) or AICCombatUtils.IsStuck())
+                    and (AICCombatUtils.IsJumpableObstacleAhead(Waypoint.Position)
+                        or (AICCombatUtils.IsStuck() and not IsAgainstTargetBody(Goblin)))
                 then
                     AICCombatUtils.DoJump()
                 end
 
                 --// Hung on a corner between two path points: the path is
                 --// fine, the body is caught on the edge. A hop frees it.
-                if AICCombatUtils.IsStuck() then
+                --// Not when the "corner" is the target itself: the hop lands
+                --// on top of it.
+                if AICCombatUtils.IsStuck() and not IsAgainstTargetBody(Goblin) then
                     AICCombatUtils.DoJump()
                 end
 
@@ -1400,6 +1454,22 @@ return {
             then
                 AICCombatUtils.ResetStuckTracker()
                 AICCombat.ResetTargetPath()
+
+                --// The target stands between us and the spot: pushing on only
+                --// climbs onto it. Hold here (melee range already) and let the
+                --// solver pick a spot that does not go through it.
+                if AICCombat.IsTargetBodyInTheWay(Destination, GoblinRoot) then
+                    Humanoid.AutoRotate = false
+                    Humanoid:MoveTo(RootPart.Position)
+                    AICCombat.FaceGoblin(Goblin)
+
+                    if Destination == AICCombat.S.CACHED_SAFECOMBAT_POSITION then
+                        AICCombat.S.LAST_SAFECOMBAT_TIME = 0
+                    end
+
+                    return true
+                end
+
                 MoveStraight(Humanoid, Goblin, Destination)
                 return true
             end
@@ -1483,10 +1553,48 @@ return {
                 or AICCombatUtils.IsModelInWater(Goblin)
         end
 
+        --// The ControlModule calls Player:Move and sets Humanoid.Jump from the
+        --// keyboard on every RenderStepped, before physics. A swim stroke
+        --// issued from Heartbeat was zeroed again before it ever moved the
+        --// character (MoveTo survives that, which is why the walk to the
+        --// shore worked and the swim did not). SwimChase leaves its latest
+        --// order here and it is re-applied right after the ControlModule.
+        local SWIM_STEP_NAME = "AICSwimChase"
+        local SWIM_ORDER_LIFETIME = 0.25
+        AICCombat.S.SwimOrder = nil
+
+        local function ApplySwimOrder()
+            local Order = AICCombat.S.SwimOrder
+            if not Order then
+                return
+            end
+
+            --// SwimChase stopped calling: the fight left the water.
+            if os.clock() - Order.Time > SWIM_ORDER_LIFETIME then
+                AICCombat.S.SwimOrder = nil
+                return
+            end
+
+            local Character, Humanoid = Runtime:GetCharacter()
+            if not Humanoid or Humanoid.Health <= 0 then
+                return
+            end
+
+            Humanoid:Move(Order.Direction, false)
+
+            if Order.Rise then
+                Humanoid.Jump = true
+            end
+        end
+
+        pcall(RunService.UnbindFromRenderStep, RunService, SWIM_STEP_NAME)
+        RunService:BindToRenderStep(SWIM_STEP_NAME, Enum.RenderPriority.Input.Value + 1, ApplySwimOrder)
+
         function AICCombat.SwimChase(Goblin)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             local MobRoot = Goblin and Goblin:FindFirstChild("HumanoidRootPart")
             if not Humanoid or not RootPart or not MobRoot then
+                AICCombat.S.SwimOrder = nil
                 return false
             end
 
@@ -1502,20 +1610,19 @@ return {
             if not AICCombatUtils.IsSelfSwimming() then
                 --// Still on land: walk in after them. Pathfinding would
                 --// refuse the water, so this is a straight line.
+                AICCombat.S.SwimOrder = nil
                 Humanoid:MoveTo(MobRoot.Position)
                 AICCombatUtils.DoJumpIfObstacle(MobRoot.Position)
                 return true
             end
 
-            if Offset.Magnitude <= Arrival then
-                Humanoid:Move(Vector3.zero)
-            else
-                Humanoid:Move(Offset.Unit, false)
-            end
-
             --// Rise toward a target above us, including one back on land.
             --// Jump in water swims upward rather than leaving the surface.
-            Humanoid.Jump = Offset.Y > Margin
+            AICCombat.S.SwimOrder = {
+                Direction = Offset.Magnitude > Arrival and Offset.Unit or Vector3.zero,
+                Rise = Offset.Y > Margin,
+                Time = os.clock(),
+            }
 
             return true
         end
