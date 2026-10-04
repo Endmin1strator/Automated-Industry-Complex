@@ -39,7 +39,7 @@ return {
             { Name = "AutoSmithing",      Default = false, Key = "q" },
             --// Server tab (ServerUI): leave when a danger group member is here,
             --// and notify about players off the whitelist.
-            { Name = "DangerGroupHop",    Default = true,  Key = "r" },
+            { Name = "DangerGroupHop",    Default = false, Key = "r" },
             { Name = "JoinAlerts",        Default = false, Key = "s" },
             --// Pull a pack of mobs together, then use the skill (MobGather).
             { Name = "MobGather",         Default = false, Key = "t" },
