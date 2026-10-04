@@ -37,6 +37,9 @@ return {
         local PATH_TO_MOB_HOLD = 2
         --// A path solve not back after this long is given up on.
         local PATH_COMPUTE_TIMEOUT = 3
+        --// With Safe Combat off, the spots tried around the target, nearest
+        --// first: just clear of its body (TARGET_BODY_CLEARANCE) and in reach.
+        local CLOSE_COMBAT_DISTANCES = { 5, 6.5, 8 }
 
         function AICCombat.IsSafeCombatPathClear(TargetPosition, Goblin)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
@@ -119,7 +122,10 @@ return {
         --// Get a safe combat position around the Target.
         --// Cheap checks are performed first. Expensive path/visibility checks are
         --// only run for the best few candidates to reduce physics-query spikes.
-        function AICCombat.GetSafeCombatPosition(TargetMob)
+        --// Close is the Safe Combat off version: the same rear-first spots and
+        --// the same circling as the mob turns, but CLOSE_COMBAT_DISTANCES from
+        --// it instead of outside its blade reach. Only the spacing differs.
+        function AICCombat.GetSafeCombatPosition(TargetMob, Close)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             if not RootPart or not TargetMob then
                 return nil
@@ -183,13 +189,18 @@ return {
             --// Farm Zone can make the normal attack radius unreachable when the mob
             --// is close to the edge of the zone. Try progressively closer combat
             --// positions instead of giving up at PLAYER_ATTACK_DISTANCE.
-            local CombatDistances = {
+            local CombatDistances = Close and CLOSE_COMBAT_DISTANCES or {
                 CombatDistance,
                 math.max(CONFIG.GOBLIN_REACH_DISTANCE, CombatDistance - 2),
                 math.max(CONFIG.GOBLIN_REACH_DISTANCE, CombatDistance - 4),
                 math.max(CONFIG.GOBLIN_REACH_DISTANCE, CombatDistance - 6),
                 math.max(CONFIG.GOBLIN_REACH_DISTANCE, CombatDistance - 8),
             }
+
+            --// Close spots sit inside the blade reach by design.
+            local function IsBladeSafe(CandidatePosition)
+                return Close or AICCombat.IsPositionSafeFromBladeGroup(CandidatePosition, TargetMob)
+            end
         
             --// Always prefer the mob's rear. This applies both when LastAttacker is
             --// the local player and when another player is the current attacker.
@@ -216,7 +227,7 @@ return {
                         and not (IsPlayerTarget and AICCombat.IsTargetBodyInTheWay(CandidatePosition, TargetRoot))
                         and not AICCombatUtils.IsWaterAtPosition(CandidatePosition, TargetMob)
                         and not AICCombatUtils.IsPathThroughDeadzone(CandidatePosition)
-                        and AICCombat.IsPositionSafeFromBladeGroup(CandidatePosition, TargetMob)
+                        and IsBladeSafe(CandidatePosition)
                     then
                         local Dot = math.clamp(CurrentDirection:Dot(Direction), -1, 1)
                         local DirectionPenalty = (1 - Dot) * CandidateDistance * 0.2
@@ -241,7 +252,7 @@ return {
                         or (IsPlayerTarget and AICCombat.IsTargetBodyInTheWay(CandidatePosition, TargetRoot))
                         or AICCombatUtils.IsWaterAtPosition(CandidatePosition, TargetMob)
                         or AICCombatUtils.IsPathThroughDeadzone(CandidatePosition)
-                        or not AICCombat.IsPositionSafeFromBladeGroup(CandidatePosition, TargetMob)
+                        or not IsBladeSafe(CandidatePosition)
                     then
                         continue
                     end
@@ -274,7 +285,7 @@ return {
                 local CandidatePosition = Candidates[Index].Position
         
                 if AICCombatUtils.IsPathThroughWater(CandidatePosition)
-                    or AICCombat.IsPathThroughBladeGroupDanger(CandidatePosition, TargetMob)
+                    or (not Close and AICCombat.IsPathThroughBladeGroupDanger(CandidatePosition, TargetMob))
                 then
                     continue
                 end
@@ -1148,8 +1159,9 @@ return {
                 or not AICCombat.IsSafeCombatPathClear(TargetPosition, Goblin)
                 or AICCombatUtils.IsPathThroughWater(TargetPosition)
                 or AICCombatUtils.IsPathThroughDeadzone(TargetPosition)
-                or AICCombat.IsPathThroughBladeGroupDanger(TargetPosition, Goblin)
-        
+                --// Close combat (Safe Combat off) walks past the blade on purpose.
+                or (AICCombat.S.SafeCombatPositionEnabled and AICCombat.IsPathThroughBladeGroupDanger(TargetPosition, Goblin))
+
             return AICCombat.S.LastDirectPathBlocked
         end
         
@@ -1875,29 +1887,39 @@ return {
             --// It only cares about BladePart distance, FarmZone, and Deadzone.
             --// It does not use CanSeeGoblin, water checks, path checks, or SafeCombat.
             local SafeEnemyRangePosition = AICCombat.GetSafeEnemyRangePosition(Goblin)
+            local SafeEnemyArrived = false
+
             if SafeEnemyRangePosition then
                 local SafeEnemyOffset = SafeEnemyRangePosition - RootPart.Position
                 local SafeEnemyDistance = Vector3.new(SafeEnemyOffset.X, 0, SafeEnemyOffset.Z).Magnitude
-        
-                if SafeEnemyDistance > CONFIG.SAFE_ENEMY_RANGE_ARRIVAL
+                SafeEnemyArrived = SafeEnemyDistance <= CONFIG.SAFE_ENEMY_RANGE_ARRIVAL
+
+                if not SafeEnemyArrived
                     and AICCombat.ChaseMoveTo(Goblin, SafeEnemyRangePosition)
                 then
                     return
                 end
             end
-        
-            --// Safe Combat Position disabled:
-            --// simply move directly toward the target.
-            if not AICCombat.S.SafeCombatPositionEnabled then
-                AICCombat.ResetTargetReposition()
 
-                if not AICCombat.ChaseMoveTo(Goblin, MobRoot.Position) then
-                    Humanoid:Move(Vector3.zero)
-                    AICCombat.FaceGoblin(Goblin)
-                end
+            --// Safe Combat off fights exactly as Safe Combat on does (rear
+            --// first, circling round as the mob turns to face us, paths round
+            --// obstacles) but close: CLOSE_COMBAT_DISTANCES from the mob rather
+            --// than outside its blade reach, and without backing off its blade.
+            --// It used to walk straight at the mob and stand at its face.
+            local CloseCombat = not AICCombat.S.SafeCombatPositionEnabled
+
+            --// Safe Enemy Range is the spacing the player asked for: once there,
+            --// stay (it moves round with the mob), or the close spot would pull
+            --// us back in every frame. Before, arriving fell through to walking
+            --// at the mob's face, then back out again.
+            if CloseCombat and SafeEnemyArrived then
+                Humanoid.AutoRotate = false
+                Humanoid:Move(Vector3.zero)
+                AICCombat.FaceGoblin(Goblin)
+                AICCombat.S.TargetUnreachableSince = nil
                 return
             end
-        
+
             if AICCombat.S.TargetApproachMob ~= Goblin then
                 AICCombat.ResetTargetReposition()
                 AICCombat.S.TargetApproachMob = Goblin
@@ -1912,8 +1934,9 @@ return {
             --// ========================================================
         
             local PushDirection, ClosestEffectiveDistance, ClosestBlade = AICCombat.GetBladeDangerData(Goblin)
-        
-            if ClosestEffectiveDistance <= 0 then
+
+            --// Close combat stands inside the blade reach on purpose.
+            if ClosestEffectiveDistance <= 0 and not CloseCombat then
                 if PushDirection.Magnitude > 0 then
                     local RetreatDistance = math.abs(ClosestEffectiveDistance) + CONFIG.ENEMY_ATTACK_SAFE_DISTANCE + 2
                     local RetreatPosition = RootPart.Position + PushDirection * RetreatDistance
@@ -1963,12 +1986,14 @@ return {
         
             local SafeCombatPosition = AICCombat.S.CACHED_SAFECOMBAT_POSITION
             if AICCombat.S.CACHED_SAFECOMBAT_TARGET ~= Goblin
+                or AICCombat.S.CACHED_SAFECOMBAT_CLOSE ~= CloseCombat
                 or now - AICCombat.S.LAST_SAFECOMBAT_TIME >= CONFIG.SAFECOMBAT_INTERVAL
                 or (SafeCombatPosition and not AICCombatUtils.IsInsideFarmArea(SafeCombatPosition))
             then
                 AICCombat.S.LAST_SAFECOMBAT_TIME = now
                 AICCombat.S.CACHED_SAFECOMBAT_TARGET = Goblin
-                SafeCombatPosition = AICCombat.GetSafeCombatPosition(Goblin)
+                AICCombat.S.CACHED_SAFECOMBAT_CLOSE = CloseCombat
+                SafeCombatPosition = AICCombat.GetSafeCombatPosition(Goblin, CloseCombat)
                 AICCombat.S.CACHED_SAFECOMBAT_POSITION = SafeCombatPosition
             end
         
