@@ -8,6 +8,7 @@ return {
 
     Start = function(Context)
         local UI = Context.UI
+        local UserInputService = Context.Services.UserInputService
 
         --// Kept free on every side of the screen.
         local SCREEN_MARGIN = 12
@@ -15,6 +16,10 @@ return {
         local WINDOW_Z = 60
         local POPUP_Z = 70
         local HEADER_HEIGHT = 32
+        --// Smallest a window can be resized to, unless it asks otherwise.
+        local DEFAULT_MIN_WIDTH = 360
+        local DEFAULT_MIN_HEIGHT = 240
+        local RESIZE_GRIP_SIZE = 18
 
         local Floating = {
             Name = "Floating",
@@ -165,17 +170,27 @@ return {
             return pcall(Copy, Text)
         end
 
-        --// A window of its own. Options: Title, Width, Height, OnClose.
-        --// Content goes in Window.Body, the area under the title bar.
+        --// A window of its own. Options: Title, Width, Height (its starting
+        --// size), MinWidth, MinHeight, OnClose, OnMinimize(Minimized).
+        --// Content goes in Window.Body, the area under the title bar, and
+        --// should size by scale so it follows a resize.
+        --// The title bar drags it, "—" folds it to the title bar and back,
+        --// and the corner grip resizes it. Size and fold are kept for the
+        --// session, across closing and reopening.
         function Floating.CreateWindow(Options)
             local Theme = UI.Theme
-            local Window = { IsOpen = false }
+            local MinSize = Vector2.new(Options.MinWidth or DEFAULT_MIN_WIDTH, Options.MinHeight or DEFAULT_MIN_HEIGHT)
+            local Window = {
+                IsOpen = false,
+                Minimized = false,
+                --// The unfolded size, as resized.
+                Size = Vector2.new(Options.Width, Options.Height),
+                Placed = false,
+            }
 
             local Frame = New("Frame", {
                 Name = Options.Title,
                 Parent = UI.ScreenGui,
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                Position = UDim2.fromScale(0.5, 0.5),
                 Size = UDim2.fromOffset(Options.Width, Options.Height),
                 BackgroundColor3 = Theme.Background,
                 BackgroundTransparency = 0.03,
@@ -199,7 +214,7 @@ return {
             Floating.Corner(Header, 6)
             Floating.Label(Header, Options.Title, 13, {
                 Position = UDim2.fromOffset(12, 0),
-                Size = UDim2.new(1, -50, 1, 0),
+                Size = UDim2.new(1, -76, 1, 0),
                 TextColor3 = Theme.Cyan,
                 Font = Enum.Font.GothamBold,
             })
@@ -207,6 +222,12 @@ return {
             local Close = Floating.Button(Header, "×", Theme.Danger, {
                 AnchorPoint = Vector2.new(1, 0.5),
                 Position = UDim2.new(1, -8, 0.5, 0),
+                Size = UDim2.fromOffset(22, 20),
+            })
+
+            local Minimize = Floating.Button(Header, "—", Theme.TextMuted, {
+                AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.new(1, -34, 0.5, 0),
                 Size = UDim2.fromOffset(22, 20),
             })
 
@@ -218,9 +239,38 @@ return {
                 Size = UDim2.new(1, -20, 1, -(HEADER_HEIGHT + 18)),
             })
 
+            local Grip = New("TextButton", {
+                Parent = Frame,
+                AnchorPoint = Vector2.new(1, 1),
+                Position = UDim2.fromScale(1, 1),
+                Size = UDim2.fromOffset(RESIZE_GRIP_SIZE, RESIZE_GRIP_SIZE),
+                BackgroundTransparency = 1,
+                Text = "◢",
+                TextColor3 = Theme.TextMuted,
+                TextSize = 12,
+                Font = Enum.Font.GothamBold,
+                AutoButtonColor = false,
+                ZIndex = 2,
+            })
+
             UI:_MakeDraggable(Header, Frame, true)
 
-            --// Fits a small screen, keeping the margin on every side.
+            --// Largest size that still fits on screen from where it stands.
+            local function GetMaxSize()
+                local Screen = UI.ScreenGui.AbsoluteSize
+
+                return Vector2.new(
+                    math.max(MinSize.X, Screen.X - Frame.AbsolutePosition.X - SCREEN_MARGIN),
+                    math.max(MinSize.Y, Screen.Y - Frame.AbsolutePosition.Y - SCREEN_MARGIN)
+                )
+            end
+
+            local function ApplySize()
+                local Height = Window.Minimized and HEADER_HEIGHT or Window.Size.Y
+                Frame.Size = UDim2.fromOffset(Window.Size.X, Height)
+            end
+
+            --// Centred the first time, and shrunk to fit a small screen.
             local function FitToScreen()
                 local Screen = UI.ScreenGui.AbsoluteSize
 
@@ -228,13 +278,81 @@ return {
                     return
                 end
 
-                Frame.Size = UDim2.fromOffset(
-                    math.min(Options.Width, Screen.X - SCREEN_MARGIN * 2),
-                    math.min(Options.Height, Screen.Y - SCREEN_MARGIN * 2)
+                local MaxWidth = Screen.X - SCREEN_MARGIN * 2
+                local MaxHeight = Screen.Y - SCREEN_MARGIN * 2
+
+                Window.Size = Vector2.new(
+                    math.clamp(Window.Size.X, math.min(MinSize.X, MaxWidth), MaxWidth),
+                    math.clamp(Window.Size.Y, math.min(MinSize.Y, MaxHeight), MaxHeight)
                 )
 
+                if not Window.Placed then
+                    Window.Placed = true
+                    Frame.Position = UDim2.fromOffset(
+                        math.floor((Screen.X - Window.Size.X) * 0.5),
+                        math.floor((Screen.Y - Window.Size.Y) * 0.5)
+                    )
+                end
+
+                ApplySize()
                 task.defer(UI._ClampToParent, Frame)
             end
+
+            function Window:SetMinimized(Value)
+                Window.Minimized = Value == true
+                Window.Body.Visible = not Window.Minimized
+                Grip.Visible = not Window.Minimized
+                Minimize.Text = Window.Minimized and "+" or "—"
+                ApplySize()
+
+                if Options.OnMinimize then
+                    Options.OnMinimize(Window.Minimized)
+                end
+            end
+
+            UI:_Connect(Minimize.Activated, function()
+                Window:SetMinimized(not Window.Minimized)
+            end)
+
+            --// Resized from the bottom-right grip; the top-left corner stays put.
+            local Resizing, ResizeStart, StartSize = false, nil, nil
+
+            UI:_Connect(Grip.InputBegan, function(Input)
+                if Input.UserInputType == Enum.UserInputType.MouseButton1
+                    or Input.UserInputType == Enum.UserInputType.Touch
+                then
+                    Resizing = true
+                    ResizeStart = Vector2.new(Input.Position.X, Input.Position.Y)
+                    StartSize = Window.Size
+                end
+            end)
+
+            UI:_Connect(UserInputService.InputChanged, function(Input)
+                if not Resizing
+                    or (Input.UserInputType ~= Enum.UserInputType.MouseMovement
+                        and Input.UserInputType ~= Enum.UserInputType.Touch)
+                then
+                    return
+                end
+
+                local Delta = Vector2.new(Input.Position.X, Input.Position.Y) - ResizeStart
+                local MaxSize = GetMaxSize()
+
+                Window.Size = Vector2.new(
+                    math.clamp(StartSize.X + Delta.X, MinSize.X, MaxSize.X),
+                    math.clamp(StartSize.Y + Delta.Y, MinSize.Y, MaxSize.Y)
+                )
+
+                ApplySize()
+            end)
+
+            UI:_Connect(UserInputService.InputEnded, function(Input)
+                if Input.UserInputType == Enum.UserInputType.MouseButton1
+                    or Input.UserInputType == Enum.UserInputType.Touch
+                then
+                    Resizing = false
+                end
+            end)
 
             function Window:Open()
                 Window.IsOpen = true

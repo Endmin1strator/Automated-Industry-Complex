@@ -475,6 +475,10 @@ return {
                     S.IsOpen = false
                     HidePopup()
                 end,
+                --// The popup belongs to a row that is now hidden.
+                OnMinimize = function()
+                    HidePopup()
+                end,
             })
 
             SearchBox = New("TextBox", {
