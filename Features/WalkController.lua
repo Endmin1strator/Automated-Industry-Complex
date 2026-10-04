@@ -1,11 +1,19 @@
--- WalkController walks Auto Mining and Auto Smithing to a spot. It walks
--- straight while that is safe and switches to pathfinding when the straight
--- line is not: a wall a hop cannot clear, a hole too wide to jump, a climb
--- higher than a jump, a deadzone in the way, or (with KeepInsideMine)
--- leaving the mine zone. A hole that can be jumped is jumped at its edge.
--- Paths are solved off the heartbeat, so a slow solve never stalls a frame,
--- and a path that enters a deadzone (or leaves the mine zone, with
--- KeepInsideMine) is refused.
+-- WalkController walks Auto Mining and Auto Smithing to a spot.
+--
+-- Pathfinding comes first whenever the straight line is not clean: an
+-- obstacle in the body's way (anything solid that is not walkable ground,
+-- even one a hop could clear), a hole too wide to jump, a climb higher
+-- than a jump, a deadzone, or (with KeepInsideMine) leaving the mine zone.
+-- An open line is walked straight, and a jumpable hole is jumped at its
+-- edge. Paths are solved off the heartbeat, so a slow solve never stalls a
+-- frame, and a path that enters a deadzone (or leaves the mine zone) is
+-- refused.
+--
+-- When the solver finds no path, the walk detours: it steps toward the
+-- open side of the obstacle nearest the heading, then tries the straight
+-- line and the path again from there. Only after MAX_DETOURS in a row
+-- bring it no closer does it report "failed"; an obstacle low enough to
+-- hop is then still jumped as a last resort.
 return {
     Name = "WalkController",
     Dependencies = {"Runtime", "CombatUtils"},
@@ -23,7 +31,14 @@ return {
         local DIRECT_CHECK_INTERVAL = 0.1
         --// Taller than this above the feet needs a path, not a straight walk.
         local MAX_DIRECT_RISE = 6
-        local WALL_PROBE_DISTANCE = 12
+        --// How far ahead the body probe looks for obstacles.
+        local OBSTACLE_PROBE_DISTANCE = 8
+        --// The body probe: as wide as the character, from BODY_PROBE_LIFT
+        --// above the feet (over steps a walk takes in stride) to head height.
+        local BODY_PROBE_SIZE = Vector3.new(2.4, 3.5, 2.4)
+        local BODY_PROBE_LIFT = 1
+        --// A surface facing up more than this is ground to walk up, not a wall.
+        local WALKABLE_NORMAL_Y = 0.6
         --// Jump once the hole edge is this close.
         local HOLE_JUMP_EDGE = 2.5
         --// Once on a path, stay on it at least this long so a borderline
@@ -33,9 +48,20 @@ return {
         local PATH_RETRY_INTERVAL = 2
         local PATH_WAYPOINT_REACH = 3
         local PATH_DESTINATION_TOLERANCE = 4
-        --// Jumping has not freed the character for this long: take a path.
+        --// Jumping has not freed the character for this long: take a path,
+        --// or solve the one being walked again.
         local STUCK_PATH_SECONDS = 1.5
         local ZONE_SAMPLE_DISTANCE = 4
+        --// Detours, tried nearest the heading first, on alternating sides.
+        local DETOUR_ANGLES = { 30, 60, 90, 120, 150 }
+        local DETOUR_PROBE_DISTANCE = 10
+        --// A side needs at least this much open ground to be worth a detour.
+        local DETOUR_MIN_FREE = 4
+        local DETOUR_REACH = 2
+        local DETOUR_TIMEOUT = 2.5
+        local MAX_DETOURS = 4
+        --// Closer to the destination by this much counts as progress.
+        local DETOUR_PROGRESS = 2
 
         local Movement = {
             Name = "WalkController",
@@ -45,10 +71,18 @@ return {
                 StuckSince = nil,
                 LastDirectCheck = 0,
                 DirectBlocked = false,
+                --// The straight line is unsafe (hole, climb, deadzone, zone),
+                --// not merely obstructed.
+                Unsafe = false,
                 HoleCanJump = false,
                 HoleEdge = nil,
                 PathToken = 0,
                 Path = {},
+                Detour = nil,
+                DetourSide = 1,
+                DetourCount = 0,
+                BestDistance = math.huge,
+                ProgressDestination = nil,
             },
         }
 
@@ -107,8 +141,26 @@ return {
             return Params
         end
 
-        --// A wall straight ahead that a hop will not clear.
-        local function IsWallAhead(RootPart, Character, Destination, IgnoreModel)
+        local function GetFeet(RootPart, Humanoid)
+            --// R6 legs are not counted in HipHeight.
+            local Hip = Humanoid.RigType == Enum.HumanoidRigType.R6 and 2 or Humanoid.HipHeight
+            return RootPart.Position - Vector3.new(0, Hip + RootPart.Size.Y * 0.5, 0)
+        end
+
+        --// How far the body gets along Direction (flat, unit) before it hits
+        --// something that is not walkable ground, or nil when nothing.
+        local function CastBody(RootPart, Humanoid, Params, Direction, Distance)
+            local Center = GetFeet(RootPart, Humanoid) + Vector3.new(0, BODY_PROBE_LIFT + BODY_PROBE_SIZE.Y * 0.5, 0)
+            local Hit = workspace:Blockcast(CFrame.new(Center), BODY_PROBE_SIZE, Direction * Distance, Params)
+
+            if Hit and Hit.Normal.Y < WALKABLE_NORMAL_Y then
+                return Hit.Distance
+            end
+
+            return nil
+        end
+
+        local function IsObstacleAhead(RootPart, Humanoid, Character, Destination, IgnoreModel)
             local Offset = Destination - RootPart.Position
             local Flat = Vector3.new(Offset.X, 0, Offset.Z)
 
@@ -116,17 +168,12 @@ return {
                 return false
             end
 
-            local Hit = workspace:Raycast(
-                RootPart.Position,
-                Flat.Unit * math.min(Flat.Magnitude, WALL_PROBE_DISTANCE),
-                BuildWallParams(Character, IgnoreModel)
-            )
-
-            return Hit ~= nil and not AICCombatUtils.IsJumpableObstacleAhead(Destination)
+            local Distance = math.min(Flat.Magnitude, OBSTACLE_PROBE_DISTANCE)
+            return CastBody(RootPart, Humanoid, BuildWallParams(Character, IgnoreModel), Flat.Unit, Distance) ~= nil
         end
 
         --// Re-tests the straight line at most every DIRECT_CHECK_INTERVAL.
-        local function UpdateDirectCheck(now, RootPart, Character, Destination, Options)
+        local function UpdateDirectCheck(now, RootPart, Humanoid, Character, Destination, Options)
             if now - S.LastDirectCheck < DIRECT_CHECK_INTERVAL then
                 return
             end
@@ -137,11 +184,13 @@ return {
             S.HoleCanJump = IsHole and CanJump
             S.HoleEdge = Edge
 
-            S.DirectBlocked = (IsHole and not CanJump)
+            S.Unsafe = (IsHole and not CanJump)
                 or Destination.Y - RootPart.Position.Y > MAX_DIRECT_RISE
                 or AICCombatUtils.IsPathThroughDeadzone(Destination)
                 or (Options.KeepInsideMine and not SegmentStaysInMine(RootPart.Position, Destination))
-                or IsWallAhead(RootPart, Character, Destination, Options.Ignore)
+
+            S.DirectBlocked = S.Unsafe
+                or IsObstacleAhead(RootPart, Humanoid, Character, Destination, Options.Ignore)
         end
 
         local function JumpHoleIfClose()
@@ -258,11 +307,116 @@ return {
             AICCombatUtils.DoJump()
 
             if now - S.StuckSince >= STUCK_PATH_SECONDS then
+                --// Already on a path and still stuck: solve it again from here.
+                if now < S.PathUntil then
+                    S.Path.Time = 0
+                end
+
                 S.PathUntil = now + PATH_HOLD_SECONDS
                 S.StuckSince = nil
                 AICCombatUtils.ResetStuckTracker()
             end
         end
+
+        ------------------------------------------------------------------------
+        --// Detours, for when the solver finds no path
+        ------------------------------------------------------------------------
+
+        --// Detours are only worth repeating while they lead somewhere.
+        local function TrackProgress(RootPart, Destination)
+            if not S.ProgressDestination
+                or (S.ProgressDestination - Destination).Magnitude > PATH_DESTINATION_TOLERANCE
+            then
+                S.ProgressDestination = Destination
+                S.BestDistance = math.huge
+                S.DetourCount = 0
+            end
+
+            local Distance = (Destination - RootPart.Position).Magnitude
+
+            if Distance < S.BestDistance - DETOUR_PROGRESS then
+                S.BestDistance = Distance
+                S.DetourCount = 0
+            end
+        end
+
+        local function IsDetourAllowed(RootPart, Candidate, KeepInsideMine)
+            local IsHole, CanJump = AICCombatUtils.IsHoleAhead(Candidate)
+
+            return CanUseGround(Candidate, KeepInsideMine)
+                and not (IsHole and not CanJump)
+                and not AICCombatUtils.IsPathThroughDeadzone(Candidate)
+                and not (KeepInsideMine and not SegmentStaysInMine(RootPart.Position, Candidate))
+        end
+
+        --// The open side nearest the heading, starting on the other side
+        --// from last time so two detours do not hit the same wall.
+        local function FindDetour(RootPart, Humanoid, Character, Destination, Options)
+            local Offset = Destination - RootPart.Position
+            local Heading = Vector3.new(Offset.X, 0, Offset.Z)
+            Heading = Heading.Magnitude > 0.01 and Heading.Unit or RootPart.CFrame.LookVector
+
+            local Params = BuildWallParams(Character, Options.Ignore)
+            S.DetourSide = -S.DetourSide
+
+            for _, Angle in ipairs(DETOUR_ANGLES) do
+                for _, Sign in ipairs({ S.DetourSide, -S.DetourSide }) do
+                    local Direction = CFrame.Angles(0, math.rad(Angle * Sign), 0):VectorToWorldSpace(Heading)
+                    local HitDistance = CastBody(RootPart, Humanoid, Params, Direction, DETOUR_PROBE_DISTANCE)
+                    local Free = HitDistance and HitDistance - 1 or DETOUR_PROBE_DISTANCE
+
+                    if Free >= DETOUR_MIN_FREE then
+                        local Candidate = RootPart.Position + Direction * Free
+
+                        if IsDetourAllowed(RootPart, Candidate, Options.KeepInsideMine) then
+                            return Candidate
+                        end
+                    end
+                end
+            end
+
+            return nil
+        end
+
+        local function StartDetour(now, RootPart, Humanoid, Character, Destination, Options)
+            if S.DetourCount >= MAX_DETOURS then
+                return false
+            end
+
+            local Position = FindDetour(RootPart, Humanoid, Character, Destination, Options)
+
+            if not Position then
+                return false
+            end
+
+            S.DetourCount += 1
+            S.Detour = { Position = Position, Until = now + DETOUR_TIMEOUT }
+            AICCombatUtils.ResetStuckTracker()
+            return true
+        end
+
+        --// True while a detour has this frame. Once reached (or timed out),
+        --// the straight line and the path are tried again from there.
+        local function WalkDetour(now, RootPart, Humanoid)
+            local Detour = S.Detour
+
+            if not Detour then
+                return false
+            end
+
+            if now > Detour.Until or AICCombatUtils.GetHorizontalDistance(RootPart.Position, Detour.Position) <= DETOUR_REACH then
+                S.Detour = nil
+                S.PathUntil = 0
+                S.LastDirectCheck = 0
+                return false
+            end
+
+            AICCombatUtils.DoJumpIfObstacle(Detour.Position)
+            Humanoid:MoveTo(Detour.Position)
+            return true
+        end
+
+        ------------------------------------------------------------------------
 
         --// Stands still. A MoveTo stays active until reached, so it is
         --// cancelled once by moving to where we already are.
@@ -282,7 +436,7 @@ return {
         end
 
         --// Options:
-        --//   Ignore          model the walls probe looks through (the ore)
+        --//   Ignore          model the obstacle probes look through (the ore)
         --//   KeepInsideMine  never step outside the mine zones
         --// Returns "moving", "waiting" (standing while a path is solved) or
         --// "failed" (no allowed way there).
@@ -306,7 +460,13 @@ return {
             S.Holding = false
 
             UpdateStuck(now)
-            UpdateDirectCheck(now, RootPart, Character, Destination, Options)
+            TrackProgress(RootPart, Destination)
+
+            if WalkDetour(now, RootPart, Humanoid) then
+                return "moving"
+            end
+
+            UpdateDirectCheck(now, RootPart, Humanoid, Character, Destination, Options)
 
             if S.DirectBlocked and now >= S.PathUntil then
                 S.PathUntil = now + PATH_HOLD_SECONDS
@@ -319,11 +479,25 @@ return {
                     return Result
                 end
 
-                --// Never walk the blocked straight line meanwhile; that is
-                --// the hole or the deadzone the path is going around.
-                if Result == "waiting" or (Result == "failed" and S.DirectBlocked) then
+                if Result == "waiting" then
                     self:Hold()
                     return Result
+                end
+
+                --// No path: go round the obstacle and try again from there.
+                if Result == "failed" then
+                    if StartDetour(now, RootPart, Humanoid, Character, Destination, Options) then
+                        WalkDetour(now, RootPart, Humanoid)
+                        return "moving"
+                    end
+
+                    --// Out of detours. Never walk an unsafe line (the hole or
+                    --// the deadzone); an obstacle is still hopped if it is low
+                    --// enough, otherwise give up.
+                    if S.Unsafe or (S.DirectBlocked and not AICCombatUtils.IsJumpableObstacleAhead(Destination)) then
+                        self:Hold()
+                        return "failed"
+                    end
                 end
             end
 
@@ -359,8 +533,13 @@ return {
             S.StuckSince = nil
             S.LastDirectCheck = 0
             S.DirectBlocked = false
+            S.Unsafe = false
             S.HoleCanJump = false
             S.HoleEdge = nil
+            S.Detour = nil
+            S.DetourCount = 0
+            S.BestDistance = math.huge
+            S.ProgressDestination = nil
             table.clear(S.Path)
         end
 
