@@ -58,7 +58,7 @@ return {
         --// Someone else's name on the node after this long means we lost it.
         local CLAIM_CONFIRM_SECONDS = 1
         --// Added to the game's mining cooldown so the node is never left early.
-        local COOLDOWN_PADDING = 0.5
+        local COOLDOWN_PADDING = 0.15
         local FALLBACK_COOLDOWN = 20
         --// Stand this far in front of the ore, measured from its surface.
         local APPROACH_STANDOFF = 3
