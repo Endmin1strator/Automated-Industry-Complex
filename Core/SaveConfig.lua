@@ -36,17 +36,19 @@ return {
             { Name = "SafeBoosterReset",  Default = false, Key = "n" },
             { Name = "AutoBlockConfirm",  Default = false, Key = "o" },
             { Name = "AutoMining",        Default = false, Key = "p" },
+            { Name = "AutoSmithing",      Default = false, Key = "q" },
             { Name = "DebugWaypoints",    Default = true },
             { Name = "DebugFarmZones",    Default = true },
             { Name = "DebugDeadzones",    Default = true },
             { Name = "DebugRadiusLabels", Default = true },
             { Name = "DebugMineZones",    Default = true },
             { Name = "DebugOres",         Default = true },
+            { Name = "DebugSmithing",     Default = true },
         }
 
-        --// The game holds at most this many of one ore, so no mining target
-        --// can be higher.
-        SaveConfig.MINE_ORE_MAX_STACK = 500
+        --// The game holds at most this many of one item, so no mining or
+        --// smithing target can be higher.
+        SaveConfig.ITEM_MAX_STACK = 500
 
         --// Normalizers turn whatever a save file holds into a valid value.
         --// They receive nil for a missing entry and must return the default.
@@ -76,29 +78,32 @@ return {
             }
         end
 
-        --// { { Name, Target }, ... } in mining priority order. Duplicate
-        --// names keep the first entry.
-        local function NormalizeOreList(Value)
-            local Result = {}
-            local Seen = {}
+        --// A normalizer for { { Name, <CountKey> }, ... } in priority order,
+        --// each count a whole number from 0 to ITEM_MAX_STACK (Fallback when
+        --// missing). Duplicate names keep the first entry.
+        local function NormalizeCountList(CountKey, Fallback)
+            return function(Value)
+                local Result = {}
+                local Seen = {}
 
-            for _, Entry in ipairs(type(Value) == "table" and Value or {}) do
-                local Name = type(Entry) == "table" and Entry.Name
+                for _, Entry in ipairs(type(Value) == "table" and Value or {}) do
+                    local Name = type(Entry) == "table" and Entry.Name
 
-                if type(Name) == "string" and Name ~= "" and not Seen[Name] then
-                    Seen[Name] = true
-                    table.insert(Result, {
-                        Name = Name,
-                        Target = math.clamp(
-                            math.floor(tonumber(Entry.Target) or SaveConfig.MINE_ORE_MAX_STACK),
-                            0,
-                            SaveConfig.MINE_ORE_MAX_STACK
-                        ),
-                    })
+                    if type(Name) == "string" and Name ~= "" and not Seen[Name] then
+                        Seen[Name] = true
+                        table.insert(Result, {
+                            Name = Name,
+                            [CountKey] = math.clamp(
+                                math.floor(tonumber(Entry[CountKey]) or Fallback),
+                                0,
+                                SaveConfig.ITEM_MAX_STACK
+                            ),
+                        })
+                    end
                 end
-            end
 
-            return Result
+                return Result
+            end
         end
 
         local function NormalizePinnedState(Value)
@@ -157,7 +162,17 @@ return {
             { Key = "MINE_ORES", Default = {
                 { Name = "Iron Ore", Target = 500 },
                 { Name = "Copper Ore", Target = 500 },
-            }, Normalize = NormalizeOreList },
+            }, Normalize = NormalizeCountList("Target", SaveConfig.ITEM_MAX_STACK) },
+
+            --// Recipes Auto Smithing crafts, highest priority first, each
+            --// until the inventory holds Target of what it makes.
+            { Key = "SMITH_RECIPES", Default = {
+                { Name = "Iron Ingot", Target = 500 },
+                { Name = "Copper Ingot", Target = 500 },
+            }, Normalize = NormalizeCountList("Target", SaveConfig.ITEM_MAX_STACK) },
+
+            --// Materials Auto Smithing never uses below Keep.
+            { Key = "SMITH_RESERVES", Default = {}, Normalize = NormalizeCountList("Keep", 0) },
 
             --// Pinned item panel: items, popped out or not, and position.
             --// Shared by every PlaceId, so it lives in its own file.

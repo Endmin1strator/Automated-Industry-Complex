@@ -4,12 +4,12 @@ This revision explicitly separates the feature modules requested:
 
 - AutoFarming.lua
 - AutoBlock.lua
-- AutoCraft.lua
+- AutoSmithing.lua (with AutoSmithingUI.lua, SmithingRecipes.lua and SmithingMinigame.lua)
 - AutoPatrol.lua
 - ReturnToFarmZone.lua
 - IgnoreFarmZone.lua
 - AutoHeal.lua
-- AutoMining.lua (with AutoMiningUI.lua, Minezone.lua and MiningMovement.lua)
+- AutoMining.lua (with AutoMiningUI.lua, Minezone.lua and WalkController.lua)
 - AutoRefill.lua (Refill Booster: resets when a boost runs out)
 - SafeBoosterReset.lua
 - AntiAFK.lua
@@ -36,7 +36,7 @@ To add a feature with a saved toggle:
 3. Add `{ Name = "MyFeature", Default = false, Key = "<unused letter>" }` to `SaveConfig.Features`.
 4. In `Start`, call `Context.AICUI.BindFeatureToggle("MyFeature", "My Feature", OnChanged)` and read `Context.Feature.MyFeature.Enabled`.
 
-The supplied source contains a Crafting UI/TODO but no actual crafting routine, so AutoCraft is a real module with the UI/state hook and deliberately does not invent crafting behavior.
+AutoSmithing implements crafting from the smithing proof of concept (CraftingStart + the strike minigame).
 
 `Legacy/` contains the original reviewed files for comparison. `Core/Runtime.lua` is retained as a compatibility layer while the large legacy implementation is migrated feature-by-feature without silently inventing behavior.
 "# Automated-Industry-Complex" 

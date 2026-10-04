@@ -4,12 +4,12 @@
 return {
     Name = "AutoBlockConfirm",
     IsFeature = true,
-    Dependencies = {"Runtime", "SaveConfig", "Components", "AutoBlock"},
+    Dependencies = {"Runtime", "SaveConfig", "Components", "AutoBlock", "GuiClick"},
 
     Start = function(Context)
         local Services = Context.Services
         local RunService = Services.RunService
-        local UserInputService = Services.UserInputService
+        local GuiClick = Context.GuiClick
         local FeatureState = Context.Feature
         local AICFeature = Context.AICFeature
         local AICUI = Context.AICUI
@@ -21,7 +21,6 @@ return {
         --// Wait after each click method before checking the block list.
         local VERIFY_SECONDS = 0.7
         local FINAL_VERIFY_SECONDS = 2
-        local CLICK_HOLD_SECONDS = 0.05
         --// Exact match: "Block and report" must never be pressed.
         local CONFIRM_TEXT = "Block"
         --// The dialog title reads "Block <name>?".
@@ -32,14 +31,6 @@ return {
         end
 
         local CoreGui = CloneReference(game:GetService("CoreGui"))
-        local GuiService = game:GetService("GuiService")
-        local HasVirtualInput, VirtualInputManager = pcall(function()
-            return CloneReference(game:GetService("VirtualInputManager"))
-        end)
-
-        if not HasVirtualInput then
-            VirtualInputManager = nil
-        end
 
         local Available = not RunService:IsStudio()
             and (pcall(function()
@@ -112,31 +103,6 @@ return {
             return ""
         end
 
-        local function IsOnScreen(Gui)
-            if not Gui or not Gui.Parent then
-                return false
-            end
-
-            if Gui.AbsoluteSize.X < 1 or Gui.AbsoluteSize.Y < 1 then
-                return false
-            end
-
-            local Node = Gui
-
-            while Node do
-                if Node:IsA("GuiObject") and not Node.Visible then
-                    return false
-                end
-
-                if Node:IsA("LayerCollector") then
-                    return Node.Enabled
-                end
-
-                Node = Node.Parent
-            end
-
-            return false
-        end
 
         local function TitleNamesPlayer(Text, Names)
             if string.sub(Text, 1, #TITLE_PREFIX) ~= TITLE_PREFIX then
@@ -171,113 +137,6 @@ return {
             return false
         end
 
-        local function FireConnections(Signal)
-            if type(getconnections) ~= "function" then
-                return false
-            end
-
-            local Ok, Connections = pcall(getconnections, Signal)
-
-            if not Ok or type(Connections) ~= "table" then
-                return false
-            end
-
-            local Fired = false
-
-            for _, Connection in ipairs(Connections) do
-                if pcall(function()
-                    Connection:Fire()
-                end) then
-                    Fired = true
-                end
-            end
-
-            return Fired
-        end
-
-        local function FireSignal(Signal)
-            if type(firesignal) ~= "function" then
-                return false
-            end
-
-            return (pcall(firesignal, Signal))
-        end
-
-        --// Screen-space centre of a button, including the top bar inset when
-        --// its ScreenGui uses it.
-        local function GetButtonCenter(Button)
-            local Center = Button.AbsolutePosition + Button.AbsoluteSize / 2
-            local ScreenGui = Button:FindFirstAncestorWhichIsA("ScreenGui")
-
-            if not (ScreenGui and ScreenGui.IgnoreGuiInset) then
-                Center += GuiService:GetGuiInset()
-            end
-
-            return Center
-        end
-
-        local function ClickWithVirtualInput(Button)
-            if not VirtualInputManager then
-                return false
-            end
-
-            local Center = GetButtonCenter(Button)
-
-            return (pcall(function()
-                VirtualInputManager:SendMouseButtonEvent(Center.X, Center.Y, 0, true, game, 0)
-                task.wait(CLICK_HOLD_SECONDS)
-                VirtualInputManager:SendMouseButtonEvent(Center.X, Center.Y, 0, false, game, 0)
-            end))
-        end
-
-        --// Last resort: moves the real cursor, clicks, then puts it back.
-        local function ClickWithRealMouse(Button)
-            if type(mousemoveabs) ~= "function" or type(mouse1click) ~= "function" then
-                return false
-            end
-
-            local Center = GetButtonCenter(Button)
-            local Previous = UserInputService:GetMouseLocation()
-
-            return (pcall(function()
-                mousemoveabs(Center.X, Center.Y)
-                task.wait(CLICK_HOLD_SECONDS)
-                mouse1click()
-                task.wait(CLICK_HOLD_SECONDS)
-                mousemoveabs(Previous.X, Previous.Y)
-            end))
-        end
-
-        local CLICK_METHODS = {
-            {
-                Name = "getconnections",
-                Click = function(Button)
-                    return FireConnections(Button.Activated) or FireConnections(Button.MouseButton1Click)
-                end,
-            },
-            {
-                Name = "firesignal",
-                Click = function(Button)
-                    return FireSignal(Button.Activated) or FireSignal(Button.MouseButton1Click)
-                end,
-            },
-            { Name = "VirtualInputManager", Click = ClickWithVirtualInput },
-            { Name = "mouse", Click = ClickWithRealMouse },
-        }
-
-        local function GetOrderedMethods()
-            local Ordered = {}
-
-            for _, Method in ipairs(CLICK_METHODS) do
-                if Method.Name == S.LastMethod then
-                    table.insert(Ordered, 1, Method)
-                else
-                    table.insert(Ordered, Method)
-                end
-            end
-
-            return Ordered
-        end
 
         local function FindConfirmButton(OtherPlayer)
             local Ok, Descendants = pcall(function()
@@ -290,7 +149,7 @@ return {
 
             for _, Descendant in ipairs(Descendants) do
                 if Descendant:IsA("GuiButton")
-                    and IsOnScreen(Descendant)
+                    and GuiClick.IsOnScreen(Descendant)
                     and GetButtonText(Descendant) == CONFIRM_TEXT
                     and DialogNamesPlayer(Descendant, OtherPlayer)
                 then
@@ -319,7 +178,7 @@ return {
                         Descendant:GetFullName(),
                         Descendant.ClassName,
                         string.format("%q", Descendant.Text),
-                        "onScreen=" .. tostring(IsOnScreen(Descendant))
+                        "onScreen=" .. tostring(GuiClick.IsOnScreen(Descendant))
                     )
                 end
             end
@@ -363,8 +222,8 @@ return {
                 return
             end
 
-            for _, Method in ipairs(GetOrderedMethods()) do
-                if Token ~= S.ArmToken or not IsOnScreen(Button) then
+            for _, Method in ipairs(GuiClick.GetOrderedMethods(S.LastMethod)) do
+                if Token ~= S.ArmToken or not GuiClick.IsOnScreen(Button) then
                     break
                 end
 

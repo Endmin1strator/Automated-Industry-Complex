@@ -179,11 +179,18 @@ return {
             return EnsureWeaponDrawn(now, InputBindableFunction, MainWeld)
         end
 
-        --// Auto Mining, once the route is walked. True while it owns this
-        --// frame's movement; it fights off anything close by itself, so the
-        --// combat at the end of the frame is skipped then.
-        local function RunMining(now)
-            if not AICFeature.MiningStep or not AICFeature.MiningStep(now) then
+        --// Auto Smithing, then Auto Mining, once the route is walked. True
+        --// while one of them owns this frame's movement; each fights off
+        --// anything close by itself, so the combat at the end of the frame
+        --// is skipped then. Smithing never pulls the character off a node
+        --// mid-mining; mining never interrupts a craft, as smithing keeps
+        --// the frame for the whole of one.
+        local function RunSideJobs(now)
+            local MiningBusy = AICFeature.IsMiningCommitted and AICFeature.IsMiningCommitted()
+            local Taken = (not MiningBusy and AICFeature.SmithingStep and AICFeature.SmithingStep(now))
+                or (AICFeature.MiningStep and AICFeature.MiningStep(now))
+
+            if not Taken then
                 return false
             end
 
@@ -312,6 +319,12 @@ return {
             end
 
             if not AICFeature.S.Enabled then
+                --// Auto Smithing also runs with Auto Farm off: it walks to
+                --// the table and crafts, and nothing else moves.
+                if AICFeature.SmithingStep and AICFeature.SmithingStep(now) then
+                    return
+                end
+
                 if FaceOrientation then
                     FaceOrientation.Enabled = false
                 end
@@ -538,7 +551,7 @@ return {
             local HasWaypoints = PlaceConfig and type(PlaceConfig.WAYPOINTS) == "table" and #PlaceConfig.WAYPOINTS > 0
             local WaypointIndex = tonumber(CONFIG.CURRENT_WAYPOINT_TARGET) or 1
             local target = nil
-            local Mining = false
+            local HandedOff = false
 
             --// Holding at a waypoint that has a wait time. Nothing else runs on
             --// the route meanwhile, the same as walking it.
@@ -646,8 +659,8 @@ return {
 
                     if LoopResult == "move" then
                         AICFeature.CancelPatrol()
-                    elseif RunMining(now) then
-                        Mining = true
+                    elseif RunSideJobs(now) then
+                        HandedOff = true
                     elseif FeatureState.ReturnToFarmZone.Enabled
                         and not FeatureState.IgnoreFarmZone.Enabled
                         and (OutsideFarmZone or InFarmDeadzone)
@@ -690,8 +703,8 @@ return {
                 local OutsideFarmZone = not AICCombatUtils.IsInsideFarmArea(RootPart.Position)
                 local InFarmDeadzone = AICCombatUtils.IsInsideFarmDeadzone(RootPart.Position)
 
-                if RunMining(now) then
-                    Mining = true
+                if RunSideJobs(now) then
+                    HandedOff = true
                 elseif FeatureState.ReturnToFarmZone.Enabled
                     and not FeatureState.IgnoreFarmZone.Enabled
                     and (OutsideFarmZone or InFarmDeadzone)
@@ -755,9 +768,9 @@ return {
                 return
             end
 
-            --// Mining already moved, and fought anything close, this frame.
-            --// Falling through would press Interact next to the ore.
-            if Mining then
+            --// Smithing or mining already moved, and fought anything close,
+            --// this frame. Falling through would press Interact there.
+            if HandedOff then
                 return
             end
 

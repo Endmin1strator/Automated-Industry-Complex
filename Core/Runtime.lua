@@ -88,7 +88,7 @@ return {
         UIRef.StatusSection = UIRef.StatusTab:AddSection("Live Status")
         UIRef.DebugSection = UIRef.DebugTab:AddSection("Debug Visualizer")
         UIRef.MineSection = UIRef.MineTab:AddSection("Auto Mining")
-        UIRef.CraftSection = UIRef.CraftTab:AddSection("Auto Crafting")
+        UIRef.CraftSection = UIRef.CraftTab:AddSection("Auto Smithing")
         UIRef.PartySection = UIRef.PartyTab:AddSection("Party System")
         
         local function NotifyAction(Action, Message, Duration)
@@ -761,6 +761,11 @@ return {
             Config.DEADZONES = Deadzones
             --// Auto Mining only mines ores inside one of these.
             Config.MINE_ZONES = AICConfig.CloneZoneList(Config.MINE_ZONES)
+            --// Where the chosen smithing table stands, or nil for "nearest".
+            --// A position, not the table's Id, which may differ per server.
+            Config.SMITH_TABLE = Config.SMITH_TABLE ~= nil
+                and AICConfig.DecodeVector3(Config.SMITH_TABLE)
+                or nil
 
             --// Legacy aliases remain available to old code while the actual logic
             --// supports multiple zones.

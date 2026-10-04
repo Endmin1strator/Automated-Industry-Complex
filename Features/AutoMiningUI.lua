@@ -7,19 +7,17 @@ return {
 
     Start = function(Context)
         local Runtime = Context.Runtime
-        local CONFIG = Context.CONFIG
-        local AICProfile = Context.AICProfile
         local AICUI = Context.AICUI
         local UIRef = Context.UIRef
         local NotifyAction = Context.NotifyAction
         local AutoMining = Context.AutoMining
 
-        local MAX_STACK = Context.SaveConfig.MINE_ORE_MAX_STACK
+        local MAX_STACK = Context.SaveConfig.ITEM_MAX_STACK
         local NO_ORES_OPTION = "No ores found"
 
         local Module = {
             Name = "AutoMiningUI",
-            OrePickerSignature = nil,
+            OrePicker = {},
         }
 
         local Section = UIRef.MineSection
@@ -46,54 +44,12 @@ return {
         local OreList = UIRef.OrePriorityComponent
 
         --// The list is the source of truth while editing; CONFIG follows it.
-        local function SaveOreList()
-            local Values = OreList:GetValues()
-            local Ores = {}
-
-            for Index, Name in ipairs(OreList:GetPriority()) do
-                table.insert(Ores, { Name = Name, Target = Values[Index] })
-            end
-
-            CONFIG.MINE_ORES = Ores
+        local LoadOreList = AICUI.BindCountList(OreList, "MINE_ORES", "Target", function()
             AutoMining:Rescan()
-            AICProfile.QueueProfileSave()
-        end
-
-        local function LoadOreList()
-            local Names, Targets = {}, {}
-
-            for Index, Entry in ipairs(CONFIG.MINE_ORES or {}) do
-                Names[Index] = Entry.Name
-                Targets[Index] = Entry.Target
-            end
-
-            OreList:SetPriority(Names, Targets)
-        end
-
-        local OriginalMoveUp = OreList.MoveUp
-        local OriginalMoveDown = OreList.MoveDown
-        local OriginalRemove = OreList.Remove
-
-        function OreList:MoveUp(Name)
-            OriginalMoveUp(self, Name)
-            SaveOreList()
-        end
-
-        function OreList:MoveDown(Name)
-            OriginalMoveDown(self, Name)
-            SaveOreList()
-        end
-
-        function OreList:Remove(Name)
-            local Removed = OriginalRemove(self, Name)
-            SaveOreList()
             AICUI.RefreshOrePicker(true)
-            return Removed
-        end
+        end)
 
-        OreList.OnValueChanged = function()
-            SaveOreList()
-        end
+        LoadOreList()
 
         local function AddOre(Name)
             Name = tostring(Name or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -107,8 +63,6 @@ return {
                 return
             end
 
-            SaveOreList()
-            AICUI.RefreshOrePicker(true)
             NotifyAction("AUTO MINING", "Added " .. Name)
         end
 
@@ -128,27 +82,7 @@ return {
                 Options = { NO_ORES_OPTION }
             end
 
-            local Old = UIRef.OrePicker
-            local Signature = table.concat(Options, "\n")
-
-            if Old and (Module.OrePickerSignature == Signature or (Old.IsOpen and not Force)) then
-                return
-            end
-
-            local Order = Old and Old.Frame and Old.Frame.LayoutOrder
-
-            if Old then
-                if Old.Popup then Old.Popup:Destroy() end
-                if Old.Frame then Old.Frame:Destroy() end
-            end
-
-            UIRef.OrePicker = Section:AddDropdown("Add Ore", Options, AddOre)
-
-            if Order and UIRef.OrePicker.Frame then
-                UIRef.OrePicker.Frame.LayoutOrder = Order
-            end
-
-            Module.OrePickerSignature = Signature
+            AICUI.RefreshDropdown(Module.OrePicker, Section, "Add Ore", Options, AddOre, Force)
         end
 
         AICUI.RefreshOrePicker(true)
@@ -173,8 +107,6 @@ return {
             AICUI.RefreshMineZonePicker()
             AutoMining:Reset(true)
         end
-
-        LoadOreList()
 
         return Module
     end,

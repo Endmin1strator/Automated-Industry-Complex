@@ -1,7 +1,7 @@
 -- AutoFarm bootstrap.
 -- Every module returns {Name, Dependencies, Start(Context)}.
 
-local TITLE = "AUTOMATED INDUSTRY COMPLEX v2.71"
+local TITLE = "AUTOMATED INDUSTRY COMPLEX v2.72"
 local UTILS_PATH = "UI/Utils.lua"
 
 --// A failed download is retried this many times before giving up.
@@ -25,6 +25,7 @@ local ROOT =
 --// needs its line in Core/SaveConfig.lua.
 local MODULES = {
     "Core/SaveConfig.lua",
+    "Core/GuiClick.lua",
     "Core/Runtime.lua",
     "Core/ProfileManager.lua",
     "UI/Components.lua",
@@ -50,11 +51,14 @@ local MODULES = {
     "Features/DebugVisualizer.lua",
     "Features/AutoHeal.lua",
     "Features/AntiAFK.lua",
-    "Features/AutoCraft.lua",
     "Features/Minezone.lua",
-    "Features/MiningMovement.lua",
+    "Features/WalkController.lua",
     "Features/AutoMining.lua",
     "Features/AutoMiningUI.lua",
+    "Features/SmithingRecipes.lua",
+    "Features/SmithingMinigame.lua",
+    "Features/AutoSmithing.lua",
+    "Features/AutoSmithingUI.lua",
     "Features/PartySystem.lua",
     "Features/ProfileSettings.lua",
     "Features/Waypoints.lua",

@@ -575,20 +575,23 @@ return {
             AICDebug.SetDebugVisualizerVisible(true)
         end
 
-        --// Ore status billboards. Auto Mining decides what each ore shows;
-        --// this only keeps one billboard per ore in step with that. They live
-        --// in the debug folder, so hiding the visualizer hides them too.
-        local ORE_BILLBOARD_MAX_DISTANCE = 150
+        --// Status billboards over world objects (ores, smithing tables). The
+        --// feature decides what each shows; this keeps one billboard per
+        --// object in step with that, per Group so groups never clear each
+        --// other. They live in the debug folder, so hiding the visualizer
+        --// hides them too.
+        local STATUS_BILLBOARD_MAX_DISTANCE = 150
 
-        AICDebug.S.OreBillboards = {}
+        --// Group -> { [Object] = billboard parts }
+        AICDebug.S.StatusBillboards = {}
 
-        local function CreateOreBillboard(Core)
+        local function CreateStatusBillboard(Core)
             local Billboard = Instance.new("BillboardGui")
-            Billboard.Name = "OreStatus"
+            Billboard.Name = "Status"
             Billboard.Adornee = Core
             Billboard.AlwaysOnTop = true
             Billboard.LightInfluence = 0
-            Billboard.MaxDistance = ORE_BILLBOARD_MAX_DISTANCE
+            Billboard.MaxDistance = STATUS_BILLBOARD_MAX_DISTANCE
             Billboard.Size = UDim2.fromScale(5, 1.3)
             Billboard.StudsOffsetWorldSpace = Vector3.new(0, Core.Size.Y * 0.5 + 2, 0)
 
@@ -625,11 +628,11 @@ return {
             Status.TextScaled = true
             Status.Parent = Container
 
-            local Folder = AICDebug.GetDebugAdorneeParent():FindFirstChild("OreStatus")
+            local Folder = AICDebug.GetDebugAdorneeParent():FindFirstChild("StatusBillboards")
 
             if not Folder then
                 Folder = Instance.new("Folder")
-                Folder.Name = "OreStatus"
+                Folder.Name = "StatusBillboards"
                 Folder.Parent = AICDebug.GetDebugAdorneeParent()
             end
 
@@ -638,17 +641,19 @@ return {
             return { Gui = Billboard, Title = Title, Status = Status, Stroke = Stroke }
         end
 
-        --// Entries maps an ore model to { Core, Title, Status, Color }. Ores
-        --// missing from it lose their billboard; nil clears every one.
-        function AICDebug.UpdateOreBillboards(Entries)
-            local Visible = Entries ~= nil
-                and FeatureState.DebugVisualizer.Enabled
-                and FeatureState.DebugOres.Enabled
+        --// Entries maps an object to { Core, Title, Status, Color }. Objects
+        --// missing from it lose their billboard; nil clears the whole Group.
+        --// The caller checks its own debug toggle and passes nil when off.
+        function AICDebug.UpdateStatusBillboards(Group, Entries)
+            local Billboards = AICDebug.S.StatusBillboards[Group] or {}
+            AICDebug.S.StatusBillboards[Group] = Billboards
 
-            for Ore, Data in pairs(AICDebug.S.OreBillboards) do
-                if not Visible or not Entries[Ore] or not Ore.Parent then
+            local Visible = Entries ~= nil and FeatureState.DebugVisualizer.Enabled
+
+            for Object, Data in pairs(Billboards) do
+                if not Visible or not Entries[Object] or not Object.Parent then
                     Data.Gui:Destroy()
-                    AICDebug.S.OreBillboards[Ore] = nil
+                    Billboards[Object] = nil
                 end
             end
 
@@ -656,12 +661,12 @@ return {
                 return
             end
 
-            for Ore, Entry in pairs(Entries) do
-                local Data = AICDebug.S.OreBillboards[Ore]
+            for Object, Entry in pairs(Entries) do
+                local Data = Billboards[Object]
 
                 if not Data then
-                    Data = CreateOreBillboard(Entry.Core)
-                    AICDebug.S.OreBillboards[Ore] = Data
+                    Data = CreateStatusBillboard(Entry.Core)
+                    Billboards[Object] = Data
                 end
 
                 --// Only touch what changed; these run several times a second.
@@ -755,6 +760,17 @@ return {
                     FeatureState.DebugOres.Enabled,
                     function(Value)
                         FeatureState.DebugOres.Enabled = Value
+                        AICProfile.SaveActiveProfile()
+                    end
+                )
+
+                --// Auto Smithing's billboards over smithing tables, same
+                --// arrangement as the ores.
+                FeatureState.DebugSmithing.Button = UIRef.DebugSection:AddToggle(
+                    "Debug Smithing Tables",
+                    FeatureState.DebugSmithing.Enabled,
+                    function(Value)
+                        FeatureState.DebugSmithing.Enabled = Value
                         AICProfile.SaveActiveProfile()
                     end
                 )

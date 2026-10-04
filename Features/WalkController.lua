@@ -1,12 +1,13 @@
--- MiningMovement walks Auto Mining to a spot. It walks straight while that
--- is safe and switches to pathfinding when the straight line is not: a wall
--- a hop cannot clear, a hole too wide to jump, a climb higher than a jump,
--- a deadzone in the way, or leaving the mine zone. A hole that can be jumped
--- is jumped at its edge. Paths are solved off the heartbeat, so a slow solve
--- never stalls a frame, and a path that enters a deadzone (or leaves the
--- mine zone, once inside it) is refused.
+-- WalkController walks Auto Mining and Auto Smithing to a spot. It walks
+-- straight while that is safe and switches to pathfinding when the straight
+-- line is not: a wall a hop cannot clear, a hole too wide to jump, a climb
+-- higher than a jump, a deadzone in the way, or (with KeepInsideMine)
+-- leaving the mine zone. A hole that can be jumped is jumped at its edge.
+-- Paths are solved off the heartbeat, so a slow solve never stalls a frame,
+-- and a path that enters a deadzone (or leaves the mine zone, with
+-- KeepInsideMine) is refused.
 return {
-    Name = "MiningMovement",
+    Name = "WalkController",
     Dependencies = {"Runtime", "CombatUtils"},
 
     Start = function(Context)
@@ -37,7 +38,7 @@ return {
         local ZONE_SAMPLE_DISTANCE = 4
 
         local Movement = {
-            Name = "MiningMovement",
+            Name = "WalkController",
             S = {
                 Holding = false,
                 PathUntil = 0,
@@ -330,6 +331,25 @@ return {
             AICCombatUtils.DoJumpIfObstacle(Destination)
             Humanoid:MoveTo(Destination)
             return "moving"
+        end
+
+        --// A ground spot Standoff studs out from Part's surface, on our side.
+        --// Ores and tables are solid, so neither MoveTo nor a path can end
+        --// inside one. Ignore is the model Part belongs to.
+        function Movement:GetApproachPoint(Part, Standoff, Ignore)
+            local Character, _, RootPart = Runtime:GetCharacter()
+            local Offset = RootPart and RootPart.Position - Part.Position or Vector3.xAxis
+            local Flat = Vector3.new(Offset.X, 0, Offset.Z)
+            local Direction = Flat.Magnitude > 0.01 and Flat.Unit or Vector3.xAxis
+            local Point = Part.Position + Direction * (math.max(Part.Size.X, Part.Size.Z) * 0.5 + Standoff)
+
+            local Params = RaycastParams.new()
+            Params.FilterType = Enum.RaycastFilterType.Exclude
+            Params.FilterDescendantsInstances = { Character, Ignore, AICCombatUtils.S.DebugFolder }
+
+            local Hit = workspace:Raycast(Point + Vector3.new(0, 8, 0), Vector3.new(0, -30, 0), Params)
+
+            return Hit and Hit.Position + Vector3.new(0, 3, 0) or Point
         end
 
         function Movement:Reset()

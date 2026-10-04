@@ -4,13 +4,13 @@
 -- whenever there is nothing to mine.
 --
 --   * Ores are mined in the Ore Priority order. Each one is mined until the
---     inventory holds its Target (at most MINE_ORE_MAX_STACK); what is
+--     inventory holds its Target (at most ITEM_MAX_STACK); what is
 --     already carried counts, so 250 held of a 500 target leaves 250 to go.
 --   * The highest priority ore with an available node in a mine zone wins;
 --     when none of its nodes are up (taken, regenerating, unreachable) the
 --     next ore in the list is mined instead.
 --   * Ores outside every mine zone, or inside a deadzone, are never targets.
---   * Walking is MiningMovement's job. Within CLAIM_DISTANCE the ore is
+--   * Walking is WalkController's job. Within CLAIM_DISTANCE the ore is
 --     claimed and the character holds still until the mining cooldown ends.
 --   * Anything within DEFEND_RANGE while a job is on is fought: the weapon is
 --     drawn and it is hit once in range. While mining the character never
@@ -18,11 +18,11 @@
 --   * Each ore shows its state on a billboard through the Debug Visualizer
 --     ("Debug Ore Status").
 --
--- The Mining tab controls live in AutoMiningUI; the walking in MiningMovement.
+-- The Mining tab controls live in AutoMiningUI; the walking in WalkController.
 return {
     Name = "AutoMining",
     IsFeature = true,
-    Dependencies = {"Runtime", "SaveConfig", "ProfileManager", "Components", "CombatUtils", "Navigation", "Combat", "DebugVisualizer", "MiningMovement"},
+    Dependencies = {"Runtime", "SaveConfig", "ProfileManager", "Components", "CombatUtils", "Navigation", "Combat", "DebugVisualizer", "WalkController"},
 
     Start = function(Context)
         local SaveConfig = Context.SaveConfig
@@ -39,9 +39,9 @@ return {
         local UIRef = Context.UIRef
         local NotifyAction = Context.NotifyAction
         local DEBUG_COLORS = Context.DEBUG_COLORS
-        local Movement = Context.MiningMovement
+        local Movement = Context.WalkController
 
-        local MAX_STACK = SaveConfig.MINE_ORE_MAX_STACK
+        local MAX_STACK = SaveConfig.ITEM_MAX_STACK
 
         --// Re-pick the target this often while walking, so a higher
         --// priority node that regenerates is taken over a lower one.
@@ -334,27 +334,11 @@ return {
             end
 
             EndJob()
+            --// Next node on the next frame, not after a scan interval.
+            S.LastScan = 0
         end
 
-        --// A ground spot APPROACH_STANDOFF in front of the ore on our side.
-        --// The core itself is solid, so neither MoveTo nor a path can end in it.
-        local function GetApproachPoint(Core, RootPart)
-            local Offset = RootPart.Position - Core.Position
-            local Flat = Vector3.new(Offset.X, 0, Offset.Z)
-            local Direction = Flat.Magnitude > 0.01 and Flat.Unit or Vector3.xAxis
-            local Standoff = math.max(Core.Size.X, Core.Size.Z) * 0.5 + APPROACH_STANDOFF
-            local Point = Core.Position + Direction * Standoff
-
-            local Params = RaycastParams.new()
-            Params.FilterType = Enum.RaycastFilterType.Exclude
-            Params.FilterDescendantsInstances = { RootPart.Parent, Core.Parent, AICCombatUtils.S.DebugFolder }
-
-            local Hit = workspace:Raycast(Point + Vector3.new(0, 8, 0), Vector3.new(0, -30, 0), Params)
-
-            return Hit and Hit.Position + Vector3.new(0, 3, 0) or Point
-        end
-
-        local function StartJob(Ore, Priority, now, RootPart)
+        local function StartJob(Ore, Priority, now)
             local Core, Owner, Id = GetNodeParts(Ore)
 
             EndJob()
@@ -365,7 +349,7 @@ return {
             S.Id = Id
             S.Priority = Priority
             S.ApproachStart = now
-            S.ApproachPoint = GetApproachPoint(Core, RootPart)
+            S.ApproachPoint = Movement:GetApproachPoint(Core, APPROACH_STANDOFF, Ore)
         end
 
         --// Picks or re-picks the node while not committed to one.
@@ -374,8 +358,11 @@ return {
                 and GetNodeParts(S.Ore) ~= nil
                 and IsAvailable(S.Ore, S.Core, S.Owner, now)
 
-            if CurrentValid and now - S.LastScan < SCAN_INTERVAL then
-                return true
+            --// A node gone bad is replaced at once. With no job at all the
+            --// scan still waits its turn: rescanning every node every frame
+            --// with nothing to mine is wasted work.
+            if (CurrentValid or S.Ore == nil) and now - S.LastScan < SCAN_INTERVAL then
+                return CurrentValid
             end
 
             S.LastScan = now
@@ -383,12 +370,17 @@ return {
             local Best, Priority = FindTargetOre(now, RootPart)
 
             if not Best then
-                EndJob()
+                --// Idle already: leave the shared walker alone, Auto
+                --// Smithing may be using it.
+                if S.State ~= "Idle" then
+                    EndJob()
+                end
+
                 return false
             end
 
             if Best ~= S.Ore then
-                StartJob(Best, Priority, now, RootPart)
+                StartJob(Best, Priority, now)
             end
 
             return true
@@ -584,6 +576,7 @@ return {
 
                 if IsMiningDone(now) then
                     EndJob()
+                    S.LastScan = 0
                 end
             else
                 Approach(now, RootPart)
@@ -593,6 +586,12 @@ return {
         end
 
         AICFeature.MiningStep = Feature.Step
+
+        --// Claiming or mining a node: nothing else may walk the character
+        --// off it until that is done.
+        AICFeature.IsMiningCommitted = function()
+            return S.State == "Claiming" or S.State == "Mining"
+        end
 
         ------------------------------------------------------------------------
         --// Status label and ore billboards
@@ -667,7 +666,7 @@ return {
             if not Wanted then
                 if S.BillboardsShown then
                     S.BillboardsShown = false
-                    AICDebug.UpdateOreBillboards(nil)
+                    AICDebug.UpdateStatusBillboards("Ores", nil)
                 end
 
                 return
@@ -701,7 +700,7 @@ return {
             end
 
             S.BillboardsShown = true
-            AICDebug.UpdateOreBillboards(Entries)
+            AICDebug.UpdateStatusBillboards("Ores", Entries)
         end
 
         function Feature:Update()

@@ -135,6 +135,96 @@ return {
             end
         end
 
+        --// Keeps a priority list that has a number per row (AddPriority with
+        --// Values) and CONFIG[Key] = { { Name, <CountKey> }, ... } the same.
+        --// Adds, edits, reorders and removals write CONFIG, queue a profile
+        --// save, then call OnChanged. Returns Load, which shows CONFIG[Key]
+        --// in the list (on start and after a profile load).
+        function AICUI.BindCountList(Component, Key, CountKey, OnChanged)
+            local function Save()
+                local Values = Component:GetValues()
+                local Result = {}
+
+                for Index, Name in ipairs(Component:GetPriority()) do
+                    table.insert(Result, { Name = Name, [CountKey] = Values[Index] })
+                end
+
+                CONFIG[Key] = Result
+                AICProfile.QueueProfileSave()
+
+                if OnChanged then
+                    OnChanged()
+                end
+            end
+
+            local OriginalAdd = Component.Add
+            local OriginalMoveUp = Component.MoveUp
+            local OriginalMoveDown = Component.MoveDown
+            local OriginalRemove = Component.Remove
+
+            function Component:Add(Name, Value)
+                local Added = OriginalAdd(self, Name, Value)
+
+                if Added then
+                    Save()
+                end
+
+                return Added
+            end
+
+            function Component:MoveUp(Name)
+                OriginalMoveUp(self, Name)
+                Save()
+            end
+
+            function Component:MoveDown(Name)
+                OriginalMoveDown(self, Name)
+                Save()
+            end
+
+            function Component:Remove(Name)
+                local Removed = OriginalRemove(self, Name)
+                Save()
+                return Removed
+            end
+
+            Component.OnValueChanged = Save
+
+            return function()
+                local Names, Values = {}, {}
+
+                for Index, Entry in ipairs(CONFIG[Key] or {}) do
+                    Names[Index] = Entry.Name
+                    Values[Index] = Entry[CountKey]
+                end
+
+                Component:SetPriority(Names, Values)
+            end
+        end
+
+        --// A dropdown whose options change at runtime. Utils cannot replace
+        --// options, so it is rebuilt: only when the options differ, never
+        --// while open unless Force (a pick by the user), and in the old
+        --// one's slot. Picker = { Dropdown, Signature } is kept by the caller.
+        function AICUI.RefreshDropdown(Picker, Section, Label, Options, Callback, Force)
+            local Old = Picker.Dropdown
+            local Signature = table.concat(Options, "\n")
+
+            if Old and (Picker.Signature == Signature or (Old.IsOpen and not Force)) then
+                return
+            end
+
+            local Order = Old and Old.Frame and Old.Frame.LayoutOrder
+            DestroyDropdown(Old)
+
+            Picker.Dropdown = Section:AddDropdown(Label, Options, Callback)
+            Picker.Signature = Signature
+
+            if Order and Picker.Dropdown.Frame then
+                Picker.Dropdown.Frame.LayoutOrder = Order
+            end
+        end
+
         function AICUI.RefreshTargetPicker(Kind, Force)
             local Picker = TARGET_PICKERS[Kind]
             if not Picker or not UIRef.TargetSection then
@@ -268,6 +358,10 @@ return {
 
             if AICUI.RefreshMiningUI then
                 AICUI.RefreshMiningUI()
+            end
+
+            if AICUI.RefreshSmithingUI then
+                AICUI.RefreshSmithingUI()
             end
         end
         function AICUI.updateButton()

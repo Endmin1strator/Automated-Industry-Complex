@@ -101,6 +101,34 @@
 > - นับเวลาแยกรายคน เริ่มตั้งแต่เห็นคนนั้นครั้งแรก ออกจากเซิร์ฟแล้วกลับเข้ามาใหม่จะเริ่มนับใหม่
 > - ถ้าตั้ง Leader ใน Party System ไว้ Party จะจัดการคนแปลกหน้าแทน ดีเลย์นี้ไม่มีผล
 
+### [x] Auto Smithing
+- ทำระบบ auto smithing จาก PoC: เลือกสูตรตาม priority, เดินไปโต๊ะ, `CraftingStart`, เล่นมินิเกมกด strike เอง
+- คิดวัตถุดิบที่ใช้ และ SmithingSkill ที่แต่ละสูตรต้องการ
+- ไม่เกี่ยวกับการขุด / ใช้โต๊ะใกล้สุดหรือที่เลือกไว้ / กรอกจำนวนได้ / มี Reserve วัตถุดิบ
+
+> ทำแล้ว (v2.72): แท็บ **Crafting**
+> - **Auto Smithing** (บันทึกในโปรไฟล์ ค่าเริ่มต้นปิด) แยกจาก Auto Mining
+>   เปิด Auto Farm: คราฟหลังเดิน Waypoint ครบ ทำก่อนการขุด แต่ไม่ดึงออกตอนกำลังขุดก้อนแร่อยู่
+>   ปิด Auto Farm: ทำงานเองได้ (เดินไปโต๊ะแล้วคราฟอย่างเดียว)
+> - **Recipe Priority**: ลากเรียงได้ ช่อง Target ต่อสูตร (0–500) ค่าเริ่มต้น Iron Ingot, Copper Ingot อย่างละ 500
+>   ข้ามสูตรที่ SmithingSkill ไม่ถึง `CraftingSkill`, วัตถุดิบไม่พอ หรือในกระเป๋ามีครบเป้าแล้ว
+>   เพิ่มจาก dropdown **Add Recipe** (โชว์ skill ที่ต้องใช้และวัตถุดิบ เรียงจากง่ายไปยาก)
+> - **Recipe Status**: บรรทัดละสูตร READY xN / LOCKED SKILL ต้องการ/มี / NEED วัตถุดิบ มี/ต้องใช้ / DONE / PAUSED
+> - **Material Reserve**: ตั้งจำนวนวัตถุดิบที่เก็บไว้ ไม่เอาไปคราฟ (เช่น Keep Iron Ore 40)
+> - **Set Smithing Table** (ยืนใกล้โต๊ะ ≤ 20 studs) บันทึกตำแหน่งลงโปรไฟล์ / **Use Nearest Table** กลับไปใช้โต๊ะใกล้สุด
+>   บันทึกเป็นตำแหน่ง ไม่ใช่ Id (Id อาจเปลี่ยนตามเซิร์ฟ) ตอนใช้หาโต๊ะในระยะ 10 studs จากจุดนั้น
+> - เดินไปโต๊ะด้วย `WalkController` (เปลี่ยนชื่อจาก MiningMovement) ห่างโต๊ะ ≤ 8 studs แล้วเรียก `CraftingStart`
+>   เดินไม่ถึงใน 30 วิ หรือหาทางไม่ได้ ข้ามโต๊ะนั้น 30 วิ มอนเข้าระยะตีระหว่างเดินจะตีก่อนแล้วเดินต่อ
+> - มินิเกม (`SmithingMinigame`): เช็คทุกเฟรม (RenderStepped) กด `Action` ตอน `Mover` ทับ `ClickArea`
+>   กดผ่าน firesignal/getconnections (สัญญาณ `MouseButton1Click` ตาม PoC) ถ้าไม่มีใช้ VirtualInputManager/เมาส์จริง
+>   แบบหลังจะคำนวณตำแหน่ง Mover เฟรมถัดไปจากความเร็ว
+> - จบเมื่อ Success/Failed ขึ้นและ GUI ปิด แล้วรอกระเป๋าอัปเดตก่อนเลือกสูตรถัดไป ทุกขั้นมี timeout ไม่ค้าง
+>   ล้มเหลวติดกัน 3 ครั้ง พักสูตรนั้น 60 วิ
+> - Debug: **Debug Smithing Tables** ป้ายบนโต๊ะ (TARGET / CRAFTING / READY / UNREACHABLE / NOT THE SET TABLE)
+> - แยกโค้ดกดปุ่มเป็น `Core/GuiClick.lua` ใช้ร่วมกับ Auto Confirm Block, ลบ `AutoCraft.lua` (stub)
+> - แก้ AutoMining: ตอนไม่มีแร่ให้ขุดไม่สแกนทุกเฟรมแล้ว (ทุก 0.5 วิ)
+> - ข้อสันนิษฐานที่ต้องเช็คในเกม: ชื่อไอเทมที่คราฟได้ตรงกับชื่อสูตร, ระยะใช้โต๊ะ 8 studs, ปุ่ม Action รับ `MouseButton1Click`
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair
