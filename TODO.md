@@ -53,6 +53,17 @@
 > ทำแล้ว: ลากที่ชื่อแถวได้ทุกรายการ Priority (Enemy, Waypoints, Farm Zones, Deadzones, Whitelist) มีเส้นบอกตำแหน่งวาง
 > ปุ่ม ▲▼ ยังใช้ได้เหมือนเดิม
 
+### [x] Auto Confirm Block
+- เอา AutoBlockConfirm จาก Iambatman มาใช้: กด Block ในหน้าต่างยืนยันของ Roblox ให้อัตโนมัติ
+
+> ทำแล้ว (v2.69): เปิด **Auto Confirm Block** (ใต้ Auto Block, บันทึกในโปรไฟล์ ค่าเริ่มต้นปิด)
+> - หลัง Auto Block เปิดหน้าต่าง Block จะหาปุ่ม `Block` ใน CoreGui ภายใน 6 วินาที (`ARM_SECONDS`)
+>   กดเฉพาะหน้าต่างที่ชื่อเรื่องเป็นชื่อผู้เล่นคนนั้น และไม่กด "Block and report"
+> - ลองกดทีละวิธี getconnections > firesignal > VirtualInputManager > เมาส์จริง แล้วเช็คว่าบล็อกสำเร็จจริง
+>   วิธีที่สำเร็จจะถูกลองก่อนในครั้งถัดไป ถ้ากดไม่ได้จะแจ้งให้กดเอง
+> - บล็อกสำเร็จแล้ว Auto Block ย้ายเซิร์ฟต่อตามเดิม
+> - ใช้ได้เฉพาะ executor ที่อ่าน CoreGui ได้ (Studio ไม่ได้) Debug: `getgenv().AICBlockConfirmDebug = true`
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

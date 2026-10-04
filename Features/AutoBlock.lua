@@ -114,6 +114,11 @@ return {
                 return
             end
 
+            --// Auto Confirm Block presses Block in the dialog when it is on.
+            if AICFeature.ConfirmBlockPrompt then
+                AICFeature.ConfirmBlockPrompt(OtherPlayer)
+            end
+
             task.delay(CONFIG.BLOCK_COOLDOWN, function()
                 AICFeature.S.BlockCache[UserId] = nil
             end)

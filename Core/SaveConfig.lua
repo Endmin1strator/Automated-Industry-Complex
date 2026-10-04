@@ -34,6 +34,7 @@ return {
             { Name = "PartySystem",       Default = false, Key = "l" },
             { Name = "WaypointLoop",      Default = false, Key = "m" },
             { Name = "SafeBoosterReset",  Default = false, Key = "n" },
+            { Name = "AutoBlockConfirm",  Default = false, Key = "o" },
             { Name = "DebugWaypoints",    Default = true },
             { Name = "DebugFarmZones",    Default = true },
             { Name = "DebugDeadzones",    Default = true },
