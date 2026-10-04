@@ -86,6 +86,7 @@ return {
         UIRef.FeatureSection = UIRef.FarmTab:AddSection("Features")
         UIRef.TargetSection = UIRef.FarmTab:AddSection("Targeting")
         UIRef.BlockSection = UIRef.FarmTab:AddSection("Auto Block")
+        UIRef.GatherSection = UIRef.FarmTab:AddSection("Mob Gather")
         UIRef.StatusSection = UIRef.StatusTab:AddSection("Live Status")
         UIRef.DebugSection = UIRef.DebugTab:AddSection("Debug Visualizer")
         UIRef.MineSection = UIRef.MineTab:AddSection("Auto Mining")

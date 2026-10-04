@@ -41,6 +41,8 @@ return {
             --// and notify about players off the whitelist.
             { Name = "DangerGroupHop",    Default = true,  Key = "r" },
             { Name = "JoinAlerts",        Default = false, Key = "s" },
+            --// Pull a pack of mobs together, then use the skill (MobGather).
+            { Name = "MobGather",         Default = false, Key = "t" },
             { Name = "DebugWaypoints",    Default = true },
             { Name = "DebugFarmZones",    Default = true },
             { Name = "DebugDeadzones",    Default = true },
@@ -149,6 +151,12 @@ return {
             --// Below this share of its health a target is finished off instead
             --// of retreated from. An enemy skill still overrides it.
             { Key = "EXECUTE_CHARGE_HP_PERCENT", Default = 0, Min = 0, Max = 90 },
+
+            --// Gather Mobs: a pack needs at least GATHER_MIN_MOBS within
+            --// GATHER_RADIUS of each other; at most GATHER_MAX_MOBS are pulled.
+            { Key = "GATHER_MIN_MOBS", Default = 3, Min = 2, Max = 8 },
+            { Key = "GATHER_MAX_MOBS", Default = 5, Min = 2, Max = 10 },
+            { Key = "GATHER_RADIUS", Default = 40, Min = 15, Max = 80 },
 
             --// UserIds allowed to share the server. Auto Block ignores these.
             { Key = "BLOCK_WHITELIST", Default = {}, Normalize = NormalizeUserIdList },

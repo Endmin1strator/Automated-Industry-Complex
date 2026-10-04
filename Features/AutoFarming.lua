@@ -199,6 +199,21 @@ return {
             return true
         end
 
+        --// Gather Mobs, once the route is walked and the character is inside
+        --// the farm zone. True while it pulls a pack together or uses the
+        --// skill on it; it moves and fights by itself then, so the combat at
+        --// the end of the frame is skipped. Once the skill is used, normal
+        --// combat fights the pack.
+        local function RunGather(now)
+            if not AICFeature.GatherStep or not AICFeature.GatherStep(now) then
+                return false
+            end
+
+            AICCombat.S.ClosestTarget = nil
+            AICFeature.CancelPatrol()
+            return true
+        end
+
         --// Drinks the last used potion when it is off cooldown. The weapon
         --// is sheathed first, which costs a frame: true means this frame was
         --// spent sheathing and the caller should yield it. Shared by the
@@ -668,6 +683,8 @@ return {
                         AICCombat.S.ClosestTarget = nil
                         AICFeature.CancelPatrol()
                         AICFeature.MoveBackToFarmZone()
+                    elseif RunGather(now) then
+                        HandedOff = true
                     else
                         if not AICCombat.S.ClosestTarget or not AICCombat.IsTargetLockValid(AICCombat.S.ClosestTarget) then
                             AICCombat.S.ClosestTarget = AICCombat.AcquireCombatTarget(now)
@@ -712,6 +729,8 @@ return {
                     AICCombat.S.ClosestTarget = nil
                     AICFeature.CancelPatrol()
                     AICFeature.MoveBackToFarmZone()
+                elseif RunGather(now) then
+                    HandedOff = true
                 else
                     if not AICCombat.S.ClosestTarget or not AICCombat.IsTargetLockValid(AICCombat.S.ClosestTarget) then
                         AICCombat.S.ClosestTarget = AICCombat.AcquireCombatTarget(now)
