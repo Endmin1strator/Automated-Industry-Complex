@@ -175,7 +175,8 @@ return {
             return Counts
         end
 
-        local function GetReserves()
+        --// Material name -> how many Material Reserve keeps back.
+        function Recipes:GetReserves()
             local Reserves = {}
 
             for _, Entry in ipairs(CONFIG.SMITH_RESERVES or {}) do
@@ -236,7 +237,7 @@ return {
         --// Every recipe in the Recipe Priority list, in order.
         function Recipes:GetPlan()
             local Inventory = self:GetInventory()
-            local Reserves = GetReserves()
+            local Reserves = self:GetReserves()
             local Skill = self:GetSkill()
             local Plan = {}
 

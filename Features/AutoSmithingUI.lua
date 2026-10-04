@@ -1,12 +1,13 @@
 -- AutoSmithingUI owns the Crafting tab: the Auto Smithing toggle and status,
 -- the smithing table choice, the Recipe Priority list with a Target per
--- recipe, what each recipe is waiting on, and the Material Reserve list.
+-- recipe (filled from the Recipe Browser window), what each recipe is
+-- waiting on, and the Material Reserve list.
 -- The lists are saved as the SMITH_RECIPES and SMITH_RESERVES settings; the
 -- chosen table on the place config (SMITH_TABLE).
 return {
     Name = "AutoSmithingUI",
     IsFeature = true,
-    Dependencies = {"Runtime", "SaveConfig", "ProfileManager", "Components", "AutoSmithing", "SmithingRecipes"},
+    Dependencies = {"Runtime", "SaveConfig", "ProfileManager", "Components", "AutoSmithing", "SmithingRecipes", "SmithingBrowser"},
 
     Start = function(Context)
         local Runtime = Context.Runtime
@@ -17,21 +18,18 @@ return {
         local NotifyAction = Context.NotifyAction
         local AutoSmithing = Context.AutoSmithing
         local Recipes = Context.SmithingRecipes
+        local Browser = Context.SmithingBrowser
 
         local MAX_STACK = Context.SaveConfig.ITEM_MAX_STACK
         --// "Set Smithing Table" takes the nearest table within this.
         local SET_TABLE_MAX_DISTANCE = 20
         local INFO_INTERVAL = 1
-        local NO_RECIPES_OPTION = "No recipes found"
         local NO_MATERIALS_OPTION = "No materials found"
 
         local Module = {
             Name = "AutoSmithingUI",
             IsFeature = true,
-            RecipePicker = {},
             MaterialPicker = {},
-            --// Add Recipe option label -> recipe name.
-            RecipeOptions = {},
             RecipeLabels = {},
             LastInfo = 0,
         }
@@ -96,59 +94,19 @@ return {
 
         local LoadRecipeList = AICUI.BindCountList(RecipeList, "SMITH_RECIPES", "Target", function()
             AutoSmithing:Rescan()
-            AICUI.RefreshRecipePicker(true)
+            Browser:Refresh()
             Module.LastInfo = 0
         end)
 
         LoadRecipeList()
 
-        local function DescribeMaterials(Recipe)
-            local Parts = {}
-
-            for _, Material in ipairs(Recipe.Materials) do
-                table.insert(Parts, string.format("%s x%d", Material.Name, Material.Amount))
-            end
-
-            return table.concat(Parts, ", ")
-        end
-
-        local function AddRecipe(Option)
-            local Name = Module.RecipeOptions[Option]
-
-            if not Name then
-                return
-            end
-
-            if RecipeList:Add(Name, MAX_STACK) then
-                NotifyAction("AUTO SMITHING", "Added " .. Name)
-            end
-        end
-
-        --// Recipes not yet in the list, easiest first, each with its skill
-        --// requirement and materials.
-        function AICUI.RefreshRecipePicker(Force)
-            local Options = {}
-            table.clear(Module.RecipeOptions)
-
-            for _, Recipe in ipairs(Recipes:GetAll()) do
-                if not table.find(RecipeList.Priority, Recipe.Name) then
-                    local Option = string.format("%s  [Skill %s]  %s", Recipe.Name, tostring(Recipe.Skill), DescribeMaterials(Recipe))
-                    Module.RecipeOptions[Option] = Recipe.Name
-                    table.insert(Options, Option)
-                end
-            end
-
-            if #Options == 0 then
-                Options = { NO_RECIPES_OPTION }
-            end
-
-            AICUI.RefreshDropdown(Module.RecipePicker, Section, "Add Recipe", Options, AddRecipe, Force)
-        end
-
-        AICUI.RefreshRecipePicker(true)
+        --// Recipes are found and added in the Recipe Browser window.
+        Section:AddButton("Open Recipe Browser", function()
+            Browser:Toggle()
+        end)
 
         Section:AddButton("Refresh Recipes", function()
-            AICUI.RefreshRecipePicker(true)
+            Browser:Refresh()
             AICUI.RefreshMaterialPicker(true)
         end)
 
@@ -283,7 +241,7 @@ return {
         function AICUI.RefreshSmithingUI()
             LoadRecipeList()
             LoadReserveList()
-            AICUI.RefreshRecipePicker(true)
+            Browser:Refresh()
             AICUI.RefreshMaterialPicker(true)
             AutoSmithing:Reset(true)
             Module.LastInfo = 0
