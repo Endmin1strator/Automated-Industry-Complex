@@ -2048,8 +2048,21 @@ return {
                     return
                 end
         
-                local DirectPathBlocked = AICCombat.IsSafeCombatDirectPathBlocked(Goblin, SafeCombatPosition, now)
-        
+                local DirectPathBlocked
+
+                --// Close combat leaves what is in the way to ChaseMoveTo, which
+                --// walks straight, paths and sidesteps by itself; only water and
+                --// deadzones rule the walk out. The line-of-sight test hit the
+                --// other mobs of the pack, and the pathfinder could not end this
+                --// close to the mob (inside its body), so every close fight
+                --// ended in PATH SOLVING / WAITING (NO WAY FOUND).
+                if CloseCombat then
+                    DirectPathBlocked = AICCombatUtils.IsPathThroughWater(SafeCombatPosition)
+                        or AICCombatUtils.IsPathThroughDeadzone(SafeCombatPosition)
+                else
+                    DirectPathBlocked = AICCombat.IsSafeCombatDirectPathBlocked(Goblin, SafeCombatPosition, now)
+                end
+
                 if not DirectPathBlocked
                     and AICCombat.ChaseMoveTo(Goblin, SafeCombatPosition)
                 then
@@ -2059,7 +2072,20 @@ return {
                     return
                 end
             end
-        
+
+            --// Close combat with no spot to go to: walk at the mob itself, as
+            --// Safe Combat off did before v2.81.
+            if CloseCombat
+                and not AICCombatUtils.IsPathThroughWater(MobRoot.Position)
+                and not AICCombatUtils.IsPathThroughDeadzone(MobRoot.Position)
+                and AICCombat.ChaseMoveTo(Goblin, MobRoot.Position)
+            then
+                AICCombat.S.TargetUnreachableSince = nil
+                AICCombat.S.TargetApproachPosition = nil
+                AICCombat.S.ChaseStep = "CHASE TO MOB"
+                return
+            end
+
             --// ========================================================
             --// THIRD PRIORITY:
             --// Use real pathfinding when an object blocks the direct route.
