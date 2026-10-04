@@ -199,6 +199,43 @@ return {
             return true
         end
 
+        --// FARM STATE on the Status tab: what the loop did this frame, so a
+        --// character standing still can be told apart (retreating, holding
+        --// for Auto Block, waiting on a path...) without reading the code.
+        local function SetFarmState(Text)
+            local Label = UIRef.FarmStateLabel
+            Text = "FARM STATE  " .. Text
+
+            if Label and Label.Text ~= Text then
+                Label.Text = Text
+            end
+        end
+
+        --// "CHASE Goblin 12 // CHASE TO SPOT / STRAIGHT": the target, how far
+        --// it is, the MoveToGoblin step and what ChaseMoveTo did in it.
+        local CHASE_MOVE_STEPS = {
+            ["CHASE TO SPOT"] = true,
+            ["CHASE TO MOB"] = true,
+            ["REPOSITION"] = true,
+            ["SAFE ENEMY RANGE"] = true,
+        }
+
+        local function DescribeChase()
+            local Target = AICCombat.S.ClosestTarget
+            local _, _, RootPart = Runtime:GetCharacter()
+            local TargetRoot = Target and Target:FindFirstChild("HumanoidRootPart")
+            local Distance = RootPart and TargetRoot
+                and math.floor(AICCombatUtils.GetHorizontalDistance(RootPart.Position, TargetRoot.Position) + 0.5)
+                or "?"
+            local Step = tostring(AICCombat.S.ChaseStep or "?")
+
+            if CHASE_MOVE_STEPS[Step] and AICCombat.S.ChaseMoveStep then
+                Step ..= " / " .. AICCombat.S.ChaseMoveStep
+            end
+
+            return string.format("CHASE  %s  %s  //  %s", Target and Target.Name or "?", tostring(Distance), Step)
+        end
+
         --// Gather Mobs, once the route is walked and the character is inside
         --// the farm zone. True while it pulls a pack together or uses the
         --// skill on it; it moves and fights by itself then, so the combat at
@@ -325,6 +362,8 @@ return {
 
             --// Party System is resetting or waiting to Tp to its Leader.
             if AICFeature.IsPartyHolding and AICFeature.IsPartyHolding() then
+                SetFarmState("PARTY HOLD")
+
                 if FaceOrientation then
                     FaceOrientation.Enabled = false
                 end
@@ -334,6 +373,8 @@ return {
             end
 
             if not AICFeature.S.Enabled then
+                SetFarmState("AUTO FARM OFF")
+
                 --// Auto Smithing also runs with Auto Farm off: it walks to
                 --// the table and crafts, and nothing else moves.
                 if AICFeature.SmithingStep and AICFeature.SmithingStep(now) then
@@ -447,6 +488,8 @@ return {
             end
 
             if AICCombat.S.RETREATING then
+                SetFarmState("RETREAT (" .. tostring(AICCombat.S.RetreatReason or "?") .. ")")
+
                 --// On the route the dodge may land outside the farm zones,
                 --// which is where the route runs.
                 AICCombatUtils.S.DodgeOffRoute = RouteActive
@@ -471,6 +514,7 @@ return {
                     and (not AICCombatUtils.IsInsideFarmArea(RootPart.Position)
                         or AICCombatUtils.IsInsideFarmDeadzone(RootPart.Position))
                 then
+                    SetFarmState("RETURN TO FARM ZONE")
                     AICFeature.MoveBackToFarmZone()
                 end
 
@@ -543,6 +587,8 @@ return {
                 end
 
                 if Intruder then
+                    SetFarmState("AUTO BLOCK  @" .. Intruder.Name)
+
                     if not AICFeature.isBlocked(Intruder.UserId) then
                         AICFeature.promptBlockPlayer(Intruder)
                         return
@@ -556,6 +602,7 @@ return {
 
             --// Play Time
             if workspace.DistributedGameTime >= CONFIG.MAX_SERVER_AGE then
+                SetFarmState("SERVER TOO OLD, HOPPING")
                 AICFeature.TeleportToPlace()
                 return
             end
@@ -575,6 +622,8 @@ return {
                     and not FeatureState.AutoFind.Enabled
                     and now < AICFeature.S.WaypointWaitUntil
                 then
+                    SetFarmState("WAYPOINT WAIT")
+
                     if FaceOrientation then
                         FaceOrientation.Enabled = false
                     end
@@ -598,6 +647,7 @@ return {
 
                 --// Route mode: never let combat target state leak into waypoint movement.
                 if not FeatureState.AutoFind.Enabled and target then
+                    SetFarmState("ROUTE  #" .. tostring(WaypointIndex))
                     AICCombat.S.ClosestTarget = nil
                     AICCombat.S.TargetPath = nil
                     AICCombat.S.TargetPathMob = nil
@@ -673,8 +723,10 @@ return {
                     local InFarmDeadzone = AICCombatUtils.IsInsideFarmDeadzone(RootPart.Position)
 
                     if LoopResult == "move" then
+                        SetFarmState("WAYPOINT LOOP")
                         AICFeature.CancelPatrol()
                     elseif RunSideJobs(now) then
+                        SetFarmState("MINING / SMITHING")
                         HandedOff = true
                     elseif FeatureState.ReturnToFarmZone.Enabled
                         and not FeatureState.IgnoreFarmZone.Enabled
@@ -682,8 +734,10 @@ return {
                     then
                         AICCombat.S.ClosestTarget = nil
                         AICFeature.CancelPatrol()
+                        SetFarmState("RETURN TO FARM ZONE")
                         AICFeature.MoveBackToFarmZone()
                     elseif RunGather(now) then
+                        SetFarmState("GATHER")
                         HandedOff = true
                     else
                         if not AICCombat.S.ClosestTarget or not AICCombat.IsTargetLockValid(AICCombat.S.ClosestTarget) then
@@ -701,9 +755,12 @@ return {
                             --// chain to resume once the fight is over.
                             AICFeature.CancelPatrol()
                             AICCombat.MoveToGoblin(AICCombat.S.ClosestTarget)
+                            SetFarmState(DescribeChase())
                         elseif FeatureState.AutoPatrol.Enabled then
+                            SetFarmState("PATROL")
                             AICFeature.MoveToPatrol()
                         else
+                            SetFarmState("IDLE (NO TARGET)")
                             PatrolState.PatrolPosition = nil
                             AICFeature.S.FarmReturnPosition = nil
                             if FaceOrientation then
@@ -721,6 +778,7 @@ return {
                 local InFarmDeadzone = AICCombatUtils.IsInsideFarmDeadzone(RootPart.Position)
 
                 if RunSideJobs(now) then
+                    SetFarmState("MINING / SMITHING")
                     HandedOff = true
                 elseif FeatureState.ReturnToFarmZone.Enabled
                     and not FeatureState.IgnoreFarmZone.Enabled
@@ -728,8 +786,10 @@ return {
                 then
                     AICCombat.S.ClosestTarget = nil
                     AICFeature.CancelPatrol()
+                    SetFarmState("RETURN TO FARM ZONE")
                     AICFeature.MoveBackToFarmZone()
                 elseif RunGather(now) then
+                    SetFarmState("GATHER")
                     HandedOff = true
                 else
                     if not AICCombat.S.ClosestTarget or not AICCombat.IsTargetLockValid(AICCombat.S.ClosestTarget) then
@@ -747,9 +807,12 @@ return {
                         --// resume once the fight is over.
                         AICFeature.CancelPatrol()
                         AICCombat.MoveToGoblin(AICCombat.S.ClosestTarget)
+                        SetFarmState(DescribeChase())
                     elseif FeatureState.AutoPatrol.Enabled then
+                        SetFarmState("PATROL")
                         AICFeature.MoveToPatrol()
                     else
+                        SetFarmState("IDLE (NO TARGET)")
                         PatrolState.PatrolPosition = nil
                         AICFeature.S.FarmReturnPosition = nil
                         if FaceOrientation then
@@ -889,6 +952,7 @@ return {
         end
 
         if UIRef.StatusSection then
+            UIRef.FarmStateLabel = UIRef.StatusSection:AddLabel("FARM STATE  --")
             UIRef.PlaceIDLabel = UIRef.StatusSection:AddLabel("PLACE ID       " .. tostring(game.PlaceId))
             UIRef.WalkSpeedLabel = UIRef.StatusSection:AddLabel("WALKSPEED      0")
             UIRef.WayPointLabel = UIRef.StatusSection:AddLabel("WAYPOINTS:  0/" .. ((Runtime:GetPlaceConfig() and #Runtime:GetPlaceConfig().WAYPOINTS) or 0))

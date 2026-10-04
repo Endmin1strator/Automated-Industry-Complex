@@ -1534,10 +1534,12 @@ return {
                     Humanoid.AutoRotate = false
                     Humanoid:MoveTo(Detour or RootPart.Position)
                     AICCombat.FaceGoblin(Goblin)
+                    AICCombat.S.ChaseMoveStep = Detour and "ROUND BODY" or "BODY IN WAY, NO SIDE"
                     return true
                 end
 
                 MoveStraight(Humanoid, Goblin, Destination)
+                AICCombat.S.ChaseMoveStep = "MELEE"
                 return true
             end
 
@@ -1549,6 +1551,7 @@ return {
                 Humanoid:MoveTo(AICCombat.S.ChaseUnstickPosition)
                 AICCombat.FaceGoblin(Goblin)
                 AICCombatUtils.DoJumpIfObstacle(AICCombat.S.ChaseUnstickPosition)
+                AICCombat.S.ChaseMoveStep = "UNSTICK"
                 return true
             end
 
@@ -1586,10 +1589,12 @@ return {
             if not InPathMode then
                 AICCombat.ResetTargetPath()
                 MoveStraight(Humanoid, Goblin, Destination)
+                AICCombat.S.ChaseMoveStep = "STRAIGHT"
                 return true
             end
 
             if AICCombat.MoveAlongTargetPath(Goblin, Destination) then
+                AICCombat.S.ChaseMoveStep = "PATH"
                 return true
             end
 
@@ -1597,6 +1602,7 @@ return {
             --// heading rather than stopping dead for a frame.
             if AICCombat.IsTargetPathComputing() then
                 MoveStraight(Humanoid, Goblin, Destination)
+                AICCombat.S.ChaseMoveStep = "STRAIGHT (PATH SOLVING)"
                 return true
             end
 
@@ -1607,10 +1613,12 @@ return {
             --// once every sidestep has failed to get closer is the chase given
             --// up, so the caller can mark the target unreachable.
             if AICCombat.S.ChaseUnstickCount >= (tonumber(CONFIG.CHASE_MAX_UNSTICKS) or 4) then
+                AICCombat.S.ChaseMoveStep = "GAVE UP"
                 return false
             end
 
             MoveStraight(Humanoid, Goblin, Destination)
+            AICCombat.S.ChaseMoveStep = "STRAIGHT (NO PATH)"
             return true
         end
 
@@ -1844,6 +1852,7 @@ return {
         
                 AICCombat.ResetTargetReposition()
                 AICCombat.ResetTargetPath()
+                AICCombat.S.ChaseStep = "LOCK INVALID"
                 return
             end
 
@@ -1851,6 +1860,7 @@ return {
             --// spots on land) says no, so swimming fights use their own mover.
             if AICCombat.IsWaterCombat(Goblin) then
                 AICCombat.SwimChase(Goblin)
+                AICCombat.S.ChaseStep = "SWIM"
                 return
             end
 
@@ -1878,6 +1888,7 @@ return {
                     Humanoid.AutoRotate = false
                     Humanoid:MoveTo(ThreatEscapePosition)
                     AICCombat.FaceGoblin(Goblin)
+                    AICCombat.S.ChaseStep = "THREAT ESCAPE"
                     return
                 end
             end
@@ -1894,6 +1905,7 @@ return {
                 AICCombat.ResetTargetReposition()
                 AICCombat.ResetTargetPath()
         
+                AICCombat.S.ChaseStep = "TARGET DEAD"
                 return
             end
         
@@ -1910,6 +1922,7 @@ return {
                 if SafeEnemyDistance > CONFIG.SAFE_ENEMY_RANGE_ARRIVAL
                     and AICCombat.ChaseMoveTo(Goblin, SafeEnemyRangePosition)
                 then
+                    AICCombat.S.ChaseStep = "SAFE ENEMY RANGE"
                     return
                 end
             end
@@ -1934,6 +1947,7 @@ return {
                     AICCombat.FaceGoblin(Goblin)
                     AICCombat.S.TargetUnreachableSince = nil
                     AICCombat.S.TargetApproachPosition = nil
+                    AICCombat.S.ChaseStep = "CLOSE HOLD"
                     return
                 end
             end
@@ -1994,6 +2008,7 @@ return {
                     AICCombat.FaceGoblin(Goblin)
                 end
         
+                AICCombat.S.ChaseStep = "BLADE PUSH"
                 return
             end
         
@@ -2029,6 +2044,7 @@ return {
                     AICCombat.S.TargetUnreachableSince = nil
                     AICCombat.S.TargetApproachPosition = nil
         
+                    AICCombat.S.ChaseStep = "AT SPOT"
                     return
                 end
         
@@ -2039,6 +2055,7 @@ return {
                 then
                     AICCombat.S.TargetUnreachableSince = nil
                     AICCombat.S.TargetApproachPosition = nil
+                    AICCombat.S.ChaseStep = "CHASE TO SPOT"
                     return
                 end
             end
@@ -2061,12 +2078,14 @@ return {
                 Humanoid.AutoRotate = false
                 Humanoid:MoveTo(OtherPlayerDetour)
                 AICCombat.FaceGoblin(Goblin)
+                AICCombat.S.ChaseStep = "PLAYER DETOUR"
                 return
             end
         
             if AICCombat.MoveAlongTargetPath(Goblin, PathDestination) then
                 AICCombat.S.TargetUnreachableSince = nil
                 AICCombat.S.TargetApproachPosition = nil
+                AICCombat.S.ChaseStep = "PATH"
                 return
             end
         
@@ -2077,6 +2096,7 @@ return {
             --// could not see but could walk to.
             if AICCombat.IsTargetPathComputing() then
                 AICCombat.FaceGoblin(Goblin)
+                AICCombat.S.ChaseStep = "PATH SOLVING"
                 return
             end
 
@@ -2090,11 +2110,13 @@ return {
                 if AICCombat.MoveAlongTargetPath(Goblin, MobRoot.Position) then
                     AICCombat.S.TargetUnreachableSince = nil
                     AICCombat.S.TargetApproachPosition = nil
+                    AICCombat.S.ChaseStep = "PATH TO MOB"
                     return
                 end
 
                 if AICCombat.IsTargetPathComputing() then
                     AICCombat.FaceGoblin(Goblin)
+                    AICCombat.S.ChaseStep = "PATH SOLVING (MOB)"
                     return
                 end
             end
@@ -2122,6 +2144,7 @@ return {
                 if ApproachDistance <= CONFIG.APPROACH_ARRIVAL_DISTANCE then
                     AICCombat.S.TargetApproachPosition = nil
                 elseif AICCombat.ChaseMoveTo(Goblin, AICCombat.S.TargetApproachPosition) then
+                    AICCombat.S.ChaseStep = "REPOSITION"
                     return
                 end
             end
@@ -2136,6 +2159,7 @@ return {
                 and AICCombat.ChaseMoveTo(Goblin, MobRoot.Position)
             then
                 AICCombat.S.TargetUnreachableSince = nil
+                AICCombat.S.ChaseStep = "CHASE TO MOB"
                 return
             end
         
@@ -2143,6 +2167,7 @@ return {
             --// cannot find a perfect attack point. Keep the target locked while the
             --// pathfinding/reposition logic retries instead of dropping visibility.
             --// Waiting still faces it, so it cannot walk round behind us.
+            AICCombat.S.ChaseStep = "WAITING (NO WAY FOUND)"
             Humanoid:Move(Vector3.zero)
             AICCombat.FaceGoblin(Goblin)
         
