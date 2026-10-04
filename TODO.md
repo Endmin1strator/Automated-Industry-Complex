@@ -93,6 +93,14 @@
 >   (TARGET / MINING x.xs / READY มี/เป้า / DONE / TAKEN / REGENERATING / OUTSIDE MINE ZONE / NOT IN PRIORITY ...)
 > - ข้อสันนิษฐานที่ต้องเช็คในเกม: ชื่อไอเทมในกระเป๋าตรงกับชื่อโมเดลแร่ (เช่น "Iron Ore") และระยะ claim 15 studs ตาม demo
 
+### [x] Auto Block: ตั้งดีเลย์ได้
+- เพิ่ม feature ตั้งดีเลย์ของ Auto Block ได้
+
+> ทำแล้ว (v2.71): slider **Block Delay (s)** ในส่วน Auto Block (0–120 วินาที ค่าเริ่มต้น 0 = ทำทันทีเหมือนเดิม บันทึกในโปรไฟล์)
+> - เจอผู้เล่นที่ไม่อยู่ใน whitelist จะยังฟาร์มต่อตามปกติจนครบดีเลย์ แล้วค่อย Block และย้ายเซิร์ฟ
+> - นับเวลาแยกรายคน เริ่มตั้งแต่เห็นคนนั้นครั้งแรก ออกจากเซิร์ฟแล้วกลับเข้ามาใหม่จะเริ่มนับใหม่
+> - ถ้าตั้ง Leader ใน Party System ไว้ Party จะจัดการคนแปลกหน้าแทน ดีเลย์นี้ไม่มีผล
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

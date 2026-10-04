@@ -29,6 +29,8 @@ return {
         }
 
         AICFeature.S.BlockCache = AICFeature.S.BlockCache or {}
+        --// UserId -> os.clock() when Auto Block first saw that intruder.
+        AICFeature.S.IntruderSeenAt = {}
         AICFeature.S.BlockEnabled = Runtime:GetPlaceConfig().AUTOBLOCK == true
         AutoBlock.Enabled = AICFeature.S.BlockEnabled
         Feature.AutoBlock.Enabled = AutoBlock.Enabled
@@ -93,6 +95,22 @@ return {
             end
 
             return false
+        end
+
+        --// Block Delay: an intruder is acted on only once they have been
+        --// seen for AUTO_BLOCK_DELAY seconds. The clock starts the first
+        --// time this is asked about them and stops when they leave.
+        function AutoBlock:IsBlockDelayOver(OtherPlayer)
+            local Delay = math.max(tonumber(CONFIG.AUTO_BLOCK_DELAY) or 0, 0)
+            local now = os.clock()
+            local SeenAt = AICFeature.S.IntruderSeenAt[OtherPlayer.UserId]
+
+            if not SeenAt then
+                SeenAt = now
+                AICFeature.S.IntruderSeenAt[OtherPlayer.UserId] = now
+            end
+
+            return now - SeenAt >= Delay
         end
 
         function AutoBlock:PromptBlockPlayer(OtherPlayer)
@@ -217,6 +235,10 @@ return {
                 return
             end
 
+            UIRef.BlockDelaySlider = AICUI.AddSettingSlider(
+                BlockSection, "Block Delay (s)", "AUTO_BLOCK_DELAY", true
+            )
+
             self.WhitelistComponent = BlockSection:AddPriority(
                 "Block Whitelist",
                 CONFIG.BLOCK_WHITELIST or {}
@@ -308,7 +330,10 @@ return {
                 self:RefreshWhitelistPlayerDropdown()
             end)
 
-            Players.PlayerRemoving:Connect(function()
+            Players.PlayerRemoving:Connect(function(OtherPlayer)
+                --// Leaving and coming back starts the delay over.
+                AICFeature.S.IntruderSeenAt[OtherPlayer.UserId] = nil
+
                 task.defer(function()
                     self:RefreshWhitelistPlayerDropdown()
                 end)
@@ -329,6 +354,9 @@ return {
             end
             AICFeature.promptBlockPlayer = function(OtherPlayer)
                 return AutoBlock:PromptBlockPlayer(OtherPlayer)
+            end
+            AICFeature.IsBlockDelayOver = function(OtherPlayer)
+                return AutoBlock:IsBlockDelayOver(OtherPlayer)
             end
 
             AICUI.RefreshWhitelistPlayerDropdown = function()

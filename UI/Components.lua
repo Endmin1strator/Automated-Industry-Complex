@@ -243,6 +243,10 @@ return {
                 UIRef.TargetTypeDropdown:Set(tostring(CONFIG.TARGET_HP_MODE or "Disabled"), false)
             end
         
+            if UIRef.BlockDelaySlider then
+                UIRef.BlockDelaySlider:Set(CONFIG.AUTO_BLOCK_DELAY, false)
+            end
+
             if UIRef.BlockWhitelistComponent then
                 UIRef.BlockWhitelistComponent:SetPriority(table.clone(CONFIG.BLOCK_WHITELIST or {}))
                 CONFIG.BLOCK_WHITELIST = UIRef.BlockWhitelistComponent.Priority

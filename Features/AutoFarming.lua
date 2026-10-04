@@ -500,10 +500,17 @@ return {
             if AICFeature.S.BlockEnabled and not PartyHandles then
                 local Intruder = nil
 
+                --// Within the Block Delay an intruder is tolerated and the
+                --// farm carries on; block and hop only once it has run out.
+                --// Every intruder is asked about, so each one's delay starts
+                --// when they are first seen, not when the one before is dealt with.
                 for _, plr in Players:GetPlayers() do
-                    if plr ~= Player and not AICFeature.IsWhitelisted(plr.UserId) then
+                    if plr ~= Player
+                        and not AICFeature.IsWhitelisted(plr.UserId)
+                        and AICFeature.IsBlockDelayOver(plr)
+                        and not Intruder
+                    then
                         Intruder = plr
-                        break
                     end
                 end
 

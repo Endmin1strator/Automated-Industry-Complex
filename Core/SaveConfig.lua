@@ -144,6 +144,10 @@ return {
             --// UserIds allowed to share the server. Auto Block ignores these.
             { Key = "BLOCK_WHITELIST", Default = {}, Normalize = NormalizeUserIdList },
 
+            --// Seconds Auto Block waits after first seeing a non-whitelisted
+            --// player before blocking them and leaving. 0 acts at once.
+            { Key = "AUTO_BLOCK_DELAY", Default = 0, Min = 0, Max = 120 },
+
             --// Party System Leader, followed between servers with the game's
             --// "tp friend <Name>" chat command. Empty table = no Leader.
             { Key = "PARTY_LEADER", Default = {}, Normalize = NormalizePartyLeader },
