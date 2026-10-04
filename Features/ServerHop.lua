@@ -33,6 +33,18 @@ return {
         --// Pages of the public server list a hop reads before giving up.
         local HOP_MAX_PAGES = 4
         local LOG_LIMIT = 100
+        --// The same notice is not shown again within this.
+        local NOTICE_COOLDOWN = 8
+        --// One "could not check" notice at most this often, however many
+        --// players' group checks fail (the details go to the console).
+        local GROUP_CHECK_NOTICE_COOLDOWN = 60
+        --// Join alerts arriving within this are shown as one notice.
+        local JOIN_ALERT_BATCH_SECONDS = 1.5
+        --// Names listed in one notice; the rest are counted.
+        local JOIN_ALERT_MAX_NAMES = 4
+        --// A player who leaves and comes back within this is not announced
+        --// again.
+        local JOIN_ALERT_REPEAT_SECONDS = 120
         local SERVER_LIST_URL = "https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100"
 
         local ServerHop = {
@@ -41,7 +53,14 @@ return {
             DANGER_GROUP_ID = DANGER_GROUP_ID,
             S = {
                 Teleporting = false,
+                --// A hop is reading the server list.
+                Finding = false,
                 Status = "IDLE",
+                --// Notice key -> os.clock() it was last shown.
+                NoticeAt = {},
+                --// Join alerts waiting to be shown together.
+                AlertQueue = {},
+                AlertFlushScheduled = false,
                 --// UserId -> true once found in the danger group.
                 DangerUsers = {},
                 CheckedUsers = {},
@@ -49,6 +68,7 @@ return {
                 CheckFailures = {},
                 DangerHopStarted = false,
                 DangerHopAttempts = 0,
+                --// UserId -> os.clock() of their last join alert.
                 AlertSeen = {},
                 Log = {},
                 --// Bumped on every log change, so the UI redraws only then.
@@ -68,6 +88,22 @@ return {
 
         local function SetStatus(Text)
             S.Status = Text
+        end
+
+        --// Every notice goes through here, so a repeat within Cooldown
+        --// (NOTICE_COOLDOWN by default) is dropped. Key defaults to the
+        --// title and message.
+        local function Notify(Title, Message, Duration, Key, Cooldown)
+            Key = Key or (Title .. "|" .. Message)
+
+            local now = os.clock()
+
+            if now - (S.NoticeAt[Key] or -math.huge) < (Cooldown or NOTICE_COOLDOWN) then
+                return
+            end
+
+            S.NoticeAt[Key] = now
+            NotifyAction(Title, Message, Duration)
         end
 
         function ServerHop:GetStatus()
@@ -137,7 +173,7 @@ return {
                 if not Success then
                     S.Teleporting = false
                     SetStatus("TELEPORT FAILED")
-                    NotifyAction("SERVER", tostring(Error), 6)
+                    Notify("SERVER", tostring(Error), 6)
                 end
             end)
 
@@ -148,11 +184,11 @@ return {
             local JobId = tostring(game.JobId or "")
 
             if JobId == "" then
-                NotifyAction("SERVER", "This server has no Job ID, so Rejoin is unavailable", 4)
+                Notify("SERVER", "This server has no Job ID, so Rejoin is unavailable", 4)
                 return false
             end
 
-            NotifyAction("SERVER", "Rejoining this server...")
+            Notify("SERVER", "Rejoining this server...")
             return TeleportToInstance(JobId, "REJOINING")
         end
 
@@ -160,7 +196,7 @@ return {
             JobId = tostring(JobId or ""):gsub("%s+", "")
 
             if JobId == "" or JobId == game.JobId then
-                NotifyAction("SERVER", "That Job ID is empty or is this server", 4)
+                Notify("SERVER", "That Job ID is empty or is this server", 4)
                 return false
             end
 
@@ -216,28 +252,29 @@ return {
         end
 
         function ServerHop:Hop()
-            if S.Teleporting then
+            --// A second press while one is finding or teleporting does nothing.
+            if S.Teleporting or S.Finding then
                 return false
             end
 
+            S.Finding = true
             SetStatus("FINDING SERVER")
 
             task.spawn(function()
                 local Cursor
+                local Target, Error
 
                 for _ = 1, HOP_MAX_PAGES do
-                    local Servers, NextCursor, Error = ServerHop:ReadPublicServers(Cursor)
+                    local Servers, NextCursor, ReadError = ServerHop:ReadPublicServers(Cursor)
 
                     if not Servers then
-                        SetStatus("HOP FAILED")
-                        NotifyAction("SERVER HOP", "Could not read the server list: " .. tostring(Error), 6)
-                        return
+                        Error = ReadError
+                        break
                     end
 
                     if #Servers > 0 then
-                        NotifyAction("SERVER HOP", "Joining another public server...")
-                        TeleportToInstance(Servers[math.random(1, #Servers)].Id, "HOPPING")
-                        return
+                        Target = Servers[math.random(1, #Servers)].Id
+                        break
                     end
 
                     Cursor = NextCursor
@@ -247,8 +284,18 @@ return {
                     end
                 end
 
-                SetStatus("NO OTHER SERVER")
-                NotifyAction("SERVER HOP", "No other public server with a free slot was found", 6)
+                S.Finding = false
+
+                if Target then
+                    Notify("SERVER HOP", "Joining another public server...")
+                    TeleportToInstance(Target, "HOPPING")
+                elseif Error then
+                    SetStatus("HOP FAILED")
+                    Notify("SERVER HOP", "Could not read the server list: " .. tostring(Error), 6)
+                else
+                    SetStatus("NO OTHER SERVER")
+                    Notify("SERVER HOP", "No other public server with a free slot was found", 6)
+                end
             end)
 
             return true
@@ -281,7 +328,7 @@ return {
             SetStatus("LEAVING (DANGER GROUP)")
 
             if S.DangerHopAttempts == 1 then
-                NotifyAction("DANGER", string.format("@%s is in group %d. Leaving this server.", OtherPlayer.Name, DANGER_GROUP_ID), 7)
+                Notify("DANGER", string.format("@%s is in group %d. Leaving this server.", OtherPlayer.Name, DANGER_GROUP_ID), 7)
             end
 
             task.spawn(function()
@@ -301,7 +348,7 @@ return {
                     task.delay(DANGER_HOP_RETRY_DELAY, LeaveFor, OtherPlayer)
                 else
                     SetStatus("TELEPORT FAILED")
-                    NotifyAction("DANGER", "Teleport failed after " .. DANGER_HOP_MAX_ATTEMPTS .. " attempts", 7)
+                    Notify("DANGER", "Teleport failed after " .. DANGER_HOP_MAX_ATTEMPTS .. " attempts", 7)
                 end
             end)
         end
@@ -351,7 +398,8 @@ return {
                     --// again, until the last attempt has failed.
                     if S.CheckFailures[UserId] >= GROUP_CHECK_MAX_ATTEMPTS then
                         S.CheckedUsers[UserId] = true
-                        NotifyAction("GROUP CHECK", "Could not check @" .. OtherPlayer.Name .. " after " .. GROUP_CHECK_MAX_ATTEMPTS .. " tries", 7)
+                        Notify("GROUP CHECK", "Could not check @" .. OtherPlayer.Name .. " after " .. GROUP_CHECK_MAX_ATTEMPTS .. " tries", 7,
+                            "GROUP CHECK", GROUP_CHECK_NOTICE_COOLDOWN)
                     else
                         task.wait(GROUP_CHECK_RETRY_DELAY)
                     end
@@ -376,29 +424,84 @@ return {
         --// Join Alerts
         ------------------------------------------------------------------------
 
-        local function AlertIfStranger(OtherPlayer, WasAlreadyHere)
+        --// "@a, @b, @c, @d and 2 more"
+        local function ListNames(Names)
+            local Shown = {}
+
+            for Index = 1, math.min(#Names, JOIN_ALERT_MAX_NAMES) do
+                Shown[Index] = Names[Index]
+            end
+
+            local Text = table.concat(Shown, ", ")
+
+            if #Names > JOIN_ALERT_MAX_NAMES then
+                Text ..= string.format(" and %d more", #Names - JOIN_ALERT_MAX_NAMES)
+            end
+
+            return Text
+        end
+
+        --// Shows the queued alerts as at most two notices: who joined, and
+        --// who was already here. Anyone who left or was whitelisted while
+        --// queued, or Join Alerts switched off meanwhile, is dropped.
+        local function FlushJoinAlerts()
+            S.AlertFlushScheduled = false
+
+            local Queue = S.AlertQueue
+            S.AlertQueue = {}
+
+            if not Feature.JoinAlerts.Enabled then
+                return
+            end
+
+            local Joined, Here = {}, {}
+
+            for _, Entry in ipairs(Queue) do
+                if Entry.Player.Parent == Players and not IsWhitelisted(Entry.Player) then
+                    table.insert(Entry.WasAlreadyHere and Here or Joined, "@" .. Entry.Player.Name)
+                end
+            end
+
+            if #Joined == 1 then
+                NotifyAction("PLAYER JOINED", Joined[1] .. " joined the server", 6)
+            elseif #Joined > 1 then
+                NotifyAction("PLAYERS JOINED", string.format("%d players joined: %s", #Joined, ListNames(Joined)), 6)
+            end
+
+            if #Here == 1 then
+                NotifyAction("PLAYER ALREADY HERE", Here[1] .. " is already in this server", 6)
+            elseif #Here > 1 then
+                NotifyAction("PLAYERS ALREADY HERE", string.format("%d players off the whitelist are here: %s", #Here, ListNames(Here)), 6)
+            end
+        end
+
+        --// Force skips the repeat window, for a fresh look at who is here.
+        local function AlertIfStranger(OtherPlayer, WasAlreadyHere, Force)
             if OtherPlayer == Player or not Feature.JoinAlerts.Enabled or IsWhitelisted(OtherPlayer) then
                 return
             end
 
             local UserId = tostring(OtherPlayer.UserId)
+            local now = os.clock()
 
-            if S.AlertSeen[UserId] then
+            if not Force and now - (S.AlertSeen[UserId] or -math.huge) < JOIN_ALERT_REPEAT_SECONDS then
                 return
             end
 
-            S.AlertSeen[UserId] = true
-            NotifyAction(
-                WasAlreadyHere and "PLAYER ALREADY HERE" or "PLAYER JOINED",
-                "@" .. OtherPlayer.Name .. (WasAlreadyHere and " is already in this server" or " joined the server"),
-                6
-            )
+            S.AlertSeen[UserId] = now
+            table.insert(S.AlertQueue, { Player = OtherPlayer, WasAlreadyHere = WasAlreadyHere })
+
+            if not S.AlertFlushScheduled then
+                S.AlertFlushScheduled = true
+                task.delay(JOIN_ALERT_BATCH_SECONDS, FlushJoinAlerts)
+            end
         end
 
-        --// Called when Join Alerts is switched on: everyone already here.
+        --// Join Alerts switched on, or loaded on: everyone already here, in
+        --// one notice.
         function ServerHop:ScanJoinAlerts()
             for _, OtherPlayer in ipairs(Players:GetPlayers()) do
-                AlertIfStranger(OtherPlayer, true)
+                AlertIfStranger(OtherPlayer, true, true)
             end
         end
 
@@ -436,8 +539,9 @@ return {
                 RecordLog(OtherPlayer, "left")
             end
 
+            --// AlertSeen is kept, so leaving and coming straight back is not
+            --// announced twice.
             S.Online[UserId] = nil
-            S.AlertSeen[UserId] = nil
             S.CheckedUsers[UserId] = nil
             S.CheckFailures[UserId] = nil
         end)
@@ -447,13 +551,15 @@ return {
         end
 
         TeleportService.TeleportInitFailed:Connect(function(Who, _, ErrorMessage)
-            if Who ~= Player then
+            --// Auto Block and Party System teleport too, and report their own
+            --// failures; only a teleport of ours is reported here.
+            if Who ~= Player or not (S.Teleporting or S.DangerHopStarted) then
                 return
             end
 
             S.Teleporting = false
             SetStatus("TELEPORT FAILED")
-            NotifyAction("SERVER", tostring(ErrorMessage or "Teleport failed"), 6)
+            Notify("SERVER", tostring(ErrorMessage or "Teleport failed"), 6)
 
             --// A failed danger hop tries again on the next scan.
             S.DangerHopStarted = false
