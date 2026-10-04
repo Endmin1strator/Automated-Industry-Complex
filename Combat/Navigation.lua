@@ -40,6 +40,10 @@ return {
         --// With Safe Combat off, the spots tried around the target, nearest
         --// first: just clear of its body (TARGET_BODY_CLEARANCE) and in reach.
         local CLOSE_COMBAT_DISTANCES = { 5, 6.5, 8 }
+        --// With Safe Combat off, standing within this of the mob's facing
+        --// (cosine; 0.5 = 60 degrees either side) counts as in front of it,
+        --// the only place it moves away from.
+        local CLOSE_FRONT_DOT = 0.5
 
         function AICCombat.IsSafeCombatPathClear(TargetPosition, Goblin)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
@@ -1852,11 +1856,21 @@ return {
 
             local MobHumanoid = Goblin:FindFirstChildOfClass("Humanoid")
             local MobRoot     = Goblin:FindFirstChild("HumanoidRootPart")
-        
+
+            --// Safe Combat off (close combat) never backs away: no making room
+            --// from a second mob, no Safe Enemy Range spacing, no stepping
+            --// out from the target. It only goes round the target to its rear.
+            local CloseCombat = not AICCombat.S.SafeCombatPositionEnabled
+
             --// Secondary threat handling:
             --// Keep the current target locked, but make room if another mob
             --// closes in from the player's side or rear.
-            local ThreatMob, ThreatDistance = AICCombat.GetNearbyThreatMob(Goblin)
+            local ThreatMob, ThreatDistance = nil, math.huge
+
+            if not CloseCombat then
+                ThreatMob, ThreatDistance = AICCombat.GetNearbyThreatMob(Goblin)
+            end
+
             if ThreatMob and ThreatDistance <= CONFIG.ENEMY_ATTACK_SAFE_DISTANCE + CONFIG.THREAT_ESCAPE_DISTANCE then
                 local ThreatEscapePosition = AICCombat.GetThreatEscapePosition(Goblin, ThreatMob)
         
@@ -1886,38 +1900,42 @@ return {
             --// Safe Enemy Range has its own lightweight rule set.
             --// It only cares about BladePart distance, FarmZone, and Deadzone.
             --// It does not use CanSeeGoblin, water checks, path checks, or SafeCombat.
-            local SafeEnemyRangePosition = AICCombat.GetSafeEnemyRangePosition(Goblin)
-            local SafeEnemyArrived = false
+            --// Spacing, so Safe Combat on only.
+            local SafeEnemyRangePosition = not CloseCombat and AICCombat.GetSafeEnemyRangePosition(Goblin)
 
             if SafeEnemyRangePosition then
                 local SafeEnemyOffset = SafeEnemyRangePosition - RootPart.Position
                 local SafeEnemyDistance = Vector3.new(SafeEnemyOffset.X, 0, SafeEnemyOffset.Z).Magnitude
-                SafeEnemyArrived = SafeEnemyDistance <= CONFIG.SAFE_ENEMY_RANGE_ARRIVAL
 
-                if not SafeEnemyArrived
+                if SafeEnemyDistance > CONFIG.SAFE_ENEMY_RANGE_ARRIVAL
                     and AICCombat.ChaseMoveTo(Goblin, SafeEnemyRangePosition)
                 then
                     return
                 end
             end
 
-            --// Safe Combat off fights exactly as Safe Combat on does (rear
-            --// first, circling round as the mob turns to face us, paths round
-            --// obstacles) but close: CLOSE_COMBAT_DISTANCES from the mob rather
-            --// than outside its blade reach, and without backing off its blade.
-            --// It used to walk straight at the mob and stand at its face.
-            local CloseCombat = not AICCombat.S.SafeCombatPositionEnabled
+            --// Safe Combat off fights as Safe Combat on does (rear first,
+            --// circling round as the mob turns to face us, paths round
+            --// obstacles) but close: CLOSE_COMBAT_DISTANCES from the mob, with
+            --// no backing off at all. In reach and out of the mob's front, it
+            --// stays put and fights; it only moves when the mob turns to face it.
+            if CloseCombat then
+                local Offset = RootPart.Position - MobRoot.Position
+                local FlatOffset = Vector3.new(Offset.X, 0, Offset.Z)
+                local Look = MobRoot.CFrame.LookVector
+                local FlatLook = Vector3.new(Look.X, 0, Look.Z)
+                local InFront = FlatOffset.Magnitude > 0.01
+                    and FlatLook.Magnitude > 0.01
+                    and FlatOffset.Unit:Dot(FlatLook.Unit) > CLOSE_FRONT_DOT
 
-            --// Safe Enemy Range is the spacing the player asked for: once there,
-            --// stay (it moves round with the mob), or the close spot would pull
-            --// us back in every frame. Before, arriving fell through to walking
-            --// at the mob's face, then back out again.
-            if CloseCombat and SafeEnemyArrived then
-                Humanoid.AutoRotate = false
-                Humanoid:Move(Vector3.zero)
-                AICCombat.FaceGoblin(Goblin)
-                AICCombat.S.TargetUnreachableSince = nil
-                return
+                if FlatOffset.Magnitude <= CLOSE_COMBAT_DISTANCES[#CLOSE_COMBAT_DISTANCES] and not InFront then
+                    Humanoid.AutoRotate = false
+                    Humanoid:Move(Vector3.zero)
+                    AICCombat.FaceGoblin(Goblin)
+                    AICCombat.S.TargetUnreachableSince = nil
+                    AICCombat.S.TargetApproachPosition = nil
+                    return
+                end
             end
 
             if AICCombat.S.TargetApproachMob ~= Goblin then
