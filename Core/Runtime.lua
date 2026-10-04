@@ -81,6 +81,7 @@ return {
         UIRef.MineTab = UI:AddTab("Mining")
         UIRef.CraftTab = UI:AddTab("Crafting")
         UIRef.PartyTab = UI:AddTab("Party")
+        UIRef.ServerTab = UI:AddTab("Server")
         UIRef.DebugTab = UI:AddTab("Debug")
         UIRef.FeatureSection = UIRef.FarmTab:AddSection("Features")
         UIRef.TargetSection = UIRef.FarmTab:AddSection("Targeting")
@@ -90,6 +91,9 @@ return {
         UIRef.MineSection = UIRef.MineTab:AddSection("Auto Mining")
         UIRef.CraftSection = UIRef.CraftTab:AddSection("Auto Smithing")
         UIRef.PartySection = UIRef.PartyTab:AddSection("Party System")
+        UIRef.ServerSection = UIRef.ServerTab:AddSection("Current Server")
+        UIRef.ServerSafetySection = UIRef.ServerTab:AddSection("Server Safety")
+        UIRef.ServerLogSection = UIRef.ServerTab:AddSection("Player Log")
         
         local function NotifyAction(Action, Message, Duration)
             if UI and type(UI.Notify) == "function" then

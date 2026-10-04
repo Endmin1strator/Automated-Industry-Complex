@@ -143,6 +143,22 @@
 >   ถ้าคราฟไม่ได้จะบอกว่าไม่มีสูตร Smithing ที่ทำของนี้ / กดที่อื่นหรือ × เพื่อปิด
 > - อัปเดตกระเป๋าและ skill ทุก 1 วิ ตอนหน้าต่างเปิดอยู่ (`SmithingBrowser.lua`)
 
+### [x] Server: ย้าย feature ที่เกี่ยวกับ server จาก Iambatman มาทั้งหมด
+> ทำแล้ว (v2.75): แท็บใหม่ **Server** (`ServerHop.lua` ทำงาน, `ServerUI.lua` วาด UI)
+> - **Current Server**: จำนวนผู้เล่น/สูงสุด + ชื่อแมพ, Job ID + PlaceId, FPS และ Ping (สีเหลือง/ส้ม/แดงตามเกณฑ์ 50/30 FPS, 100/200 ms), สถานะการย้ายเซิร์ฟ
+>   ปุ่ม **Rejoin** (เข้าเซิร์ฟเดิม), **Server Hop** (สุ่มเซิร์ฟ public ที่ยังไม่เต็ม อ่านรายการสูงสุด 4 หน้า), **Copy Job ID**,
+>   ช่อง **Job ID** + **Join Job ID** (เข้าเซิร์ฟตาม Job ID), **Open Server Browser**
+> - **Server Browser**: หน้าต่างแยก ซ้ายเป็นรายการเซิร์ฟ public (เซิร์ฟที่อยู่ขึ้นก่อน "YOU ARE HERE") โชว์ผู้เล่น/Ping/FPS/Job ID ย่อ, Refresh / Load More
+>   กดเซิร์ฟแล้วขวาโชว์รายละเอียด + Copy Job ID + Join ถ้าเป็นเซิร์ฟปัจจุบันจะโชว์รายชื่อผู้เล่นในเซิร์ฟด้วย (เซิร์ฟอื่น Roblox ให้แค่จำนวน)
+> - **Leave On Danger Group** (ค่าเริ่มต้นเปิด เหมือน Iambatman ที่เปิดตลอด): เช็คทุกคนในเซิร์ฟว่าอยู่กลุ่ม 5928691 ไหม
+>   ถ้าใช่และไม่อยู่ใน whitelist ของ Auto Block → ย้ายเซิร์ฟทันที ลองสูงสุด 3 ครั้ง (เช็คกลุ่มพลาดลองใหม่ 3 ครั้ง ห่าง 5 วิ)
+>   เริ่มเช็คหลังโหลดโปรไฟล์แล้ว (whitelist ต้องโหลดก่อน) และเช็คซ้ำทุก 2 วิ เผื่อเอาใครออกจาก whitelist
+> - **Join Alerts** (ค่าเริ่มต้นปิด): แจ้งเตือนเมื่อมีคนนอก whitelist เข้ามา หรืออยู่ในเซิร์ฟตอนเปิด
+> - **Player Log**: 15 รายการล่าสุด เวลา JOINED / LEFT / PRESENT @ชื่อ พร้อมป้าย [WL] [DANGER] เก็บสูงสุด 100, ปุ่ม Clear Log
+> - "เพิ่มทุกคนในเซิร์ฟเข้า whitelist" มีอยู่แล้วใน Auto Block (**Add Everyone Here**) ไม่ได้ทำซ้ำ
+> - แยกโค้ดสร้างหน้าต่างลอยเป็น `UI/Floating.lua` ใช้ร่วมกับ Recipe Browser
+> - รายการเซิร์ฟต้องใช้ `game:HttpGet` (executor) ใน Studio จะขึ้นว่าโหลดไม่ได้
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

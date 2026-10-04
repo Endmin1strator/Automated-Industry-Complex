@@ -7,26 +7,26 @@
 return {
     Name = "SmithingBrowser",
     IsFeature = true,
-    Dependencies = {"Runtime", "SaveConfig", "SmithingRecipes"},
+    Dependencies = {"Runtime", "SaveConfig", "SmithingRecipes", "Floating"},
 
     Start = function(Context)
         local UI = Context.UI
         local UIRef = Context.UIRef
         local NotifyAction = Context.NotifyAction
         local Recipes = Context.SmithingRecipes
+        local Floating = Context.Floating
         local UserInputService = Context.Services.UserInputService
+
+        local New, Corner, Stroke, Padding, List = Floating.New, Floating.Corner, Floating.Stroke, Floating.Padding, Floating.List
+        local Label, Button, ClearChildren, IsInside = Floating.Label, Floating.Button, Floating.ClearChildren, Floating.IsInside
 
         local MAX_STACK = Context.SaveConfig.ITEM_MAX_STACK
         local WINDOW_WIDTH = 580
         local WINDOW_HEIGHT = 400
-        local SCREEN_MARGIN = 12
         --// Share of the window the recipe list takes; the details get the rest.
         local LIST_WIDTH_SCALE = 0.46
         local ROW_HEIGHT = 34
         local POPUP_WIDTH = 240
-        --// Above the main window and the pinned items panel.
-        local WINDOW_Z = 60
-        local POPUP_Z = 70
         --// Inventory and skill are read again this often while open.
         local REFRESH_INTERVAL = 1
 
@@ -50,115 +50,6 @@ return {
 
         local S = Browser.S
         local Theme, Window, SearchBox, ListScroll, EmptyLabel, DetailScroll, Popup, PopupContent
-
-        ------------------------------------------------------------------------
-        --// Instance helpers, in the style of UI/Utils
-        ------------------------------------------------------------------------
-
-        local function New(ClassName, Properties)
-            local Object = Instance.new(ClassName)
-
-            for Property, Value in pairs(Properties or {}) do
-                if Property ~= "Parent" then
-                    Object[Property] = Value
-                end
-            end
-
-            Object.Parent = Properties and Properties.Parent
-            return Object
-        end
-
-        local function Corner(Parent, Radius)
-            return New("UICorner", { Parent = Parent, CornerRadius = UDim.new(0, Radius or 4) })
-        end
-
-        local function Stroke(Parent, Color, Transparency)
-            return New("UIStroke", {
-                Parent = Parent,
-                Color = Color,
-                Transparency = Transparency or 0,
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-            })
-        end
-
-        local function Padding(Parent, X, Y)
-            return New("UIPadding", {
-                Parent = Parent,
-                PaddingLeft = UDim.new(0, X),
-                PaddingRight = UDim.new(0, X),
-                PaddingTop = UDim.new(0, Y),
-                PaddingBottom = UDim.new(0, Y),
-            })
-        end
-
-        local function List(Parent, Gap)
-            return New("UIListLayout", {
-                Parent = Parent,
-                SortOrder = Enum.SortOrder.LayoutOrder,
-                Padding = UDim.new(0, Gap),
-            })
-        end
-
-        local function Label(Parent, Text, Size, Properties)
-            local Object = New("TextLabel", {
-                Parent = Parent,
-                BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, Size + 4),
-                Text = Text,
-                TextColor3 = Theme.Text,
-                TextSize = Size,
-                Font = Enum.Font.GothamMedium,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                TextTruncate = Enum.TextTruncate.AtEnd,
-            })
-
-            for Property, Value in pairs(Properties or {}) do
-                Object[Property] = Value
-            end
-
-            return Object
-        end
-
-        local function Button(Parent, Text, Color, Properties)
-            local Object = New("TextButton", {
-                Parent = Parent,
-                Size = UDim2.new(1, 0, 0, 26),
-                BackgroundColor3 = Theme.Element,
-                BorderSizePixel = 0,
-                Text = Text,
-                TextColor3 = Color or Theme.Text,
-                TextSize = 12,
-                Font = Enum.Font.GothamBold,
-                AutoButtonColor = true,
-            })
-
-            Corner(Object, 4)
-            Stroke(Object, Theme.BorderDim, 0.3)
-
-            for Property, Value in pairs(Properties or {}) do
-                Object[Property] = Value
-            end
-
-            return Object
-        end
-
-        local function ClearChildren(Parent)
-            for _, Child in ipairs(Parent:GetChildren()) do
-                if Child:IsA("GuiObject") then
-                    Child:Destroy()
-                end
-            end
-        end
-
-        local function IsInside(Object, Position)
-            if not Object or not Object.Parent or not Object.Visible then
-                return false
-            end
-
-            local Min = Object.AbsolutePosition
-            local Max = Min + Object.AbsoluteSize
-            return Position.X >= Min.X and Position.X <= Max.X and Position.Y >= Min.Y and Position.Y <= Max.Y
-        end
 
         ------------------------------------------------------------------------
         --// What the inventory says about a recipe or a material
@@ -251,7 +142,7 @@ return {
                 local Screen = UI.ScreenGui.AbsoluteSize
                 local Left = Anchor.AbsolutePosition.X + Anchor.AbsoluteSize.X + 6
 
-                if Left + POPUP_WIDTH > Screen.X - SCREEN_MARGIN then
+                if Left + POPUP_WIDTH > Screen.X - Floating.SCREEN_MARGIN then
                     Left = Anchor.AbsolutePosition.X - POPUP_WIDTH - 6
                 end
 
@@ -576,55 +467,19 @@ return {
         local function Build()
             Theme = UI.Theme
 
-            Window = New("Frame", {
-                Name = "SmithingBrowser",
-                Parent = UI.ScreenGui,
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                Position = UDim2.fromScale(0.5, 0.5),
-                Size = UDim2.fromOffset(WINDOW_WIDTH, WINDOW_HEIGHT),
-                BackgroundColor3 = Theme.Background,
-                BackgroundTransparency = 0.03,
-                BorderSizePixel = 0,
-                Active = true,
-                Visible = false,
-                ZIndex = WINDOW_Z,
+            Window = Floating.CreateWindow({
+                Title = "RECIPE BROWSER",
+                Width = WINDOW_WIDTH,
+                Height = WINDOW_HEIGHT,
+                OnClose = function()
+                    S.IsOpen = false
+                    HidePopup()
+                end,
             })
-
-            Corner(Window, 6)
-            Stroke(Window, Theme.BorderDim)
-
-            local Header = New("Frame", {
-                Parent = Window,
-                BackgroundColor3 = Theme.BackgroundLight,
-                BorderSizePixel = 0,
-                Size = UDim2.new(1, 0, 0, 32),
-                Active = true,
-            })
-
-            Corner(Header, 6)
-            Label(Header, "RECIPE BROWSER", 13, {
-                Position = UDim2.fromOffset(12, 0),
-                Size = UDim2.new(1, -50, 1, 0),
-                TextColor3 = Theme.Cyan,
-                Font = Enum.Font.GothamBold,
-            })
-
-            local Close = Button(Header, "×", Theme.Danger, {
-                AnchorPoint = Vector2.new(1, 0.5),
-                Position = UDim2.new(1, -8, 0.5, 0),
-                Size = UDim2.fromOffset(22, 20),
-            })
-
-            UI:_Connect(Close.Activated, function()
-                Browser:Close()
-            end)
-
-            UI:_MakeDraggable(Header, Window, true)
 
             SearchBox = New("TextBox", {
-                Parent = Window,
-                Position = UDim2.fromOffset(10, 40),
-                Size = UDim2.new(1, -20, 0, 26),
+                Parent = Window.Body,
+                Size = UDim2.new(1, 0, 0, 26),
                 BackgroundColor3 = Theme.Element,
                 BorderSizePixel = 0,
                 Text = "",
@@ -641,35 +496,15 @@ return {
             Stroke(SearchBox, Theme.BorderDim, 0.3)
             New("UIPadding", { Parent = SearchBox, PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
 
-            local Body = New("Frame", {
-                Parent = Window,
+            local Lists = New("Frame", {
+                Parent = Window.Body,
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(10, 74),
-                Size = UDim2.new(1, -20, 1, -84),
+                Position = UDim2.fromOffset(0, 34),
+                Size = UDim2.new(1, 0, 1, -34),
             })
 
-            local function Scroller(Position, Size, PadX, PadY)
-                local Scroll = New("ScrollingFrame", {
-                    Parent = Body,
-                    Position = Position,
-                    Size = Size,
-                    BackgroundColor3 = Theme.Panel,
-                    BorderSizePixel = 0,
-                    CanvasSize = UDim2.new(),
-                    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-                    ScrollBarThickness = 4,
-                    ScrollBarImageColor3 = Theme.Border,
-                    ScrollingDirection = Enum.ScrollingDirection.Y,
-                })
-
-                Corner(Scroll, 4)
-                Padding(Scroll, PadX, PadY)
-                List(Scroll, 3)
-                return Scroll
-            end
-
-            ListScroll = Scroller(UDim2.new(), UDim2.new(LIST_WIDTH_SCALE, -4, 1, 0), 4, 4)
-            DetailScroll = Scroller(UDim2.new(LIST_WIDTH_SCALE, 4, 0, 0), UDim2.new(1 - LIST_WIDTH_SCALE, -4, 1, 0), 8, 6)
+            ListScroll = Floating.Scroller(Lists, UDim2.new(), UDim2.new(LIST_WIDTH_SCALE, -4, 1, 0), 4, 4)
+            DetailScroll = Floating.Scroller(Lists, UDim2.new(LIST_WIDTH_SCALE, 4, 0, 0), UDim2.new(1 - LIST_WIDTH_SCALE, -4, 1, 0), 8, 6)
 
             EmptyLabel = Label(ListScroll, "No recipes match", 12, {
                 TextColor3 = Theme.TextMuted,
@@ -686,7 +521,7 @@ return {
                 BorderSizePixel = 0,
                 Active = true,
                 Visible = false,
-                ZIndex = POPUP_Z,
+                ZIndex = Floating.POPUP_Z,
             })
 
             Corner(Popup, 6)
@@ -725,22 +560,6 @@ return {
             S.Built = true
         end
 
-        --// Fits a small screen, keeping the margin on every side.
-        local function FitToScreen()
-            local Screen = UI.ScreenGui.AbsoluteSize
-
-            if Screen.X <= 0 or Screen.Y <= 0 then
-                return
-            end
-
-            Window.Size = UDim2.fromOffset(
-                math.min(WINDOW_WIDTH, Screen.X - SCREEN_MARGIN * 2),
-                math.min(WINDOW_HEIGHT, Screen.Y - SCREEN_MARGIN * 2)
-            )
-
-            task.defer(UI._ClampToParent, Window)
-        end
-
         ------------------------------------------------------------------------
         --// API
         ------------------------------------------------------------------------
@@ -765,7 +584,7 @@ return {
         end
 
         function Browser:Open()
-            if not UI or not UI.ScreenGui then
+            if not Floating.Available() then
                 return
             end
 
@@ -775,17 +594,13 @@ return {
 
             S.IsOpen = true
             S.DetailSignature = nil
-            FitToScreen()
-            Window.Visible = true
+            Window:Open()
             Browser:Refresh()
         end
 
         function Browser:Close()
-            S.IsOpen = false
-            HidePopup()
-
             if Window then
-                Window.Visible = false
+                Window:Close()
             end
         end
 

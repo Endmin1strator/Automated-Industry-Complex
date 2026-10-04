@@ -37,6 +37,10 @@ return {
             { Name = "AutoBlockConfirm",  Default = false, Key = "o" },
             { Name = "AutoMining",        Default = false, Key = "p" },
             { Name = "AutoSmithing",      Default = false, Key = "q" },
+            --// Server tab (ServerUI): leave when a danger group member is here,
+            --// and notify about players off the whitelist.
+            { Name = "DangerGroupHop",    Default = true,  Key = "r" },
+            { Name = "JoinAlerts",        Default = false, Key = "s" },
             { Name = "DebugWaypoints",    Default = true },
             { Name = "DebugFarmZones",    Default = true },
             { Name = "DebugDeadzones",    Default = true },
