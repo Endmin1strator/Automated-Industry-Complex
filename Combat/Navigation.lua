@@ -1463,13 +1463,25 @@ return {
                 return true
             end
 
-            --// Mid-sidestep: finish it before trying the target again.
+            --// Mid-sidestep: finish it before trying the target again. The
+            --// sidestep heads for open ground, so it only hops over something
+            --// actually in the way.
             if now < AICCombat.S.ChaseUnstickUntil and AICCombat.S.ChaseUnstickPosition then
                 Humanoid.AutoRotate = false
                 Humanoid:MoveTo(AICCombat.S.ChaseUnstickPosition)
                 AICCombat.FaceGoblin(Goblin)
-                AICCombatUtils.DoJump()
+                AICCombatUtils.DoJumpIfObstacle(AICCombat.S.ChaseUnstickPosition)
                 return true
+            end
+
+            --// Within attack range the character is swinging, and swings and
+            --// the bodies of a crowd slow the walk. That is not a corner, so
+            --// it must not start pathing, sidestepping and hopping mid-fight.
+            if GoblinRoot
+                and AICCombat.GetCombatDistance(Goblin, GoblinRoot.Position - RootPart.Position)
+                    <= AICCombat.GetCombatAttackRange(Goblin)
+            then
+                AICCombatUtils.ResetStuckTracker()
             end
 
             local InPathMode = now < AICCombat.S.ChasePathUntil
@@ -1510,12 +1522,18 @@ return {
                 return true
             end
 
-            --// No route from here. A sidestep often opens one up.
-            if StartUnstick(Destination, now) then
-                return AICCombat.ChaseMoveTo(Goblin, Destination)
+            --// The pathfinder found no route, which it often does on rough
+            --// terrain to a mob that is plainly walkable to. Walk straight at
+            --// it, as the chase did before v2.62: a real wall makes the
+            --// character stall, and the stuck handling above sidesteps. Only
+            --// once every sidestep has failed to get closer is the chase given
+            --// up, so the caller can mark the target unreachable.
+            if AICCombat.S.ChaseUnstickCount >= (tonumber(CONFIG.CHASE_MAX_UNSTICKS) or 4) then
+                return false
             end
 
-            return false
+            MoveStraight(Humanoid, Goblin, Destination)
+            return true
         end
 
         --// ============================================================
