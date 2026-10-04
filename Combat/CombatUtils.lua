@@ -327,7 +327,25 @@ return {
         
             return not AICCombatUtils.IsInsideFarmDeadzone(Position)
         end
-        
+
+        --// Inside any mine zone. Deadzones are checked separately, so a
+        --// caller can tell "outside the mine" from "in a deadzone".
+        function AICCombatUtils.IsInsideMineZone(Position)
+            local PlaceConfig = Runtime:GetPlaceConfig()
+
+            if not Position or not PlaceConfig then
+                return false
+            end
+
+            for _, Zone in ipairs(PlaceConfig.MINE_ZONES or {}) do
+                if AICCombatUtils.IsPositionInsideZone(Position, Zone) then
+                    return true
+                end
+            end
+
+            return false
+        end
+
         --// Water Check
         function AICCombatUtils.IsWaterAtPosition(Position, IgnoreModel)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
@@ -673,6 +691,109 @@ return {
             local StepUp = Down.Position.Y - Feet.Y
         
             return StepUp >= (tonumber(CONFIG.JUMP_STEP_HEIGHT) or 1.2)
+        end
+
+        --// Hole Check
+        --// Samples the ground every HOLE_SAMPLE_STEP studs toward
+        --// TargetPosition. Ground missing, water, or lower than the feet by
+        --// more than HOLE_MAX_SAFE_DROP is a hole. Returns IsHole, CanJump and
+        --// the distance to the edge. CanJump means ground comes back within
+        --// the reach of a running jump, at a height that jump can land on.
+        local HOLE_PROBE_DISTANCE = 6
+        local HOLE_SAMPLE_STEP = 1
+        local HOLE_MAX_SAFE_DROP = 6
+        --// Share of the ideal jump arc counted on, for speed lost at takeoff.
+        local HOLE_JUMP_SAFETY = 0.8
+
+        local function GetGroundHeight(Position, Params)
+            local Hit = workspace:Raycast(
+                Position + Vector3.new(0, 4, 0),
+                Vector3.new(0, -(HOLE_MAX_SAFE_DROP + 12), 0),
+                Params
+            )
+
+            if not Hit or Hit.Material == Enum.Material.Water then
+                return nil
+            end
+
+            return Hit.Position.Y
+        end
+
+        local function GetJumpReach(Humanoid)
+            local Gravity = math.max(workspace.Gravity, 1)
+            local Speed = Humanoid.UseJumpPower
+                and Humanoid.JumpPower
+                or math.sqrt(2 * Gravity * Humanoid.JumpHeight)
+
+            local Rise = Speed * Speed / (2 * Gravity)
+            local AirTime = 2 * Speed / Gravity
+
+            return Humanoid.WalkSpeed * AirTime * HOLE_JUMP_SAFETY, Rise * HOLE_JUMP_SAFETY
+        end
+
+        function AICCombatUtils.IsHoleAhead(TargetPosition)
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            if not RootPart or not Humanoid or not TargetPosition then
+                return false, false, nil
+            end
+
+            local Offset = TargetPosition - RootPart.Position
+            local Flat = Vector3.new(Offset.X, 0, Offset.Z)
+
+            if Flat.Magnitude <= HOLE_SAMPLE_STEP then
+                return false, false, nil
+            end
+
+            local Params = RaycastParams.new()
+            Params.FilterType = Enum.RaycastFilterType.Exclude
+            local Filter = { Character }
+            local MobFolder = workspace:FindFirstChild("Mobs")
+            if MobFolder then
+                table.insert(Filter, MobFolder)
+            end
+            for _, OtherPlayer in ipairs(Players:GetPlayers()) do
+                if OtherPlayer.Character and OtherPlayer.Character ~= Character then
+                    table.insert(Filter, OtherPlayer.Character)
+                end
+            end
+            if AICCombatUtils.S.DebugFolder then
+                table.insert(Filter, AICCombatUtils.S.DebugFolder)
+            end
+            Params.FilterDescendantsInstances = Filter
+
+            local Direction = Flat.Unit
+            local FeetY = GetGroundHeight(RootPart.Position, Params)
+                or (RootPart.Position.Y - RootPart.Size.Y * 0.5 - Humanoid.HipHeight)
+            local CheckDistance = math.min(Flat.Magnitude, HOLE_PROBE_DISTANCE)
+            local EdgeDistance = nil
+
+            for Distance = HOLE_SAMPLE_STEP, CheckDistance, HOLE_SAMPLE_STEP do
+                local GroundY = GetGroundHeight(RootPart.Position + Direction * Distance, Params)
+
+                if not GroundY or FeetY - GroundY > HOLE_MAX_SAFE_DROP then
+                    EdgeDistance = Distance
+                    break
+                end
+            end
+
+            if not EdgeDistance then
+                return false, false, nil
+            end
+
+            local Reach, Rise = GetJumpReach(Humanoid)
+
+            for Distance = EdgeDistance + HOLE_SAMPLE_STEP, EdgeDistance + Reach, HOLE_SAMPLE_STEP do
+                local GroundY = GetGroundHeight(RootPart.Position + Direction * Distance, Params)
+
+                if GroundY
+                    and GroundY <= FeetY + Rise
+                    and FeetY - GroundY <= HOLE_MAX_SAFE_DROP
+                then
+                    return true, true, EdgeDistance
+                end
+            end
+
+            return true, false, EdgeDistance
         end
         function AICCombatUtils.GetPatrolGroundPosition(Position)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()

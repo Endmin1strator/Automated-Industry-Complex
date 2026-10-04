@@ -154,14 +154,6 @@ return {
         --    Black           = Color3.fromRGB(10, 10, 14),
         --})
         
-        UIRef.OreDropdown = UIRef.MineSection:AddDropdown(
-            "Add Ores",
-            CONFIG.PREFERED_ORES,
-            function(Value)
-                --TODO
-            end
-        )
-        
         --// Feature toggles
         Feature.ResetStats.Enabled = true
         

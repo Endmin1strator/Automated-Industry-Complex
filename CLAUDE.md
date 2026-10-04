@@ -18,6 +18,7 @@ Every file except `UI/Utils.lua` returns a spec: `{ Name, Dependencies = {...}, 
 - Whatever `Start` returns is stored as both `Context.Modules[Name]` and `Context[Name]`. A module returned with `IsFeature` goes into `Context.Features`, and `Core/Heartbeat.lua` calls its `:Update(dt)` every RunService.Heartbeat.
 - After all modules have started, Init calls the optional `:BuildLateUI()` on every module (controls that must go below all the toggles), then `:Finalize()` (ProfileSettings restores the last profile here, once every control exists), then starts Heartbeat.
 - `Core/Bootstrap.lua` is the composition root. It wires character respawn resets and other cross-module glue.
+- `Features/AutoFarming.lua` `Feature:Update` is the main per-frame decision loop (retreat, Auto Block, waypoint route, then combat/patrol). Once the route is walked it first offers the frame to `AICFeature.MiningStep` (AutoMining); a true return means mining moved and fought this frame, and the farm's own combat is skipped.
 
 ## Shared runtime layers
 

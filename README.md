@@ -9,6 +9,7 @@ This revision explicitly separates the feature modules requested:
 - ReturnToFarmZone.lua
 - IgnoreFarmZone.lua
 - AutoHeal.lua
+- AutoMining.lua (with AutoMiningUI.lua, Minezone.lua and MiningMovement.lua)
 - AutoRefill.lua (Refill Booster: resets when a boost runs out)
 - SafeBoosterReset.lua
 - AntiAFK.lua

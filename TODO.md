@@ -64,6 +64,35 @@
 > - บล็อกสำเร็จแล้ว Auto Block ย้ายเซิร์ฟต่อตามเดิม
 > - ใช้ได้เฉพาะ executor ที่อ่าน CoreGui ได้ (Studio ไม่ได้) Debug: `getgenv().AICBlockConfirmDebug = true`
 
+### [x] Auto Mining
+- ขุดแร่ใน MineZone หลังเดิน Waypoint ครบ มีศัตรูเข้ามาใกล้ 15 studs ให้ชักดาบตี ระหว่างขุดยืนนิ่ง
+- MineZone: ขุดเฉพาะแร่ในโซน แร่นอกโซนไม่เป็นเป้าเดิน มี slider ปรับรัศมี
+- Ore Priority + จำนวนเป้าหมายต่อแร่ (สูงสุด 500) หักของที่มีในกระเป๋าแล้ว
+- Billboard สถานะแร่ ผูกกับ DebugVisualizer
+- `IsHoleAhead`: เจอหลุมกระโดดข้ามได้ก็กระโดด ไม่ได้ก็ใช้ Pathfinding / ปรับ MoveTo, jump, Pathfinding ให้เคารพ deadzone และ MineZone
+
+> ทำแล้ว (v2.70): แท็บ **Mining**
+> - **Auto Mining** (บันทึกในโปรไฟล์ ค่าเริ่มต้นปิด) ทำงานในลูป Auto Farm หลังเดิน Waypoint ครบ (Auto Farm ต้องเปิด)
+>   ไม่มีแร่ให้ขุดก็กลับไปฟาร์มตามปกติ บรรทัด STATUS บอกว่ากำลังทำอะไร/รออะไร
+> - **Ore Priority**: ลากเรียงลำดับได้ ช่อง Target ต่อแร่ (0–500) ค่าเริ่มต้น Iron Ore, Copper Ore อย่างละ 500
+>   ขุดแร่ลำดับสูงสุดที่ยังไม่ครบเป้า ถ้าแร่นั้นไม่มีก้อนว่างในโซน (โดนจอง/กำลังเกิดใหม่/ไปไม่ถึง) ข้ามไปลำดับถัดไป
+>   เป้าที่เหลือ = Target − จำนวนในกระเป๋า อ่านจาก `PlayerStats.Inventory` ทุกครั้งที่เลือกก้อน
+> - เพิ่มแร่จาก dropdown **Add Ore** (แร่ที่โหลดอยู่) หรือพิมพ์ชื่อใน **Ore Name** สำหรับแร่ที่อยู่ไกลเกินโหลด
+> - **Mine Zone**: Add Mine Zone Here / Mine Zone Radius (5–300) / Edit Mine Zone / Clear เก็บใน `PLACE_CONFIG.MINE_ZONES`
+>   ไม่มี Mine Zone = ไม่ขุด แร่ใน deadzone ก็ไม่ขุด
+> - เดินไปห่างก้อน ≤ 15 studs แล้วยิง `ClaimMaterial` ยืนนิ่งจนหมด cooldown ของเกม (`CoreCommons`) +0.5 วิ
+>   เดินไม่ถึงใน 15 วิ หรือหาทางไม่ได้ ข้ามก้อนนั้น 30 วิ
+> - ศัตรูในระยะ 15 studs: ชักดาบ หันหา ตีเมื่อถึงระยะ ระหว่างขุดไม่ขยับ ระหว่างเดินเข้าไปตีได้เฉพาะในโซน
+>   ศัตรูที่อยู่นอกโซนและตีไม่ถึงจะไม่สนใจ (กันยืนรอมอนที่ยืนเฉยๆ ตลอดไป) Retreat ตอนเลือดต่ำยังทำงานเหมือนเดิม
+> - การเดิน (`MiningMovement`): เดินตรงถ้าปลอดภัย ใช้ Pathfinding เมื่อเจอกำแพงที่โดดไม่พ้น หลุมกว้างเกินโดด
+>   ที่สูงเกินโดด deadzone ขวาง หรือจะออกนอก MineZone (ถ้าอยู่ในโซนแล้ว) ติดเกิน 1.5 วิก็เปลี่ยนไปใช้ Pathfinding
+>   เส้นทางที่ผ่าน deadzone หรือออกนอกโซนจะไม่ใช้ คำนวณ path นอก Heartbeat ไม่ทำให้เฟรมค้าง
+> - `AICCombatUtils.IsHoleAhead`: เช็คพื้นข้างหน้าทุก 1 stud ถึง 6 studs ตกลึกกว่า 6 studs/น้ำ/ไม่มีพื้น = หลุม
+>   คำนวณระยะโดดจาก WalkSpeed + JumpPower/JumpHeight (เผื่อ 80%) ถ้ามีพื้นฝั่งตรงข้ามในระยะ โดดตอนถึงขอบ 2.5 studs
+> - Debug: **Debug Mine Zones** (วงสีฟ้า) และ **Debug Ore Status** ป้ายบนแร่ในระยะ 150 studs
+>   (TARGET / MINING x.xs / READY มี/เป้า / DONE / TAKEN / REGENERATING / OUTSIDE MINE ZONE / NOT IN PRIORITY ...)
+> - ข้อสันนิษฐานที่ต้องเช็คในเกม: ชื่อไอเทมในกระเป๋าตรงกับชื่อโมเดลแร่ (เช่น "Iron Ore") และระยะ claim 15 studs ตาม demo
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

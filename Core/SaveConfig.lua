@@ -35,11 +35,18 @@ return {
             { Name = "WaypointLoop",      Default = false, Key = "m" },
             { Name = "SafeBoosterReset",  Default = false, Key = "n" },
             { Name = "AutoBlockConfirm",  Default = false, Key = "o" },
+            { Name = "AutoMining",        Default = false, Key = "p" },
             { Name = "DebugWaypoints",    Default = true },
             { Name = "DebugFarmZones",    Default = true },
             { Name = "DebugDeadzones",    Default = true },
             { Name = "DebugRadiusLabels", Default = true },
+            { Name = "DebugMineZones",    Default = true },
+            { Name = "DebugOres",         Default = true },
         }
+
+        --// The game holds at most this many of one ore, so no mining target
+        --// can be higher.
+        SaveConfig.MINE_ORE_MAX_STACK = 500
 
         --// Normalizers turn whatever a save file holds into a valid value.
         --// They receive nil for a missing entry and must return the default.
@@ -67,6 +74,31 @@ return {
                 Name = Value.Name,
                 UserId = tonumber(Value.UserId),
             }
+        end
+
+        --// { { Name, Target }, ... } in mining priority order. Duplicate
+        --// names keep the first entry.
+        local function NormalizeOreList(Value)
+            local Result = {}
+            local Seen = {}
+
+            for _, Entry in ipairs(type(Value) == "table" and Value or {}) do
+                local Name = type(Entry) == "table" and Entry.Name
+
+                if type(Name) == "string" and Name ~= "" and not Seen[Name] then
+                    Seen[Name] = true
+                    table.insert(Result, {
+                        Name = Name,
+                        Target = math.clamp(
+                            math.floor(tonumber(Entry.Target) or SaveConfig.MINE_ORE_MAX_STACK),
+                            0,
+                            SaveConfig.MINE_ORE_MAX_STACK
+                        ),
+                    })
+                end
+            end
+
+            return Result
         end
 
         local function NormalizePinnedState(Value)
@@ -115,6 +147,13 @@ return {
             --// Party System Leader, followed between servers with the game's
             --// "tp friend <Name>" chat command. Empty table = no Leader.
             { Key = "PARTY_LEADER", Default = {}, Normalize = NormalizePartyLeader },
+
+            --// Ores Auto Mining collects, highest priority first, each mined
+            --// until the inventory holds Target of it.
+            { Key = "MINE_ORES", Default = {
+                { Name = "Iron Ore", Target = 500 },
+                { Name = "Copper Ore", Target = 500 },
+            }, Normalize = NormalizeOreList },
 
             --// Pinned item panel: items, popped out or not, and position.
             --// Shared by every PlaceId, so it lives in its own file.

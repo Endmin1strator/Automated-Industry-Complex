@@ -164,6 +164,34 @@ return {
             return true
         end
 
+        --// For code outside the farm loop (Auto Mining's defence), which has
+        --// no weld or input handle of its own.
+        AICFeature.EnsureWeaponDrawn = function(now)
+            local Character = Runtime:GetCharacter()
+            local Sword = Character and Character:FindFirstChild("Sword")
+            local MainWeld = Sword and Sword:FindFirstChild("MainWeld", true)
+            local InputBindableFunction = Runtime:GetInputBindableFunction()
+
+            if not MainWeld or not InputBindableFunction then
+                return false
+            end
+
+            return EnsureWeaponDrawn(now, InputBindableFunction, MainWeld)
+        end
+
+        --// Auto Mining, once the route is walked. True while it owns this
+        --// frame's movement; it fights off anything close by itself, so the
+        --// combat at the end of the frame is skipped then.
+        local function RunMining(now)
+            if not AICFeature.MiningStep or not AICFeature.MiningStep(now) then
+                return false
+            end
+
+            AICCombat.S.ClosestTarget = nil
+            AICFeature.CancelPatrol()
+            return true
+        end
+
         --// Drinks the last used potion when it is off cooldown. The weapon
         --// is sheathed first, which costs a frame: true means this frame was
         --// spent sheathing and the caller should yield it. Shared by the
@@ -503,6 +531,7 @@ return {
             local HasWaypoints = PlaceConfig and type(PlaceConfig.WAYPOINTS) == "table" and #PlaceConfig.WAYPOINTS > 0
             local WaypointIndex = tonumber(CONFIG.CURRENT_WAYPOINT_TARGET) or 1
             local target = nil
+            local Mining = false
 
             --// Holding at a waypoint that has a wait time. Nothing else runs on
             --// the route meanwhile, the same as walking it.
@@ -610,6 +639,8 @@ return {
 
                     if LoopResult == "move" then
                         AICFeature.CancelPatrol()
+                    elseif RunMining(now) then
+                        Mining = true
                     elseif FeatureState.ReturnToFarmZone.Enabled
                         and not FeatureState.IgnoreFarmZone.Enabled
                         and (OutsideFarmZone or InFarmDeadzone)
@@ -652,7 +683,9 @@ return {
                 local OutsideFarmZone = not AICCombatUtils.IsInsideFarmArea(RootPart.Position)
                 local InFarmDeadzone = AICCombatUtils.IsInsideFarmDeadzone(RootPart.Position)
 
-                if FeatureState.ReturnToFarmZone.Enabled
+                if RunMining(now) then
+                    Mining = true
+                elseif FeatureState.ReturnToFarmZone.Enabled
                     and not FeatureState.IgnoreFarmZone.Enabled
                     and (OutsideFarmZone or InFarmDeadzone)
                 then
@@ -712,6 +745,12 @@ return {
             if Humanoid.Sit == true then
                 Humanoid.Sit = false
                 AICCombatUtils.DoJump()
+                return
+            end
+
+            --// Mining already moved, and fought anything close, this frame.
+            --// Falling through would press Interact next to the ore.
+            if Mining then
                 return
             end
 

@@ -418,6 +418,11 @@ return {
                 AICDebug.S.DebugDeadzone:Destroy()
                 AICDebug.S.DebugDeadzone = nil
             end
+
+            if AICDebug.S.DebugMineZone then
+                AICDebug.S.DebugMineZone:Destroy()
+                AICDebug.S.DebugMineZone = nil
+            end
         end
         function AICDebug.RebuildDebugZones()
         local PlaceConfig = Runtime:GetPlaceConfig()
@@ -436,7 +441,12 @@ return {
                 AICDebug.S.DebugDeadzone:Destroy()
                 AICDebug.S.DebugDeadzone = nil
             end
-        
+
+            if AICDebug.S.DebugMineZone then
+                AICDebug.S.DebugMineZone:Destroy()
+                AICDebug.S.DebugMineZone = nil
+            end
+
             AICDebug.S.DebugZoneSignature = nil
         
             local ZoneContainer = AICDebug.GetDebugAdorneeParent()
@@ -483,8 +493,30 @@ return {
                 end
             end
         
+            local MineZonesFolder = Instance.new("Folder")
+            MineZonesFolder.Name = "MineZones"
+            MineZonesFolder.Parent = ZoneContainer
+
+            if FeatureState.DebugMineZones.Enabled then
+                for Index, Zone in ipairs(PlaceConfig.MINE_ZONES or {}) do
+                    local ZoneFolder = AICDebug.CreateDebugZone(
+                        "MineZone_" .. Index,
+                        Zone.Center,
+                        Zone.Radius,
+                        DEBUG_COLORS.MineZone,
+                        "MINE",
+                        Index
+                    )
+
+                    if ZoneFolder then
+                        ZoneFolder.Parent = MineZonesFolder
+                    end
+                end
+            end
+
             AICDebug.S.DebugFarmZone = FarmZonesFolder
             AICDebug.S.DebugDeadzone = DeadzonesFolder
+            AICDebug.S.DebugMineZone = MineZonesFolder
             AICDebug.S.DebugZoneSignature = "MULTI|" .. tostring(#(PlaceConfig.FARM_ZONES or {})) .. "|" .. tostring(#(PlaceConfig.DEADZONES or {}))
         end
         function AICDebug.UpdateDebugVisualizer()
@@ -542,6 +574,111 @@ return {
             AICDebug.UpdateDebugWaypointColors()
             AICDebug.SetDebugVisualizerVisible(true)
         end
+
+        --// Ore status billboards. Auto Mining decides what each ore shows;
+        --// this only keeps one billboard per ore in step with that. They live
+        --// in the debug folder, so hiding the visualizer hides them too.
+        local ORE_BILLBOARD_MAX_DISTANCE = 150
+
+        AICDebug.S.OreBillboards = {}
+
+        local function CreateOreBillboard(Core)
+            local Billboard = Instance.new("BillboardGui")
+            Billboard.Name = "OreStatus"
+            Billboard.Adornee = Core
+            Billboard.AlwaysOnTop = true
+            Billboard.LightInfluence = 0
+            Billboard.MaxDistance = ORE_BILLBOARD_MAX_DISTANCE
+            Billboard.Size = UDim2.fromScale(5, 1.3)
+            Billboard.StudsOffsetWorldSpace = Vector3.new(0, Core.Size.Y * 0.5 + 2, 0)
+
+            local Container = Instance.new("Frame")
+            Container.BackgroundColor3 = DEBUG_COLORS.BillboardPanel
+            Container.BackgroundTransparency = 0.05
+            Container.BorderSizePixel = 0
+            Container.Size = UDim2.fromScale(1, 1)
+            Container.Parent = Billboard
+
+            local Corner = Instance.new("UICorner")
+            Corner.CornerRadius = UDim.new(0, 3)
+            Corner.Parent = Container
+
+            local Stroke = Instance.new("UIStroke")
+            Stroke.Thickness = 1
+            Stroke.Transparency = 0.1
+            Stroke.Parent = Container
+
+            local Title = Instance.new("TextLabel")
+            Title.BackgroundTransparency = 1
+            Title.Size = UDim2.fromScale(1, 0.52)
+            Title.Position = UDim2.fromScale(0, 0.03)
+            Title.Font = Enum.Font.GothamMedium
+            Title.TextColor3 = DEBUG_COLORS.BillboardText
+            Title.TextScaled = true
+            Title.Parent = Container
+
+            local Status = Instance.new("TextLabel")
+            Status.BackgroundTransparency = 1
+            Status.Size = UDim2.fromScale(1, 0.4)
+            Status.Position = UDim2.fromScale(0, 0.55)
+            Status.Font = Enum.Font.GothamMedium
+            Status.TextScaled = true
+            Status.Parent = Container
+
+            local Folder = AICDebug.GetDebugAdorneeParent():FindFirstChild("OreStatus")
+
+            if not Folder then
+                Folder = Instance.new("Folder")
+                Folder.Name = "OreStatus"
+                Folder.Parent = AICDebug.GetDebugAdorneeParent()
+            end
+
+            Billboard.Parent = Folder
+
+            return { Gui = Billboard, Title = Title, Status = Status, Stroke = Stroke }
+        end
+
+        --// Entries maps an ore model to { Core, Title, Status, Color }. Ores
+        --// missing from it lose their billboard; nil clears every one.
+        function AICDebug.UpdateOreBillboards(Entries)
+            local Visible = Entries ~= nil
+                and FeatureState.DebugVisualizer.Enabled
+                and FeatureState.DebugOres.Enabled
+
+            for Ore, Data in pairs(AICDebug.S.OreBillboards) do
+                if not Visible or not Entries[Ore] or not Ore.Parent then
+                    Data.Gui:Destroy()
+                    AICDebug.S.OreBillboards[Ore] = nil
+                end
+            end
+
+            if not Visible then
+                return
+            end
+
+            for Ore, Entry in pairs(Entries) do
+                local Data = AICDebug.S.OreBillboards[Ore]
+
+                if not Data then
+                    Data = CreateOreBillboard(Entry.Core)
+                    AICDebug.S.OreBillboards[Ore] = Data
+                end
+
+                --// Only touch what changed; these run several times a second.
+                if Data.Title.Text ~= Entry.Title then
+                    Data.Title.Text = Entry.Title
+                end
+
+                if Data.Status.Text ~= Entry.Status then
+                    Data.Status.Text = Entry.Status
+                end
+
+                if Data.Status.TextColor3 ~= Entry.Color then
+                    Data.Status.TextColor3 = Entry.Color
+                    Data.Stroke.Color = Entry.Color
+                end
+            end
+        end
         
         
         ------------------------------------------------------------------------
@@ -597,6 +734,27 @@ return {
                     function(Value)
                         FeatureState.DebugDeadzones.Enabled = Value
                         AICDebug.UpdateDebugVisualizer()
+                        AICProfile.SaveActiveProfile()
+                    end
+                )
+
+                FeatureState.DebugMineZones.Button = UIRef.DebugSection:AddToggle(
+                    "Debug Mine Zones",
+                    FeatureState.DebugMineZones.Enabled,
+                    function(Value)
+                        FeatureState.DebugMineZones.Enabled = Value
+                        AICDebug.UpdateDebugVisualizer()
+                        AICProfile.SaveActiveProfile()
+                    end
+                )
+
+                --// Auto Mining feeds the billboards; turning this off drops
+                --// them on its next update.
+                FeatureState.DebugOres.Button = UIRef.DebugSection:AddToggle(
+                    "Debug Ore Status",
+                    FeatureState.DebugOres.Enabled,
+                    function(Value)
+                        FeatureState.DebugOres.Enabled = Value
                         AICProfile.SaveActiveProfile()
                     end
                 )

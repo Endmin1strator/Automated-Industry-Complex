@@ -261,6 +261,10 @@ return {
             if AICUI.RefreshPartyUI then
                 AICUI.RefreshPartyUI()
             end
+
+            if AICUI.RefreshMiningUI then
+                AICUI.RefreshMiningUI()
+            end
         end
         function AICUI.updateButton()
             FeatureState.AutoFarm.Enabled = AICFeature.S.Enabled

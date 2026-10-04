@@ -87,7 +87,7 @@ return {
         UIRef.BlockSection = UIRef.FarmTab:AddSection("Auto Block")
         UIRef.StatusSection = UIRef.StatusTab:AddSection("Live Status")
         UIRef.DebugSection = UIRef.DebugTab:AddSection("Debug Visualizer")
-        UIRef.MineSection = UIRef.MineTab:AddSection("Mine Zone")
+        UIRef.MineSection = UIRef.MineTab:AddSection("Auto Mining")
         UIRef.CraftSection = UIRef.CraftTab:AddSection("Auto Crafting")
         UIRef.PartySection = UIRef.PartyTab:AddSection("Party System")
         
@@ -371,8 +371,6 @@ return {
             FARM_RETURN_ARRIVAL_DISTANCE = 4,
             FARM_RETURN_CENTER_DISTANCE = 5,
         
-            PREFERED_ORES = { "Iron Ore", "Copper Ore", },
-        
             --// Zones are cylinders: the radius check ignores height so that sloped
             --// ground inside one zone still counts. On a multi-floor map that lets a
             --// mob one floor above or below match a zone it is not really in. Set a
@@ -609,6 +607,11 @@ return {
             WaypointLine    = Color3.fromRGB(220, 205, 0),
             FarmZone        = Color3.fromRGB(80, 125, 95),
             Deadzone        = Color3.fromRGB(150, 65, 65),
+            MineZone        = Color3.fromRGB(70, 110, 160),
+            OreReady        = Color3.fromRGB(120, 200, 140),
+            OreMining       = Color3.fromRGB(220, 205, 0),
+            OreBlocked      = Color3.fromRGB(205, 110, 90),
+            OreIdle         = Color3.fromRGB(150, 158, 156),
             BillboardPanel  = Color3.fromRGB(27, 32, 33),
             BillboardBorder = Color3.fromRGB(79, 91, 91),
             BillboardText   = Color3.fromRGB(232, 237, 235),
@@ -756,7 +759,9 @@ return {
             --// entry per waypoint. 0 means the waypoint has no zone.
             Config.WAYPOINT_ZONES = AICConfig.NormalizeZonePairs(Config.WAYPOINT_ZONES, #Waypoints, #FarmZones)
             Config.DEADZONES = Deadzones
-        
+            --// Auto Mining only mines ores inside one of these.
+            Config.MINE_ZONES = AICConfig.CloneZoneList(Config.MINE_ZONES)
+
             --// Legacy aliases remain available to old code while the actual logic
             --// supports multiple zones.
             --// Do not manufacture Vector3.zero when a zone does not exist.
