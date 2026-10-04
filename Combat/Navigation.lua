@@ -28,6 +28,16 @@ return {
         local NotifyAction = Context.NotifyAction
 
         local Module = Context.AICCombat
+
+        --// Going round the target's body, the walk keeps this much more than
+        --// TARGET_BODY_CLEARANCE from it.
+        local BODY_DETOUR_MARGIN = 2
+        --// After the path to the Safe Combat spot fails, paths go to the mob
+        --// itself for this long rather than switching back and forth.
+        local PATH_TO_MOB_HOLD = 2
+        --// A path solve not back after this long is given up on.
+        local PATH_COMPUTE_TIMEOUT = 3
+
         function AICCombat.IsSafeCombatPathClear(TargetPosition, Goblin)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             if not RootPart or not TargetPosition then
@@ -162,6 +172,10 @@ return {
                 )
             end
         
+            --// A spot past a player's body is skipped: they stand and face us,
+            --// so the walk round them never ends. A mob's rear is still preferred;
+            --// ChaseMoveTo walks round the body to get there.
+            local IsPlayerTarget = Players:GetPlayerFromCharacter(TargetMob) ~= nil
             local Candidates = {}
             local DirectionCount = CONFIG.SAFE_COMBAT_DIRECTIONS
             local PreferredDirections = {}
@@ -199,7 +213,7 @@ return {
                 for _, CandidateDistance in ipairs(CombatDistances) do
                     local CandidatePosition = TargetRoot.Position + Direction * CandidateDistance
                     if AICCombatUtils.IsInsideFarmArea(CandidatePosition)
-                        and not AICCombat.IsTargetBodyInTheWay(CandidatePosition, TargetRoot)
+                        and not (IsPlayerTarget and AICCombat.IsTargetBodyInTheWay(CandidatePosition, TargetRoot))
                         and not AICCombatUtils.IsWaterAtPosition(CandidatePosition, TargetMob)
                         and not AICCombatUtils.IsPathThroughDeadzone(CandidatePosition)
                         and AICCombat.IsPositionSafeFromBladeGroup(CandidatePosition, TargetMob)
@@ -224,7 +238,7 @@ return {
                     --// Cheap checks first. These avoid expensive raycasts for obviously
                     --// invalid positions.
                     if not AICCombatUtils.IsInsideFarmArea(CandidatePosition)
-                        or AICCombat.IsTargetBodyInTheWay(CandidatePosition, TargetRoot)
+                        or (IsPlayerTarget and AICCombat.IsTargetBodyInTheWay(CandidatePosition, TargetRoot))
                         or AICCombatUtils.IsWaterAtPosition(CandidatePosition, TargetMob)
                         or AICCombatUtils.IsPathThroughDeadzone(CandidatePosition)
                         or not AICCombat.IsPositionSafeFromBladeGroup(CandidatePosition, TargetMob)
@@ -1150,6 +1164,14 @@ return {
             AICCombat.S.LastTargetPathTime     = 0
             AICCombat.S.TargetPathBlockedSince = nil
         end
+        --// A solve is running. One that has not come back in
+        --// PATH_COMPUTE_TIMEOUT is given up on, so a hung ComputeAsync cannot
+        --// leave every chase waiting on it.
+        function AICCombat.IsTargetPathComputing()
+            return AICCombat.S.TargetPathComputing == true
+                and os.clock() - (AICCombat.S.TargetPathComputeStart or 0) < PATH_COMPUTE_TIMEOUT
+        end
+
         function AICCombat.ComputeTargetPath(Goblin, Destination)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             if not RootPart or not Goblin or not Destination then
@@ -1166,15 +1188,23 @@ return {
         
             --// ComputeAsync yields, and every heartbeat is its own thread, so
             --// without this a slow solve stacked up one request per frame.
-            if AICCombat.S.TargetPathComputing then
+            if AICCombat.IsTargetPathComputing() then
                 return AICCombat.S.TargetPath ~= nil and AICCombat.S.TargetPathMob == Goblin
             end
 
+            local Token = (AICCombat.S.TargetPathToken or 0) + 1
+            AICCombat.S.TargetPathToken = Token
             AICCombat.S.TargetPathComputing = true
+            AICCombat.S.TargetPathComputeStart = os.clock()
 
             local Success = pcall(function()
                 Path:ComputeAsync(RootPart.Position, Destination)
             end)
+
+            --// Given up on (PATH_COMPUTE_TIMEOUT) and replaced meanwhile.
+            if AICCombat.S.TargetPathToken ~= Token then
+                return false
+            end
 
             AICCombat.S.TargetPathComputing = false
 
@@ -1376,6 +1406,40 @@ return {
             return AICCombat.S.ChaseBlocked
         end
 
+        --// A spot beside the target's body, on the side Destination lies, far
+        --// enough out that the walk on from there clears the body. nil when
+        --// Destination is the body itself (nothing to go round) or neither
+        --// side is allowed ground.
+        local function GetBodyDetour(RootPart, GoblinRoot, Destination)
+            local Clearance = (tonumber(CONFIG.TARGET_BODY_CLEARANCE) or 3.5) + BODY_DETOUR_MARGIN
+            local ToTarget = GoblinRoot.Position - RootPart.Position
+            local Forward = Vector3.new(ToTarget.X, 0, ToTarget.Z)
+            local ToDestination = Vector3.new(Destination.X - GoblinRoot.Position.X, 0, Destination.Z - GoblinRoot.Position.Z)
+
+            if Forward.Magnitude <= 0.01 or ToDestination.Magnitude < Clearance - BODY_DETOUR_MARGIN then
+                return nil
+            end
+
+            Forward = Forward.Unit
+
+            local Side = Vector3.new(-Forward.Z, 0, Forward.X)
+
+            if ToDestination:Dot(Side) < 0 then
+                Side = -Side
+            end
+
+            for _, Sign in ipairs({ 1, -1 }) do
+                local Point = GoblinRoot.Position + Side * Sign * Clearance
+                Point = Vector3.new(Point.X, RootPart.Position.Y, Point.Z)
+
+                if AICCombatUtils.IsInsideFarmArea(Point) and not AICCombatUtils.IsInsideFarmDeadzone(Point) then
+                    return Point
+                end
+            end
+
+            return nil
+        end
+
         local function MoveStraight(Humanoid, Goblin, Destination)
             Humanoid.AutoRotate = false
             Humanoid:MoveTo(Destination)
@@ -1444,18 +1508,16 @@ return {
                 AICCombatUtils.ResetStuckTracker()
                 AICCombat.ResetTargetPath()
 
-                --// The target stands between us and the spot: pushing on only
-                --// climbs onto it. Hold here (melee range already) and let the
-                --// solver pick a spot that does not go through it.
+                --// The target stands between us and the spot (its rear, say):
+                --// pushing on only climbs onto it. Walk round its side instead.
+                --// Holding here, as v2.67 did, left nothing to move us on
+                --// without Safe Combat, so the character stood at the mob's face.
                 if AICCombat.IsTargetBodyInTheWay(Destination, GoblinRoot) then
+                    local Detour = GetBodyDetour(RootPart, GoblinRoot, Destination)
+
                     Humanoid.AutoRotate = false
-                    Humanoid:MoveTo(RootPart.Position)
+                    Humanoid:MoveTo(Detour or RootPart.Position)
                     AICCombat.FaceGoblin(Goblin)
-
-                    if Destination == AICCombat.S.CACHED_SAFECOMBAT_POSITION then
-                        AICCombat.S.LAST_SAFECOMBAT_TIME = 0
-                    end
-
                     return true
                 end
 
@@ -1517,7 +1579,7 @@ return {
 
             --// A solve for this target is still running: keep the last
             --// heading rather than stopping dead for a frame.
-            if AICCombat.S.TargetPathComputing then
+            if AICCombat.IsTargetPathComputing() then
                 MoveStraight(Humanoid, Goblin, Destination)
                 return true
             end
@@ -1944,7 +2006,11 @@ return {
             --// A blocked line of sight does NOT mean the target is unreachable.
             --// ========================================================
         
-            local PathDestination = SafeCombatPosition or MobRoot.Position
+            --// One destination at a time. Trying the spot and the mob in the
+            --// same frame made each solve replace the other's path, so neither
+            --// was ever walked: the character stood facing a mob it could reach.
+            local PathToMob = not SafeCombatPosition or now < (AICCombat.S.PathToMobUntil or 0)
+            local PathDestination = PathToMob and MobRoot.Position or SafeCombatPosition
         
             local OtherPlayerDetour = AICCombat.GetOtherPlayerDetourPosition(PathDestination, Goblin)
             if OtherPlayerDetour then
@@ -1961,16 +2027,33 @@ return {
                 return
             end
         
-            --// The chosen combat spot may be unreachable while the mob itself is
-            --// perfectly walkable, so try routing to the mob before treating the
-            --// target as out of reach. An obstacle between us is a detour, not a
-            --// reason to drop the target.
-            if PathDestination ~= MobRoot.Position
-                and AICCombat.MoveAlongTargetPath(Goblin, MobRoot.Position)
-            then
-                AICCombat.S.TargetUnreachableSince = nil
-                AICCombat.S.TargetApproachPosition = nil
+            --// A solve is still running: ComputeAsync yields, and frames meanwhile
+            --// land here. Leave the last MoveTo going and keep facing the target.
+            --// Falling through stopped the character with Move(0) on every one
+            --// of those frames, which is why it stood still beside a mob it
+            --// could not see but could walk to.
+            if AICCombat.IsTargetPathComputing() then
+                AICCombat.FaceGoblin(Goblin)
                 return
+            end
+
+            --// The chosen combat spot may be unreachable while the mob itself is
+            --// perfectly walkable: route to the mob for a while before treating
+            --// the target as out of reach. An obstacle between us is a detour,
+            --// not a reason to drop the target.
+            if not PathToMob then
+                AICCombat.S.PathToMobUntil = now + PATH_TO_MOB_HOLD
+
+                if AICCombat.MoveAlongTargetPath(Goblin, MobRoot.Position) then
+                    AICCombat.S.TargetUnreachableSince = nil
+                    AICCombat.S.TargetApproachPosition = nil
+                    return
+                end
+
+                if AICCombat.IsTargetPathComputing() then
+                    AICCombat.FaceGoblin(Goblin)
+                    return
+                end
             end
         
             --// ========================================================
