@@ -201,7 +201,7 @@ return {
             ClearChildren(PopupContent)
 
             local Header = New("Frame", { Parent = PopupContent, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20), LayoutOrder = 1 })
-            Label(Header, MaterialName, 12, { Size = UDim2.new(1, -24, 1, 0), TextColor3 = Theme.Cyan, Font = Enum.Font.GothamBold })
+            Label(Header, MaterialName, 12, { Size = UDim2.new(1, -24, 1, 0), TextColor3 = Theme.Cyan, Font = Floating.Fonts.Bold })
 
             local Close = Button(Header, "×", Theme.Danger, {
                 AnchorPoint = Vector2.new(1, 0.5),
@@ -403,7 +403,7 @@ return {
 
             Label(Panel, string.format("CRAFT NOW  ·  UP TO %d", S.CraftMax), 10, {
                 TextColor3 = S.CraftMax > 0 and Theme.Cyan or Theme.TextMuted,
-                Font = Enum.Font.GothamBold,
+                Font = Floating.Fonts.Bold,
                 LayoutOrder = 1,
             })
 
@@ -425,7 +425,7 @@ return {
                 PlaceholderColor3 = Theme.TextMuted,
                 TextColor3 = Theme.Text,
                 TextSize = 10,
-                Font = Enum.Font.GothamBold,
+                Font = Floating.Fonts.Bold,
                 ClearTextOnFocus = false,
             })
 
@@ -485,7 +485,7 @@ return {
             local Info = Recipes:GetItemInfo(Recipe.Name)
             local Stats = DescribeStats(Recipe.Name)
 
-            Label(DetailScroll, "◇  " .. string.upper(Recipe.Name), 13, { TextColor3 = Theme.Cyan, Font = Enum.Font.GothamBold, LayoutOrder = 1 })
+            Label(DetailScroll, "◇  " .. string.upper(Recipe.Name), 13, { TextColor3 = Theme.Cyan, Font = Floating.Fonts.Bold, LayoutOrder = 1 })
             Label(DetailScroll, DescribeItem(Recipe.Name) .. ((Info and not Info.Bound) and "  ·  TRADEABLE" or ""), 9, {
                 TextColor3 = (Info and Info.Bound) and Theme.Warning or Theme.TextSecondary,
                 LayoutOrder = 2,
@@ -499,7 +499,7 @@ return {
                 TextColor3 = State.Locked and Theme.Danger or Theme.TextSecondary,
                 LayoutOrder = 4,
             })
-            Label(DetailScroll, Status, 10, { TextColor3 = StatusColor, Font = Enum.Font.GothamBold, LayoutOrder = 5 })
+            Label(DetailScroll, Status, 10, { TextColor3 = StatusColor, Font = Floating.Fonts.Bold, LayoutOrder = 5 })
             Label(DetailScroll, "MATERIALS PER CRAFT  (tap one to see how it is made)", 10, {
                 TextColor3 = Theme.TextMuted,
                 LayoutOrder = 6,

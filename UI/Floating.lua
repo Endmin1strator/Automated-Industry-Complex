@@ -30,7 +30,11 @@ return {
             Name = "Floating",
             SCREEN_MARGIN = SCREEN_MARGIN,
             POPUP_Z = POPUP_Z,
+            --// The window library's one font (Regular / Bold).
+            Fonts = UI and UI.Fonts or { Regular = Enum.Font.GothamMedium, Bold = Enum.Font.GothamBold },
         }
+
+        local TEXT_CLASSES = { TextLabel = true, TextButton = true, TextBox = true }
 
         function Floating.Available()
             return UI ~= nil and UI.ScreenGui ~= nil
@@ -42,6 +46,11 @@ return {
 
         function Floating.New(ClassName, Properties)
             local Object = Instance.new(ClassName)
+
+            --// Text gets the UI's font unless Properties sets one.
+            if TEXT_CLASSES[ClassName] then
+                Object.Font = Floating.Fonts.Regular
+            end
 
             for Property, Value in pairs(Properties or {}) do
                 if Property ~= "Parent" then
@@ -102,7 +111,7 @@ return {
                 Text = Text,
                 TextColor3 = UI.Theme.Text,
                 TextSize = Size,
-                Font = Enum.Font.GothamMedium,
+                Font = Floating.Fonts.Regular,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 TextTruncate = Enum.TextTruncate.AtEnd,
             }), Properties)
@@ -141,7 +150,7 @@ return {
                 Text = Text,
                 TextColor3 = Color or UI.Theme.Text,
                 TextSize = 10,
-                Font = Enum.Font.GothamBold,
+                Font = Floating.Fonts.Bold,
                 AutoButtonColor = false,
             })
 
@@ -276,7 +285,7 @@ return {
                 Position = UDim2.fromOffset(12, 0),
                 Size = UDim2.new(0, 26, 1, 0),
                 TextColor3 = Theme.Cyan,
-                Font = Enum.Font.GothamBold,
+                Font = Floating.Fonts.Bold,
                 TextXAlignment = Enum.TextXAlignment.Center,
             })
 
@@ -285,7 +294,7 @@ return {
             Floating.Label(Header, string.upper(Options.Title), 13, {
                 Position = UDim2.fromOffset(46, HasSubtitle and 6 or 0),
                 Size = UDim2.new(1, -110, 0, HasSubtitle and 18 or HEADER_HEIGHT),
-                Font = Enum.Font.GothamBold,
+                Font = Floating.Fonts.Bold,
             })
 
             if HasSubtitle then

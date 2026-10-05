@@ -236,6 +236,11 @@
 > - ทุกปุ่ม / toggle / slider / dropdown / ช่องพิมพ์ในหน้าหลักมีคำอธิบายบรรทัดเล็กใต้ชื่อว่าใช้ทำอะไร (รายการ priority โชว์ในบรรทัดรอง) แก้คำอธิบายได้ที่ `UI/Descriptions.lua` ไฟล์เดียว
 > - เอาเมาส์ชี้ปุ่ม / toggle / dropdown / ช่องพิมพ์ / แถวในหน้าต่างลอย ขอบจะเปลี่ยนเป็นสีไฮไลต์
 
+### [x] UI: ใช้ font เดียวกันทั้งระบบ
+> ทำแล้ว (v2.91): ทั้ง UI ใช้ Gotham ตัวเดียว (ตัวปกติ GothamMedium, หัวข้อ/ชื่อปุ่มใช้ GothamBold ของ font เดียวกัน) กำหนดที่ `FONT_REGULAR` / `FONT_BOLD` บนสุดของ `UI/Utils.lua` จุดเดียว
+> - ช่องสี/ตั้งค่าใน Settings ที่เคยเป็น font Code เปลี่ยนเป็น font เดียวกันแล้ว
+> - ข้อความที่ไม่ได้ตั้ง font (เดิมได้ font ตั้งต้นของ Roblox) ได้ font ปกติอัตโนมัติ ทั้งหน้าหลัก, Server Browser, Recipe Browser และป้ายลอยของ Debug Visualizer
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

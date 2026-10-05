@@ -250,7 +250,7 @@ return {
             local NameLabel = Label(Row, string.upper(Name), 10, {
                 Position = UDim2.fromOffset(10, 5),
                 Size = UDim2.new(1, -18, 0, 15),
-                Font = Enum.Font.GothamBold,
+                Font = Floating.Fonts.Bold,
             })
             local InfoLabel = Label(Row, "", 8, { Position = UDim2.fromOffset(10, 21), Size = UDim2.new(1, -18, 0, 12) })
 
@@ -331,7 +331,7 @@ return {
                 PlaceholderColor3 = Theme.TextMuted,
                 TextColor3 = Theme.Text,
                 TextSize = 10,
-                Font = Enum.Font.GothamMedium,
+                Font = Floating.Fonts.Regular,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 ClearTextOnFocus = false,
             })

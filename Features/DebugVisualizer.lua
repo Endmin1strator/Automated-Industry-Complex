@@ -137,7 +137,7 @@ return {
             Label.BackgroundTransparency = 1
             Label.Size = UDim2.fromScale(1, 0.52)
             Label.Position = UDim2.fromScale(0, 0.03)
-            Label.Font = Enum.Font.GothamMedium
+            Label.Font = UI.Fonts.Regular
             Label.Text = string.format("%s #%02d", ZoneType or "ZONE", Index or 0)
             Label.TextColor3 = DEBUG_COLORS.BillboardText
             Label.TextScaled = true
@@ -147,7 +147,7 @@ return {
             RadiusLabel.BackgroundTransparency = 1
             RadiusLabel.Size = UDim2.fromScale(1, 0.4)
             RadiusLabel.Position = UDim2.fromScale(0, 0.55)
-            RadiusLabel.Font = Enum.Font.GothamMedium
+            RadiusLabel.Font = UI.Fonts.Regular
             RadiusLabel.Text = string.format("RADIUS  %.0f", Radius)
             RadiusLabel.TextColor3 = DEBUG_COLORS.BillboardMuted
             RadiusLabel.TextScaled = true
@@ -217,7 +217,7 @@ return {
             Label.BackgroundTransparency = 1
             Label.Position = UDim2.fromScale(0.10, 0)
             Label.Size = UDim2.fromScale(0.56, 1)
-            Label.Font = Enum.Font.GothamMedium
+            Label.Font = UI.Fonts.Regular
             Label.Text = string.format("WP %02d", Index)
             Label.TextColor3 = DEBUG_COLORS.BillboardText
             Label.TextScaled = true
@@ -230,7 +230,7 @@ return {
             State.BackgroundTransparency = 1
             State.Position = UDim2.fromScale(0.68, 0)
             State.Size = UDim2.fromScale(0.25, 1)
-            State.Font = Enum.Font.GothamMedium
+            State.Font = UI.Fonts.Regular
             State.Text = "NEXT"
             State.TextColor3 = DEBUG_COLORS.BillboardMuted
             State.TextScaled = true
@@ -615,7 +615,7 @@ return {
             Title.BackgroundTransparency = 1
             Title.Size = UDim2.fromScale(1, 0.52)
             Title.Position = UDim2.fromScale(0, 0.03)
-            Title.Font = Enum.Font.GothamMedium
+            Title.Font = UI.Fonts.Regular
             Title.TextColor3 = DEBUG_COLORS.BillboardText
             Title.TextScaled = true
             Title.Parent = Container
@@ -624,7 +624,7 @@ return {
             Status.BackgroundTransparency = 1
             Status.Size = UDim2.fromScale(1, 0.4)
             Status.Position = UDim2.fromScale(0, 0.55)
-            Status.Font = Enum.Font.GothamMedium
+            Status.Font = UI.Fonts.Regular
             Status.TextScaled = true
             Status.Parent = Container
 

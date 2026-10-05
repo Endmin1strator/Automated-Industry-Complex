@@ -430,11 +430,11 @@ return {
 
             Label(DetailScroll, (IsCurrent and "◇  THIS SERVER" or "◇  PUBLIC SERVER"), 13, {
                 TextColor3 = Theme.Cyan,
-                Font = Enum.Font.GothamBold,
+                Font = Floating.Fonts.Bold,
                 LayoutOrder = 1,
             })
             Label(DetailScroll, string.format("PLAYERS  %d / %d", Server.Playing or 0, Server.MaxPlayers or 0), 10, {
-                Font = Enum.Font.GothamBold,
+                Font = Floating.Fonts.Bold,
                 LayoutOrder = 2,
             })
             Label(DetailScroll, string.format("PING  %s  ·  FPS  %s", PingText(Server.Ping), FPSText(Server.FPS)):upper(), 10, {
@@ -472,7 +472,7 @@ return {
 
             Label(DetailScroll, "PLAYERS IN THIS SERVER", 8, {
                 TextColor3 = Theme.TextMuted,
-                Font = Enum.Font.GothamBold,
+                Font = Floating.Fonts.Bold,
                 LayoutOrder = 6,
             })
 
@@ -538,7 +538,7 @@ return {
                 Position = UDim2.fromOffset(10, 5),
                 Size = UDim2.new(1, -18, 0, 15),
                 TextColor3 = IsCurrent and Theme.Cyan or Theme.Text,
-                Font = Enum.Font.GothamBold,
+                Font = Floating.Fonts.Bold,
             })
             Label(Row, string.format("PING %s  ·  FPS %s  ·  %s", PingText(Server.Ping), FPSText(Server.FPS), ShortJobId(Server.Id)):upper(), 8, {
                 Position = UDim2.fromOffset(10, 22),

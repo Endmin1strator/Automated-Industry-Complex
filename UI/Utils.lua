@@ -55,6 +55,18 @@ local MIN_WINDOW_SIZE  = Vector2.new(560, 360)
 local MAX_WINDOW_SIZE  = Vector2.new(1100, 760)
 local TEXT_SCALE       = 1
 
+--// The one font the whole UI uses: the regular weight for text, the bold
+--// weight of the same font for names and headings. Text created without a
+--// Font gets FONT_REGULAR (see New). Other modules read these as UI.Fonts.
+local FONT_REGULAR     = Enum.Font.GothamMedium
+local FONT_BOLD        = Enum.Font.GothamBold
+local TEXT_CLASSES     = { TextLabel = true, TextButton = true, TextBox = true }
+
+Library.Fonts = {
+    Regular = FONT_REGULAR,
+    Bold = FONT_BOLD,
+}
+
 local TWEEN_FAST   = TweenInfo.new(0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 local TWEEN_NORMAL = TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 local TWEEN_SMOOTH = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
@@ -65,6 +77,12 @@ local TWEEN_SMOOTH = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDire
 
 local function New(className: string, properties: {[string]: any}?): Instance
     local object = Instance.new(className)
+
+    --// Roblox's default font differs from ours; set before properties so an
+    --// explicit Font still wins.
+    if TEXT_CLASSES[className] then
+        (object :: any).Font = FONT_REGULAR
+    end
 
     if properties then
         for property, value in pairs(properties) do
@@ -159,7 +177,7 @@ local function AddText(
         TextColor3 = Theme.Text,
         TextSize = math.round(size * TEXT_SCALE),
 
-        Font = Enum.Font.GothamMedium,
+        Font = FONT_REGULAR,
 
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Center,
@@ -418,11 +436,11 @@ function Library:_CreateSettingsPanel()
 
     local cfgDiamond = AddText(configButton, "◇", 13, UDim2.fromOffset(13, 0), UDim2.fromOffset(22, 42))
     cfgDiamond.TextColor3 = self.Theme.Cyan
-    cfgDiamond.Font = Enum.Font.GothamBold
+    cfgDiamond.Font = FONT_BOLD
 
     local cfgLabel = AddText(configButton, "CONFIGURATION", 9, UDim2.fromOffset(42, 0), UDim2.new(1, -72, 1, 0))
     cfgLabel.TextColor3 = self.Theme.Cyan
-    cfgLabel.Font = Enum.Font.GothamBold
+    cfgLabel.Font = FONT_BOLD
 
     local cfgMark = AddText(configButton, "›", 18, UDim2.new(1, -34, 0, 0), UDim2.fromOffset(24, 42))
     cfgMark.TextColor3 = self.Theme.TextMuted
@@ -482,12 +500,12 @@ function Library:_CreateSettingsPanel()
 
     local panelTitle = AddText(panel, "SYSTEM CONFIGURATION", 14, UDim2.fromOffset(18, 23), UDim2.new(1, -150, 0, 24))
     panelTitle.TextColor3 = self.Theme.White
-    panelTitle.Font = Enum.Font.GothamBold
+    panelTitle.Font = FONT_BOLD
     panelTitle.ZIndex = 82
 
     local panelSub = AddText(panel, "THEME / WINDOW / TYPOGRAPHY", 8, UDim2.fromOffset(19, 47), UDim2.new(1, -150, 0, 16))
     panelSub.TextColor3 = self.Theme.TextMuted
-    panelSub.Font = Enum.Font.GothamMedium
+    panelSub.Font = FONT_REGULAR
     panelSub.ZIndex = 82
 
     local scroll = New("ScrollingFrame", {
@@ -502,7 +520,7 @@ function Library:_CreateSettingsPanel()
 
     local themeHeader = AddText(scroll, "THEME COLORS", 9, UDim2.fromOffset(4, 0), UDim2.new(1, -8, 0, 22))
     themeHeader.TextColor3 = self.Theme.Cyan
-    themeHeader.Font = Enum.Font.GothamBold
+    themeHeader.Font = FONT_BOLD
     themeHeader.LayoutOrder = 1
 
     self._ThemeInputs = {}
@@ -526,10 +544,10 @@ function Library:_CreateSettingsPanel()
 
     local pickerTitle = AddText(picker, "COLOR PICKER", 9, UDim2.fromOffset(12, 8), UDim2.new(1, -50, 0, 20))
     pickerTitle.TextColor3 = self.Theme.Cyan
-    pickerTitle.Font = Enum.Font.GothamBold
+    pickerTitle.Font = FONT_BOLD
     pickerTitle.ZIndex = 121
 
-    local pickerClose = New("TextButton", {Parent=picker, BackgroundTransparency=1, BorderSizePixel=0, Position=UDim2.new(1,-32,0,5), Size=UDim2.fromOffset(24,24), Text="X", TextColor3=self.Theme.TextMuted, TextSize=9, Font=Enum.Font.GothamBold, AutoButtonColor=false, ZIndex=122})
+    local pickerClose = New("TextButton", {Parent=picker, BackgroundTransparency=1, BorderSizePixel=0, Position=UDim2.new(1,-32,0,5), Size=UDim2.fromOffset(24,24), Text="X", TextColor3=self.Theme.TextMuted, TextSize=9, Font=FONT_BOLD, AutoButtonColor=false, ZIndex=122})
     self:_Connect(pickerClose.MouseButton1Click, function() picker.Visible = false end)
 
     -- Color picker: spectrum + grayscale, with explicit HEX and RGB fields.
@@ -556,15 +574,15 @@ function Library:_CreateSettingsPanel()
 
     local inputHeader = AddText(picker, "VALUE INPUT", 7, UDim2.fromOffset(12,178), UDim2.new(1,-24,0,14))
     inputHeader.TextColor3 = self.Theme.TextMuted
-    inputHeader.Font = Enum.Font.GothamBold
+    inputHeader.Font = FONT_BOLD
     inputHeader.ZIndex = 122
 
     local hexLabel = AddText(picker, "HEX", 7, UDim2.fromOffset(12,194), UDim2.fromOffset(32,16))
     hexLabel.TextColor3 = self.Theme.Cyan
-    hexLabel.Font = Enum.Font.GothamBold
+    hexLabel.Font = FONT_BOLD
     hexLabel.ZIndex = 122
 
-    local hexInput = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Element, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(43,190), Size=UDim2.fromOffset(92,28), Text="#DCCD00", PlaceholderText="#RRGGBB", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=9, Font=Enum.Font.Code, ClearTextOnFocus=false, ZIndex=122})
+    local hexInput = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Element, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(43,190), Size=UDim2.fromOffset(92,28), Text="#DCCD00", PlaceholderText="#RRGGBB", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=9, Font=FONT_REGULAR, ClearTextOnFocus=false, ZIndex=122})
     AddAngularCorners(hexInput, self.Theme.BorderDim)
     AddStroke(hexInput, self.Theme.BorderDim, 0.15, 1)
     AddPadding(hexInput, 7, 7, 0, 0)
@@ -576,15 +594,15 @@ function Library:_CreateSettingsPanel()
         local x = 143 + ((index - 1) * 49)
         local label = AddText(picker, channel, 7, UDim2.fromOffset(x,194), UDim2.fromOffset(12,16))
         label.TextColor3 = self.Theme.Cyan
-        label.Font = Enum.Font.GothamBold
+        label.Font = FONT_BOLD
         label.ZIndex = 122
-        local input = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Element, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(x+13,190), Size=UDim2.fromOffset(32,28), Text="0", PlaceholderText="0", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=8, Font=Enum.Font.Code, ClearTextOnFocus=false, TextXAlignment=Enum.TextXAlignment.Center, ZIndex=122})
+        local input = New("TextBox", {Parent=picker, BackgroundColor3=self.Theme.Element, BackgroundTransparency=0.05, BorderSizePixel=0, Position=UDim2.fromOffset(x+13,190), Size=UDim2.fromOffset(32,28), Text="0", PlaceholderText="0", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=8, Font=FONT_REGULAR, ClearTextOnFocus=false, TextXAlignment=Enum.TextXAlignment.Center, ZIndex=122})
         AddAngularCorners(input, self.Theme.BorderDim)
         AddStroke(input, self.Theme.BorderDim, 0.15, 1)
         rgbInputs[channel] = input
     end
 
-    local pickerApply = New("TextButton", {Parent=picker, BackgroundColor3=self.Theme.ElementHover, BorderSizePixel=0, Position=UDim2.new(1,-64,0,190), Size=UDim2.fromOffset(52,28), Text="SET", TextColor3=self.Theme.Cyan, TextSize=8, Font=Enum.Font.GothamBold, AutoButtonColor=false, ZIndex=122})
+    local pickerApply = New("TextButton", {Parent=picker, BackgroundColor3=self.Theme.ElementHover, BorderSizePixel=0, Position=UDim2.new(1,-64,0,190), Size=UDim2.fromOffset(52,28), Text="SET", TextColor3=self.Theme.Cyan, TextSize=8, Font=FONT_BOLD, AutoButtonColor=false, ZIndex=122})
     AddStroke(pickerApply, self.Theme.BorderDim, 0.25, 1)
     AddAngularCorners(pickerApply, self.Theme.CyanDark)
     self:_Connect(pickerApply.MouseButton1Click, function()
@@ -662,7 +680,7 @@ function Library:_CreateSettingsPanel()
         AddStroke(swatch, self.Theme.BorderDim, 0.2, 1)
         AddStroke(swatch, self.Theme.White, 0.55, 1)
         self._ThemeSwatches[key] = swatch
-        local input = New("TextBox", {Parent=row, BackgroundColor3=self.Theme.Background, BackgroundTransparency=0.1, BorderSizePixel=0, Position=UDim2.new(1,-128,0,5), Size=UDim2.fromOffset(116,24), Text=ColorToHex(self.Theme[key]), PlaceholderText="#RRGGBB", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=8, Font=Enum.Font.Code, ClearTextOnFocus=false, ZIndex=103})
+        local input = New("TextBox", {Parent=row, BackgroundColor3=self.Theme.Background, BackgroundTransparency=0.1, BorderSizePixel=0, Position=UDim2.new(1,-128,0,5), Size=UDim2.fromOffset(116,24), Text=ColorToHex(self.Theme[key]), PlaceholderText="#RRGGBB", TextColor3=self.Theme.Text, PlaceholderColor3=self.Theme.TextMuted, TextSize=8, Font=FONT_REGULAR, ClearTextOnFocus=false, ZIndex=103})
         AddAngularCorners(input, self.Theme.BorderDim)
         AddStroke(input, self.Theme.BorderDim, 0.2, 1)
         self._ThemeInputs[key] = input
@@ -678,7 +696,7 @@ function Library:_CreateSettingsPanel()
 
     local settingsHeader = AddText(scroll, "WINDOW / TYPOGRAPHY", 9, UDim2.fromOffset(4,0), UDim2.new(1,-8,0,22))
     settingsHeader.TextColor3 = self.Theme.Cyan
-    settingsHeader.Font = Enum.Font.GothamBold
+    settingsHeader.Font = FONT_BOLD
     settingsHeader.LayoutOrder = #THEME_KEYS + 2
 
     local function makeNumberRow(order, labelText, value, key, minValue, maxValue, decimals)
@@ -686,7 +704,7 @@ function Library:_CreateSettingsPanel()
         AddAngularCorners(row, self.Theme.BorderDim)
         local label = AddText(row, labelText, 8, UDim2.fromOffset(10,0), UDim2.new(1,-140,1,0))
         label.TextColor3 = self.Theme.TextSecondary
-        local input = New("TextBox", {Parent=row, BackgroundColor3=self.Theme.Background, BackgroundTransparency=0.1, BorderSizePixel=0, Position=UDim2.new(1,-128,0,5), Size=UDim2.fromOffset(116,24), Text=tostring(value), TextColor3=self.Theme.Text, TextSize=8, Font=Enum.Font.Code, ClearTextOnFocus=false, ZIndex=103})
+        local input = New("TextBox", {Parent=row, BackgroundColor3=self.Theme.Background, BackgroundTransparency=0.1, BorderSizePixel=0, Position=UDim2.new(1,-128,0,5), Size=UDim2.fromOffset(116,24), Text=tostring(value), TextColor3=self.Theme.Text, TextSize=8, Font=FONT_REGULAR, ClearTextOnFocus=false, ZIndex=103})
         AddAngularCorners(input, self.Theme.BorderDim)
         AddStroke(input,self.Theme.BorderDim,0.2,1)
         self:_Connect(input.FocusLost,function()
@@ -749,9 +767,9 @@ function Library:_CreateSettingsPanel()
         })
         AddStroke(button, self.Theme.BorderDim, 0.25, 1)
         local diamond = AddText(button, "◇", 13, UDim2.fromOffset(13, 0), UDim2.fromOffset(22, 42))
-        diamond.TextColor3 = accentColor or self.Theme.Cyan; diamond.Font = Enum.Font.GothamBold
+        diamond.TextColor3 = accentColor or self.Theme.Cyan; diamond.Font = FONT_BOLD
         local label = AddText(button, name:upper(), 9, UDim2.fromOffset(42, 0), UDim2.new(1, -72, 1, 0))
-        label.Font = Enum.Font.GothamBold
+        label.Font = FONT_BOLD
         local arrow = AddText(button, "›", 18, UDim2.new(1, -34, 0, 0), UDim2.fromOffset(24, 42))
         arrow.TextColor3 = self.Theme.TextMuted; arrow.TextXAlignment = Enum.TextXAlignment.Right
         self:_Connect(button.MouseEnter, function()
@@ -1053,7 +1071,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
 
         TextSize = 32,
 
-        Font = Enum.Font.GothamBold,
+        Font = FONT_BOLD,
 
         ZIndex = 14,
     })
@@ -1072,7 +1090,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
         UDim2.fromOffset(430, 25)
     )
 
-    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.Font = FONT_BOLD
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.ZIndex = 14
 
@@ -1088,7 +1106,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
     )
 
     subtitle.TextColor3 = self.Theme.TextMuted
-    subtitle.Font = Enum.Font.GothamMedium
+    subtitle.Font = FONT_REGULAR
     subtitle.ZIndex = 14
 
     self.Subtitle = subtitle
@@ -1147,7 +1165,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
 
         TextSize = 25,
 
-        Font = Enum.Font.GothamMedium,
+        Font = FONT_REGULAR,
 
         AutoButtonColor = false,
 
@@ -1218,7 +1236,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
         Text = "›",
         TextColor3 = self.Theme.Cyan,
         TextSize = 18,
-        Font = Enum.Font.GothamBold,
+        Font = FONT_BOLD,
         AutoButtonColor = false,
         ZIndex = 15,
     })
@@ -1234,7 +1252,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
     )
 
     navTitle.TextColor3 = self.Theme.TextMuted
-    navTitle.Font = Enum.Font.GothamBold
+    navTitle.Font = FONT_BOLD
     navTitle.ZIndex = 14
     navTitle.Active = true
 
@@ -1255,7 +1273,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
         Text = "",
         TextColor3 = self.Theme.Text,
         TextSize = 9,
-        Font = Enum.Font.GothamMedium,
+        Font = FONT_REGULAR,
         TextXAlignment = Enum.TextXAlignment.Center,
         ZIndex = 15,
     })
@@ -1564,7 +1582,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
 
         TextSize = 26,
 
-        Font = Enum.Font.GothamBold,
+        Font = FONT_BOLD,
 
         AutoButtonColor = false,
 
@@ -1869,7 +1887,7 @@ function Library:_PlayIntro()
         UDim2.fromOffset(20, 18),
         UDim2.new(1, -40, 0, 22)
     )
-    brand.Font = Enum.Font.GothamBold
+    brand.Font = FONT_BOLD
     brand.TextColor3 = self.Theme.Cyan
     brand.TextTransparency = 1
     brand.ZIndex = 301
@@ -1885,7 +1903,7 @@ function Library:_PlayIntro()
         UDim2.new(1, -40, 0, 26)
     )
     title.TextTruncate = Enum.TextTruncate.AtEnd
-    title.Font = Enum.Font.GothamBold
+    title.Font = FONT_BOLD
     title.TextTransparency = 1
     title.ZIndex = 301
 
@@ -2244,7 +2262,7 @@ function Library:AddTab(name: string)
         UDim2.new(1, -70, 1, 0)
     )
 
-    label.Font = Enum.Font.GothamBold
+    label.Font = FONT_BOLD
     label.TextColor3 = self.Theme.TextSecondary
     label.ZIndex = 14
 
@@ -2472,7 +2490,7 @@ function Library:_RefreshNavigationSearch()
                 UDim2.fromOffset(29, 0),
                 UDim2.new(1, -68, 0, 36)
             )
-            label.Font = Enum.Font.GothamBold
+            label.Font = FONT_BOLD
             label.TextColor3 = self.Theme.TextSecondary
             label.TextTruncate = Enum.TextTruncate.AtEnd
             label.ZIndex = 42
@@ -2880,7 +2898,7 @@ function TabMethods:AddSection(name: string)
     )
 
     icon.TextColor3 = self.Library.Theme.Cyan
-    icon.Font = Enum.Font.GothamBold
+    icon.Font = FONT_BOLD
     icon.ZIndex = 16
 
     local title = AddText(
@@ -2891,7 +2909,7 @@ function TabMethods:AddSection(name: string)
         UDim2.new(1, -70, 0, 22)
     )
 
-    title.Font = Enum.Font.GothamBold
+    title.Font = FONT_BOLD
     title.ZIndex = 16
 
     local description = AddText(
@@ -3080,7 +3098,7 @@ function Library.SectionMethods:AddButton(name: string, callback, description: s
         UDim2.new(1, -60, 1, 0)
     )
 
-    label.Font = Enum.Font.GothamBold
+    label.Font = FONT_BOLD
 
     if descriptionText then
         label.Position = UDim2.fromOffset(42, 8)
@@ -3184,7 +3202,7 @@ function Library.SectionMethods:AddToggle(name: string, default: boolean?, callb
         UDim2.new(1, -130, 1, 0)
     )
 
-    label.Font = Enum.Font.GothamBold
+    label.Font = FONT_BOLD
 
     if descriptionText then
         label.Position = UDim2.fromOffset(13, 8)
@@ -3235,7 +3253,7 @@ function Library.SectionMethods:AddToggle(name: string, default: boolean?, callb
     )
 
     state.TextXAlignment = Enum.TextXAlignment.Right
-    state.Font = Enum.Font.GothamBold
+    state.Font = FONT_BOLD
 
     function component:Set(value: boolean, fireCallback: boolean?)
         self.Value = value
@@ -3352,7 +3370,7 @@ function Library.SectionMethods:AddSlider(
         UDim2.fromOffset(180, 20)
     )
 
-    label.Font = Enum.Font.GothamBold
+    label.Font = FONT_BOLD
 
     local valueLabel = AddText(
         frame,
@@ -3366,7 +3384,7 @@ function Library.SectionMethods:AddSlider(
     valueLabel.Position = UDim2.new(1, -75, 0, 5)
     valueLabel.TextXAlignment = Enum.TextXAlignment.Right
     valueLabel.TextColor3 = self.Library.Theme.Cyan
-    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.Font = FONT_BOLD
 
     if descriptionText then
         AddDescription(self.Library, frame, descriptionText, UDim2.fromOffset(13, 24), UDim2.new(1, -28, 0, 14))
@@ -3544,7 +3562,7 @@ function Library.SectionMethods:AddTextbox(name: string, default: string?, callb
         UDim2.new(1, -235, 1, 0)
     )
 
-    label.Font = Enum.Font.GothamBold
+    label.Font = FONT_BOLD
 
     if descriptionText then
         label.Position = UDim2.fromOffset(13, 8)
@@ -3573,7 +3591,7 @@ function Library.SectionMethods:AddTextbox(name: string, default: string?, callb
 
         TextSize = 11,
 
-        Font = Enum.Font.GothamMedium,
+        Font = FONT_REGULAR,
 
         ClearTextOnFocus = false,
 
@@ -3656,7 +3674,7 @@ function Library.SectionMethods:AddDropdown(
         UDim2.new(1, -245, 1, 0)
     )
 
-    label.Font = Enum.Font.GothamBold
+    label.Font = FONT_BOLD
 
     if descriptionText then
         label.Position = UDim2.fromOffset(13, 10)
@@ -3806,7 +3824,7 @@ function Library.SectionMethods:AddDropdown(
         )
 
         check.TextColor3 = self.Library.Theme.Cyan
-        check.Font = Enum.Font.GothamBold
+        check.Font = FONT_BOLD
         check.TextTransparency = 1
 
         local optionLabel = AddText(
@@ -4085,7 +4103,7 @@ function Library.SectionMethods:AddKeybind(
         UDim2.new(1, -150, 1, 0)
     )
 
-    label.Font = Enum.Font.GothamBold
+    label.Font = FONT_BOLD
 
     local keyButton = New("TextButton", {
         Parent = frame,
@@ -4104,7 +4122,7 @@ function Library.SectionMethods:AddKeybind(
 
         TextSize = 11,
 
-        Font = Enum.Font.GothamBold,
+        Font = FONT_BOLD,
 
         AutoButtonColor = false,
 
@@ -4266,7 +4284,7 @@ function Library.SectionMethods:AddPriority(
         UDim2.new(1, -100, 0, 20)
     )
 
-    title.Font = Enum.Font.GothamBold
+    title.Font = FONT_BOLD
 
     --// The description (options.Description or the map) replaces the
     --// generic first part of the subtitle.
@@ -4307,7 +4325,7 @@ function Library.SectionMethods:AddPriority(
 
         TextSize = 10,
 
-        Font = Enum.Font.GothamBold,
+        Font = FONT_BOLD,
 
         AutoButtonColor = false,
 
@@ -4463,7 +4481,7 @@ function Library.SectionMethods:AddPriority(
             )
 
             number.TextColor3 = self.Library.Theme.CyanDark
-            number.Font = Enum.Font.GothamBold
+            number.Font = FONT_BOLD
 
             local marker = AddText(
                 row,
@@ -4486,7 +4504,7 @@ function Library.SectionMethods:AddPriority(
                 UDim2.new(1, -(rightReserve + 60), 1, 0)
             )
 
-            nameLabel.Font = Enum.Font.GothamBold
+            nameLabel.Font = FONT_BOLD
 
             if hasValues then
                 local valueBox = New("TextBox", {
@@ -4510,7 +4528,7 @@ function Library.SectionMethods:AddPriority(
 
                     TextSize = 10,
 
-                    Font = Enum.Font.GothamBold,
+                    Font = FONT_BOLD,
 
                     ClearTextOnFocus = false,
 
@@ -4542,7 +4560,7 @@ function Library.SectionMethods:AddPriority(
 
                 TextSize = 11,
 
-                Font = Enum.Font.GothamBold,
+                Font = FONT_BOLD,
 
                 AutoButtonColor = false,
 
@@ -4565,7 +4583,7 @@ function Library.SectionMethods:AddPriority(
 
                 TextSize = 11,
 
-                Font = Enum.Font.GothamBold,
+                Font = FONT_BOLD,
 
                 AutoButtonColor = false,
 
@@ -4588,7 +4606,7 @@ function Library.SectionMethods:AddPriority(
 
                 TextSize = 18,
 
-                Font = Enum.Font.GothamMedium,
+                Font = FONT_REGULAR,
 
                 AutoButtonColor = false,
 
@@ -5065,7 +5083,7 @@ function Library:AddPin(name: string?)
             Text = text,
             TextColor3 = color or self.Theme.TextMuted,
             TextSize = 11,
-            Font = Enum.Font.GothamBold,
+            Font = FONT_BOLD,
             AutoButtonColor = false,
             ZIndex = 42,
         })
@@ -5095,7 +5113,7 @@ function Library:AddPin(name: string?)
         PlaceholderColor3 = self.Theme.TextMuted,
         TextColor3 = self.Theme.Text,
         TextSize = 12,
-        Font = Enum.Font.GothamMedium,
+        Font = FONT_REGULAR,
         ClearTextOnFocus = false,
         ZIndex = 41,
     })
@@ -5152,7 +5170,7 @@ function Library:AddPin(name: string?)
         Text = "↘",
         TextColor3 = self.Theme.TextMuted,
         TextSize = 13,
-        Font = Enum.Font.GothamBold,
+        Font = FONT_BOLD,
         AutoButtonColor = false,
         Visible = true,
         ZIndex = 81,
@@ -5230,7 +5248,7 @@ function Library:AddPin(name: string?)
                     Text = text,
                     TextColor3 = colour,
                     TextSize = 11,
-                    Font = Enum.Font.GothamMedium,
+                    Font = FONT_REGULAR,
                     AutoButtonColor = false,
                     ZIndex = 43,
                 })
@@ -5712,7 +5730,7 @@ function Library:Notify(title: string, message: string, duration: number?)
     )
 
     icon.TextColor3 = self.Theme.Cyan
-    icon.Font = Enum.Font.GothamBold
+    icon.Font = FONT_BOLD
 
     local titleLabel = AddText(
         notification,
@@ -5722,7 +5740,7 @@ function Library:Notify(title: string, message: string, duration: number?)
         UDim2.new(1, -60, 0, 18)
     )
 
-    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.Font = FONT_BOLD
 
     local messageLabel = AddText(
         notification,
