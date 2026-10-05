@@ -481,7 +481,11 @@ function Library:_CreateSettingsPanel()
 
     -- Full content overlay: Settings replaces both Navigation + Tab content,
     -- while the main Window Header remains visible for context.
-    local panel = New("Frame", {
+    local panel = New("TextButton", {
+        --// A button, so a click on it stops here instead of reaching the UI
+        --// underneath; it draws like a frame.
+        Text = "",
+        AutoButtonColor = false,
         Name = "SettingsPanel",
         Parent = self.Window,
         BackgroundColor3 = self.Theme.Background,
@@ -538,7 +542,11 @@ function Library:_CreateSettingsPanel()
     self._ThemeSwatches = {}
     self._ActiveColorKey = nil
 
-    local picker = New("Frame", {
+    local picker = New("TextButton", {
+        --// A button, so a click on it stops here instead of reaching the UI
+        --// underneath; it draws like a frame.
+        Text = "",
+        AutoButtonColor = false,
         Name = "ThemeColorPicker",
         Parent = panel,
         BackgroundColor3 = self.Theme.Panel,
@@ -3763,7 +3771,11 @@ function Library.SectionMethods:AddDropdown(
     local OPTION_HEIGHT = 32
     local OPTION_PADDING = 2
 
-    local popup = New("Frame", {
+    local popup = New("TextButton", {
+        --// A button, so a click on it stops here instead of reaching the UI
+        --// underneath; it draws like a frame.
+        Text = "",
+        AutoButtonColor = false,
         Name = "Dropdown",
 
         Parent = self.Library.Overlay,
@@ -5070,7 +5082,11 @@ function Library:AddPin(name: string?)
     component.Minimized = false
     component.Visible = true
 
-    local panel = New("Frame", {
+    local panel = New("TextButton", {
+        --// A button, so a click on it stops here instead of reaching the UI
+        --// underneath; it draws like a frame.
+        Text = "",
+        AutoButtonColor = false,
         Name = "PinPanel",
         Parent = self.ScreenGui,
         AnchorPoint = Vector2.new(1, 0),

@@ -250,7 +250,11 @@ return {
                 Placed = false,
             }
 
-            local Frame = New("Frame", {
+            local Frame = New("TextButton", {
+                --// A button, so a click on it stops here instead of reaching the UI
+                --// underneath; it draws like a frame.
+                Text = "",
+                AutoButtonColor = false,
                 Name = Options.Title,
                 Parent = UI.ScreenGui,
                 Size = UDim2.fromOffset(Options.Width, Options.Height),

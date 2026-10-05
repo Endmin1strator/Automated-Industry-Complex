@@ -556,7 +556,11 @@ return {
         end
 
         local function BuildPopup()
-            Popup = New("Frame", {
+            Popup = New("TextButton", {
+                --// A button, so a click on it stops here instead of reaching the UI
+                --// underneath; it draws like a frame.
+                Text = "",
+                AutoButtonColor = false,
                 Name = "SmithingBrowserPopup",
                 Parent = UI.ScreenGui,
                 Size = UDim2.fromOffset(POPUP_WIDTH, 0),
