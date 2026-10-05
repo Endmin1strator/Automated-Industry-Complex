@@ -318,11 +318,11 @@ return {
             NotifyAction("Danger Whitelist", "Cleared")
         end)
 
-        Players.PlayerAdded:Connect(function()
+        Context.Connect(Players.PlayerAdded, function()
             RefreshDangerPlayerDropdown()
         end)
 
-        Players.PlayerRemoving:Connect(function()
+        Context.Connect(Players.PlayerRemoving, function()
             task.defer(RefreshDangerPlayerDropdown)
         end)
 

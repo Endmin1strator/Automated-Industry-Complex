@@ -67,6 +67,11 @@ return {
         AICUI.BindFeatureToggle(FEATURE_NAME, "Refill Booster")
         Feature.AutoRefillBooster()
 
+        --// Also holds Safe Booster Reset's watcher; PlayerStats outlives this run.
+        Context.Lifetime.OnEnd(function()
+            Context.Lifetime.Disconnect(AICFeature.S.BoosterConnections)
+        end)
+
         return Feature
     end,
 }

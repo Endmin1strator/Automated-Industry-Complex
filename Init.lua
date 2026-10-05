@@ -1,7 +1,7 @@
 -- AutoFarm bootstrap.
 -- Every module returns {Name, Dependencies, Start(Context)}.
 
-local TITLE = "AUTOMATED INDUSTRY COMPLEX v2.93"
+local TITLE = "AUTOMATED INDUSTRY COMPLEX v2.94"
 local UTILS_PATH = "UI/Utils.lua"
 
 --// A failed download is retried this many times before giving up.
@@ -111,6 +111,123 @@ local Context = {
     Features = {},
 }
 
+--// Re-execution guard: one run at a time. Running the script again stops the
+--// previous run (kept in getgenv().AICSession) before this one loads. A run
+--// stops by ending Context.Lifetime: Alive goes false, the OnEnd callbacks run
+--// newest first, then every connection made through Context.Connect is
+--// disconnected. Modules wrap connections to long-lived signals in
+--// Context.Connect and loops check Context.Lifetime.Alive.
+local Lifetime = { Alive = true, Connections = {}, Cleanups = {}, Env = nil }
+
+--// Signal:Connect that the end of this run disconnects. A connection made
+--// after the run was stopped (it was still loading) is cut at once.
+function Lifetime.Connect(Signal, Callback)
+    local Connection = Signal:Connect(Callback)
+
+    if Lifetime.Alive then
+        table.insert(Lifetime.Connections, Connection)
+    else
+        Connection:Disconnect()
+    end
+
+    return Connection
+end
+
+--// Runs when this run ends, newest first.
+function Lifetime.OnEnd(Callback)
+    table.insert(Lifetime.Cleanups, Callback)
+end
+
+--// Disconnects a connection, or every connection in a list (then clears it).
+--// For connections a module keeps and rebinds itself (mob watchers, folder
+--// watchers), which Context.Connect would pile up.
+function Lifetime.Disconnect(Value)
+    if typeof(Value) == "RBXScriptConnection" then
+        Value:Disconnect()
+    elseif type(Value) == "table" then
+        for _, Connection in pairs(Value) do
+            if typeof(Connection) == "RBXScriptConnection" then
+                Connection:Disconnect()
+            end
+        end
+
+        table.clear(Value)
+    end
+end
+
+function Lifetime.RunCleanups()
+    for Index = #Lifetime.Cleanups, 1, -1 do
+        local Ok, Error = pcall(Lifetime.Cleanups[Index])
+
+        if not Ok then
+            warn("[AIC] Cleanup failed:", Error)
+        end
+    end
+
+    table.clear(Lifetime.Cleanups)
+end
+
+function Lifetime.Destroy()
+    if not Lifetime.Alive then
+        return
+    end
+
+    Lifetime.Alive = false
+    Lifetime.RunCleanups()
+
+    for _, Connection in ipairs(Lifetime.Connections) do
+        pcall(function()
+            Connection:Disconnect()
+        end)
+    end
+
+    table.clear(Lifetime.Connections)
+
+    if Lifetime.Env and Lifetime.Env.AICSession == Lifetime then
+        Lifetime.Env.AICSession = nil
+    end
+end
+
+Context.Lifetime = Lifetime
+Context.Connect = Lifetime.Connect
+
+do
+    local Ok, Env = pcall(function()
+        return type(getgenv) == "function" and getgenv() or nil
+    end)
+
+    Lifetime.Env = Ok and type(Env) == "table" and Env or nil
+end
+
+if Lifetime.Env then
+    local Previous = Lifetime.Env.AICSession
+    local Player = game:GetService("Players").LocalPlayer
+    local PlayerGui = Player and Player:FindFirstChildOfClass("PlayerGui")
+
+    if type(Previous) == "table" and type(Previous.Destroy) == "function" then
+        print("[AIC] Stopping the previous run")
+        local Ok, Error = pcall(Previous.Destroy)
+
+        if not Ok then
+            warn("[AIC] Could not stop the previous run:", Error)
+        end
+    elseif PlayerGui and PlayerGui:FindFirstChild("ENDFIELD_INDUSTRIES_UI") then
+        --// A version from before this guard is running. It cannot be stopped
+        --// from here, and two runs would fight over the character.
+        warn("[AIC] An older version is already running. Rejoin to load " .. TITLE .. ".")
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "AIC",
+                Text = "An older version is already running. Rejoin to load the new one.",
+                Duration = 10,
+            })
+        end)
+        return nil
+    end
+
+    Lifetime.Env.AICSession = Lifetime
+end
+
 --// The window is built first so its boot loader can report real progress:
 --// fetching takes the first half of the bar, starting modules the rest.
 local UI = nil
@@ -128,6 +245,8 @@ local function fail(Message)
         UI:SetLoadingProgress(nil, "LOAD FAILED  //  " .. string.match(Message, "^[^\n]*"), true)
     end
 
+    --// The session stays registered with the failed window up, so running the
+    --// script again removes it along with whatever already started.
     error(Message, 0)
 end
 
@@ -179,6 +298,11 @@ end
 local function createWindow(Utils)
     UI = Utils.new(TITLE, { ManualLoading = true })
     Context.UI = UI
+
+    local Window = UI
+    Lifetime.OnEnd(function()
+        Window:Destroy()
+    end)
 end
 
 local function loadLocal()
@@ -347,6 +471,28 @@ for _, Name in ipairs(START_ORDER) do
 end
 
 Context.Heartbeat:Start(Context.Features)
+
+--// Added last, so it runs first when the run ends: stop acting before the
+--// modules tear down their own parts and the window goes.
+Lifetime.OnEnd(function()
+    Context.Heartbeat:Destroy()
+
+    local Character = Context.Player and Context.Player.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    local Root = Character and Character:FindFirstChild("HumanoidRootPart")
+
+    if Humanoid and Root then
+        Humanoid:MoveTo(Root.Position)
+    end
+end)
+
+--// A newer run stopped this one while it was still loading: undo what was
+--// built since.
+if not Lifetime.Alive then
+    Lifetime.RunCleanups()
+    print("[AIC] A newer run started while this one was loading; stopped.")
+    return nil
+end
 
 if Context.UI then
     Context.UI:FinishLoading()

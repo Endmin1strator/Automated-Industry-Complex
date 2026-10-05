@@ -659,11 +659,11 @@ return {
             end
         end
 
-        Players.PlayerAdded:Connect(function(OtherPlayer)
+        Context.Connect(Players.PlayerAdded, function(OtherPlayer)
             OnPlayerAdded(OtherPlayer, false)
         end)
 
-        Players.PlayerRemoving:Connect(function(OtherPlayer)
+        Context.Connect(Players.PlayerRemoving, function(OtherPlayer)
             local UserId = tostring(OtherPlayer.UserId)
 
             if S.Online[UserId] then
@@ -681,7 +681,7 @@ return {
             OnPlayerAdded(OtherPlayer, true)
         end
 
-        TeleportService.TeleportInitFailed:Connect(function(Who, _, ErrorMessage)
+        Context.Connect(TeleportService.TeleportInitFailed, function(Who, _, ErrorMessage)
             --// Auto Block and Party System teleport too, and report their own
             --// failures; only a teleport of ours is reported here.
             if Who ~= Player or not (S.Teleporting or S.DangerHopStarted) then

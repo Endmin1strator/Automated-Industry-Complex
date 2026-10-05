@@ -787,7 +787,7 @@ return {
             end
         end
 
-        Context.Player.CharacterAdded:Connect(function()
+        Context.Connect(Context.Player.CharacterAdded, function()
             EndJob()
             S.Defending = nil
         end)
@@ -816,6 +816,11 @@ return {
             WatchMaterials()
             return GetLoadedOreNames()
         end
+
+        --// The ore folder outlives this run.
+        Context.Lifetime.OnEnd(function()
+            Context.Lifetime.Disconnect(S.MaterialConnections)
+        end)
 
         return Feature
     end,

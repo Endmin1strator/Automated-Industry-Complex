@@ -64,6 +64,15 @@ The UI font is chosen in Configuration (`UI:SetFont`, saved as the global `UI_FO
 
 Every control in the main window shows a one-line description under its name, looked up by its label in `UI/Descriptions.lua` (`UI:SetDescriptions`; a widget can also take a `description` argument). Add a line there when adding a control. Hovering a button, toggle, dropdown or textbox lights its border in the accent colour. `UI/Floating.lua` builds the floating windows (Server Browser, Recipe Browser) in the same look; `Floating.Section` lets the Utils widgets live inside them.
 
+## Re-execution guard
+
+Running the script again stops the previous run before the new one loads (`Init.lua`, the run is kept in `getgenv().AICSession`). A run ends through `Context.Lifetime`: `Alive` goes false, the `Context.Lifetime.OnEnd` callbacks run newest first (Init's last one stops Heartbeat and the character, then the modules' own, then ProfileManager writes pending saves and closes storage, then the window goes), and every connection made with `Context.Connect` is disconnected. A run of a version from before the guard cannot be stopped; the new run then refuses to start and asks for a rejoin.
+
+When adding code:
+- Connect to long-lived signals (Players, Player, workspace, RunService, UserInputService, remotes) with `Context.Connect(Signal, Callback)`, not `Signal:Connect`. Connections on our own UI die with the window.
+- Connections a module keeps and rebinds itself (per-mob or per-folder watchers on `S`) stay plain `:Connect`; add a `Context.Lifetime.OnEnd` that calls `Context.Lifetime.Disconnect(...)` on them.
+- Loops that never end on their own check `Context.Lifetime.Alive`. Anything created outside the window (in workspace) gets an `OnEnd` that destroys it.
+
 ## Release conventions
 
 Every shipped change bumps the version:

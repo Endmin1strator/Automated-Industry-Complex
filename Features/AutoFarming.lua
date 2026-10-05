@@ -982,6 +982,12 @@ return {
             UIRef.DeathLabel = UIRef.StatusSection:AddLabel("DEATH          0")
             UIRef.ExpLabel = UIRef.StatusSection:AddLabel("EXP            0/0")
         end
+        --// The stamina value outlives this run.
+        Context.Lifetime.OnEnd(function()
+            Context.Lifetime.Disconnect(AICFeature.S.StaminaConnection)
+            AICFeature.S.StaminaConnection = nil
+        end)
+
         return Feature
     end,
 }

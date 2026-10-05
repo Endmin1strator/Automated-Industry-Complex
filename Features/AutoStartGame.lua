@@ -108,10 +108,10 @@ return {
         local S = Feature.S
 
         pcall(function()
-            UserInputService.WindowFocused:Connect(function()
+            Context.Connect(UserInputService.WindowFocused, function()
                 S.WindowFocused = true
             end)
-            UserInputService.WindowFocusReleased:Connect(function()
+            Context.Connect(UserInputService.WindowFocusReleased, function()
                 S.WindowFocused = false
             end)
         end)
@@ -951,6 +951,11 @@ return {
             if not Enabled then
                 Feature:Stop()
             end
+        end)
+
+        --// Ends the title-screen loop.
+        Context.Lifetime.OnEnd(function()
+            Feature:Stop()
         end)
 
         return Feature

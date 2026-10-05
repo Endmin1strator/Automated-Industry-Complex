@@ -350,11 +350,11 @@ return {
             AICUI.RefreshPartyLeaderDropdown()
             RefreshLeaderLabel()
 
-            Players.PlayerAdded:Connect(function()
+            Context.Connect(Players.PlayerAdded, function()
                 AICUI.RefreshPartyLeaderDropdown()
             end)
 
-            Players.PlayerRemoving:Connect(function()
+            Context.Connect(Players.PlayerRemoving, function()
                 task.defer(AICUI.RefreshPartyLeaderDropdown)
             end)
         end

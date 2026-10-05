@@ -56,7 +56,7 @@ return {
         AICFeature.CreateToggleContainer()
         AICFeature.RegenStamina()
         
-        Player.CharacterAdded:Connect(function()
+        Context.Connect(Player.CharacterAdded, function()
             task.wait()
         
             AICFeature.S.DEATH_COUNT += 1

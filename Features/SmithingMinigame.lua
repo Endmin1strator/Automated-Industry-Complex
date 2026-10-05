@@ -148,6 +148,10 @@ return {
             end
         end
 
+        Context.Lifetime.OnEnd(function()
+            Minigame:Stop()
+        end)
+
         return Minigame
     end,
 }

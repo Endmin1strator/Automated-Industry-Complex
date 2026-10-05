@@ -45,12 +45,32 @@ return {
         AICProfile.S.SelectedDeadzoneIndex = 1
         AICProfile.S.HasGlobalPinnedState = false
         AICProfile.S.PinnedSaveQueued = false
+        --// Set when this run ends (the script was run again): no more writes,
+        --// so a stopped run cannot save over what the new run loaded.
+        AICProfile.S.StorageClosed = false
 
         function AICProfile.CanUseFileStorage()
-            return type(readfile) == "function"
+            return not AICProfile.S.StorageClosed
+                and type(readfile) == "function"
                 and type(writefile) == "function"
                 and type(isfile) == "function"
         end
+
+        --// Writes any debounced save now, then closes storage. Runs before the
+        --// new run reads the files.
+        Context.Lifetime.OnEnd(function()
+            if AICProfile.S.ProfileSaveQueued then
+                AICProfile.S.ProfileSaveQueued = false
+                AICProfile.SaveActiveProfile()
+            end
+
+            if AICProfile.S.PinnedSaveQueued then
+                AICProfile.S.PinnedSaveQueued = false
+                AICProfile.WritePinnedState(CONFIG.PINNED_STATE)
+            end
+
+            AICProfile.S.StorageClosed = true
+        end)
 
         function AICProfile.EnsureProfileFolder()
             if type(makefolder) ~= "function" then

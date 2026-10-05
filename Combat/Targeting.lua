@@ -454,7 +454,20 @@ return {
                 AICCombat.NotifyMobSetChanged()
             end))
         end
-        
+
+        --// The mob folder and the mobs outlive this run.
+        Context.Lifetime.OnEnd(function()
+            for _, Connection in AICCombat.S.MobFolderConnections do
+                Connection:Disconnect()
+            end
+
+            table.clear(AICCombat.S.MobFolderConnections)
+
+            for Mob in AICCombat.S.MobConnections do
+                AICCombat.DisconnectMob(Mob)
+            end
+        end)
+
         --// Target Lock Validation
         --// Mobs with no route to them are remembered for a while. Dropping the
         --// target without this just hands the same unreachable mob straight back on
@@ -1049,11 +1062,11 @@ return {
 
         --// Players are targets too, so the picker follows the roster, and a
         --// player who leaves is dropped at once rather than on the next scan.
-        Players.PlayerAdded:Connect(function()
+        Context.Connect(Players.PlayerAdded, function()
             AICCombat.NotifyMobSetChanged("Player")
         end)
 
-        Players.PlayerRemoving:Connect(function(LeavingPlayer)
+        Context.Connect(Players.PlayerRemoving, function(LeavingPlayer)
             local LeavingCharacter = LeavingPlayer.Character
 
             if LeavingCharacter then
@@ -1074,7 +1087,7 @@ return {
             AICCombat.WatchMobFolder(AICCombat.S.ExistingMobFolder)
         end
 
-        workspace.ChildAdded:Connect(function(Child)
+        Context.Connect(workspace.ChildAdded, function(Child)
             if Child.Name ~= "Mobs" then
                 return
             end
@@ -1083,7 +1096,7 @@ return {
             AICCombat.NotifyMobSetChanged()
         end)
 
-        workspace.ChildRemoved:Connect(function(Child)
+        Context.Connect(workspace.ChildRemoved, function(Child)
             if Child.Name ~= "Mobs" then
                 return
             end

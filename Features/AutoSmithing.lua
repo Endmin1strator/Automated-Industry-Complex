@@ -723,8 +723,13 @@ return {
             return IsPaused(Name)
         end
 
-        Context.Player.CharacterAdded:Connect(function()
+        Context.Connect(Context.Player.CharacterAdded, function()
             EndJob()
+        end)
+
+        Context.Lifetime.OnEnd(function()
+            Context.Lifetime.Disconnect(S.EndedConnection)
+            S.EndedConnection = nil
         end)
 
         return Feature

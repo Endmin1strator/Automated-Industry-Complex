@@ -338,11 +338,11 @@ return {
 
             self:RefreshWhitelistPlayerDropdown()
 
-            Players.PlayerAdded:Connect(function()
+            Context.Connect(Players.PlayerAdded, function()
                 self:RefreshWhitelistPlayerDropdown()
             end)
 
-            Players.PlayerRemoving:Connect(function(OtherPlayer)
+            Context.Connect(Players.PlayerRemoving, function(OtherPlayer)
                 --// Leaving and coming back starts the delay over.
                 AICFeature.S.IntruderSeenAt[OtherPlayer.UserId] = nil
 

@@ -144,10 +144,15 @@ return {
             WatchFolder(Existing)
         end
 
-        workspace.ChildAdded:Connect(function(Child)
+        Context.Connect(workspace.ChildAdded, function(Child)
             if Child.Name == FOLDER_NAME then
                 WatchFolder(Child)
             end
+        end)
+
+        --// The enemy folders outlive this run.
+        Context.Lifetime.OnEnd(function()
+            Context.Lifetime.Disconnect(FolderConnections)
         end)
 
         return Module

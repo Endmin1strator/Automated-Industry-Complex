@@ -513,7 +513,7 @@ return {
         UIRef.GatherMaxSlider = AICUI.AddSettingSlider(Section, "Max Mobs", "GATHER_MAX_MOBS", true)
         UIRef.GatherRadiusSlider = AICUI.AddSettingSlider(Section, "Gather Radius", "GATHER_RADIUS", true)
 
-        Player.CharacterAdded:Connect(function()
+        Context.Connect(Player.CharacterAdded, function()
             Gather:Reset()
         end)
 

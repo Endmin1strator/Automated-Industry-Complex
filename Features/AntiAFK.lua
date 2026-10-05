@@ -49,14 +49,19 @@ return {
             end
         
             pcall(function()
-                Player.Idled:Connect(Nudge)
+                Context.Connect(Player.Idled, Nudge)
             end)
         
             --// Backstop on a timer as well, in case Idled does not fire in this
             --// environment. Far inside the twenty minute window either way.
             task.spawn(function()
-                while true do
+                while Context.Lifetime.Alive do
                     task.wait(tonumber(CONFIG.ANTI_AFK_INTERVAL) or 480)
+
+                    if not Context.Lifetime.Alive then
+                        break
+                    end
+
                     AICFeature.S.LastAntiAfkTime = os.clock()
                     Nudge()
                 end

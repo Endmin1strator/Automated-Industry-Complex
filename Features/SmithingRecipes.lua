@@ -380,6 +380,10 @@ return {
             return nil, Plan
         end
 
+        Context.Lifetime.OnEnd(function()
+            Context.Lifetime.Disconnect(S.Connections)
+        end)
+
         return Recipes
     end,
 }

@@ -794,6 +794,14 @@ return {
 
         Module:CreateUI()
 
+        --// The debug folder sits in workspace, outside the window.
+        Context.Lifetime.OnEnd(function()
+            if AICCombatUtils.S.DebugFolder then
+                AICCombatUtils.S.DebugFolder:Destroy()
+                AICCombatUtils.S.DebugFolder = nil
+            end
+        end)
+
         return Module
     end,
 }
