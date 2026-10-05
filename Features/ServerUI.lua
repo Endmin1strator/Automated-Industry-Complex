@@ -152,24 +152,85 @@ return {
             ServerHop.S.LastScan = 0
         end, SafetySection)
 
-        SafetySection:AddLabel(string.format("Leaves if a group %d member is here (Danger Whitelist exempt)", ServerHop.DANGER_GROUP_ID))
-        SafetySection:AddLabel("Toggle and whitelist are shared by every profile")
+        SafetySection:AddLabel("Leaves if a Danger Group member is here (Danger Whitelist exempt)")
+        SafetySection:AddLabel("Toggle, groups and whitelist are shared by every profile")
 
-        --// Players Leave On Danger Group stays for. Global like the toggle,
-        --// and separate from the Auto Block whitelist.
-        local DangerWhitelist = SafetySection:AddPriority("Danger Whitelist", CONFIG.DANGER_WHITELIST or {})
-        CONFIG.DANGER_WHITELIST = DangerWhitelist.Priority
+        --// A list of IDs kept in CONFIG[Key] and the global file. Removing
+        --// or reordering a row saves too; OnChanged runs after every save.
+        --// Returns the list and its save function.
+        local function AddGlobalIdList(Title, Key, OnChanged)
+            local List = SafetySection:AddPriority(Title, CONFIG[Key] or {})
+            CONFIG[Key] = List.Priority
 
-        --// Dropdown label -> UserId text, rebuilt with the dropdown.
+            local function Save()
+                CONFIG[Key] = List.Priority
+                AICProfile.WriteGlobalStore()
+
+                if OnChanged then
+                    OnChanged()
+                end
+            end
+
+            local OriginalRemove = List.Remove
+            local OriginalMoveUp = List.MoveUp
+            local OriginalMoveDown = List.MoveDown
+
+            function List:Remove(Entry)
+                local Changed = OriginalRemove(self, Entry)
+                Save()
+                return Changed
+            end
+
+            function List:MoveUp(Entry)
+                OriginalMoveUp(self, Entry)
+                Save()
+            end
+
+            function List:MoveDown(Entry)
+                OriginalMoveDown(self, Entry)
+                Save()
+            end
+
+            return List, Save
+        end
+
+        --// Groups whose members Leave On Danger Group leaves for.
+        local DangerGroups, SaveDangerGroups = AddGlobalIdList("Danger Groups", "DANGER_GROUP_IDS", function()
+            ServerHop:ResetGroupChecks()
+        end)
+
+        local DangerGroupBox = SafetySection:AddTextbox("Group ID", "", function() end)
+
+        SafetySection:AddButton("Add Group ID", function()
+            local Id = tostring(DangerGroupBox:Get() or ""):gsub("%s+", "")
+
+            if not Id:match("^%d+$") then
+                NotifyAction("Danger Groups", "Enter a numeric group ID")
+                return
+            end
+
+            if table.find(CONFIG.DANGER_GROUP_IDS or {}, Id) then
+                NotifyAction("Danger Groups", Id .. " is already on the list")
+                return
+            end
+
+            DangerGroups:Add(Id)
+            SaveDangerGroups()
+            DangerGroupBox:Set("")
+            NotifyAction("Danger Groups", "Added group " .. Id)
+        end)
+
+        --// Players Leave On Danger Group stays for, separate from the Auto
+        --// Block whitelist.
         local DangerPlayerOptions = {}
         local DangerPlayerDropdown
+        local RefreshDangerPlayerDropdown
 
-        local function SaveDangerWhitelist()
-            CONFIG.DANGER_WHITELIST = DangerWhitelist.Priority
-            AICProfile.WriteGlobalStore()
+        local DangerWhitelist, SaveDangerWhitelist = AddGlobalIdList("Danger Whitelist", "DANGER_WHITELIST", function()
             --// Someone taken off the list is acted on at the next frame.
             ServerHop.S.LastScan = 0
-        end
+            task.defer(RefreshDangerPlayerDropdown)
+        end)
 
         local function AddDangerWhitelist(UserId, Label)
             if ServerHop:IsDangerWhitelisted(UserId) then
@@ -183,7 +244,8 @@ return {
             return true
         end
 
-        local function RefreshDangerPlayerDropdown()
+        --// DangerPlayerOptions maps each label to its UserId text.
+        function RefreshDangerPlayerDropdown()
             table.clear(DangerPlayerOptions)
 
             local Options = {}
@@ -221,8 +283,8 @@ return {
             DangerPlayerDropdown = SafetySection:AddDropdown("Add Player In Server", Options, function(Value)
                 local Id = DangerPlayerOptions[Value]
 
-                if Id and AddDangerWhitelist(Id, Value) then
-                    task.defer(RefreshDangerPlayerDropdown)
+                if Id then
+                    AddDangerWhitelist(Id, Value)
                 end
             end)
 
@@ -245,7 +307,6 @@ return {
 
             if AddDangerWhitelist(Id, Id) then
                 DangerWhitelistBox:Set("")
-                RefreshDangerPlayerDropdown()
             end
         end)
 
@@ -253,29 +314,7 @@ return {
             DangerWhitelist:SetPriority({})
             SaveDangerWhitelist()
             NotifyAction("Danger Whitelist", "Cleared")
-            RefreshDangerPlayerDropdown()
         end)
-
-        local OriginalRemove = DangerWhitelist.Remove
-        local OriginalMoveUp = DangerWhitelist.MoveUp
-        local OriginalMoveDown = DangerWhitelist.MoveDown
-
-        function DangerWhitelist:Remove(Entry)
-            local Changed = OriginalRemove(self, Entry)
-            SaveDangerWhitelist()
-            RefreshDangerPlayerDropdown()
-            return Changed
-        end
-
-        function DangerWhitelist:MoveUp(Entry)
-            OriginalMoveUp(self, Entry)
-            SaveDangerWhitelist()
-        end
-
-        function DangerWhitelist:MoveDown(Entry)
-            OriginalMoveDown(self, Entry)
-            SaveDangerWhitelist()
-        end
 
         Players.PlayerAdded:Connect(function()
             RefreshDangerPlayerDropdown()

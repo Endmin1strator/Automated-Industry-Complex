@@ -10,6 +10,10 @@
 --     plays the strikes. A craft ends when the minigame shows its result
 --     and closes; the next one waits for the inventory to update.
 --   * MAX_FAILURES failed crafts in a row pause that recipe FAILURE_PAUSE.
+--   * A craft order (CRAFT in the Recipe Browser: N of one recipe) goes
+--     before the priority list, and runs with the Auto Smithing toggle off.
+--     It ends once N are crafted, or when it cannot go on (out of
+--     materials, skill too low, paused after failures) or is cancelled.
 --
 -- With Auto Farm on, AutoFarming offers it the frame once the waypoint
 -- route is walked, ahead of Auto Mining. With Auto Farm off it runs alone.
@@ -89,6 +93,8 @@ return {
                 BillboardsShown = false,
                 Ended = false,
                 EndedConnection = nil,
+                --// { Name, Count, Done } while a craft order runs.
+                Order = nil,
             },
         }
 
@@ -117,9 +123,27 @@ return {
             return (S.PausedUntil[Name] or 0) > os.clock()
         end
 
+        --// Ends the craft order, saying why when Reason is given.
+        local function EndOrder(Reason)
+            local Order = S.Order
+
+            if not Order then
+                return
+            end
+
+            S.Order = nil
+            S.LastSelect = 0
+
+            if Reason then
+                NotifyAction("CRAFT ORDER", string.format("%s  %d/%d  //  %s", Order.Name, Order.Done, Order.Count, Reason), 5)
+            end
+        end
+
         --// Counts a finished craft. Failures in a row pause the recipe.
         local function RecordResult(Succeeded, now)
             local Name = S.Recipe
+            local Order = S.Order
+            local ForOrder = Order ~= nil and Order.Name == Name
 
             --// Choose the next craft on the very next frame, so Auto
             --// Mining does not get a moment in between crafts.
@@ -128,6 +152,15 @@ return {
             if Succeeded then
                 S.Crafted += 1
                 S.Failures[Name] = 0
+
+                if ForOrder then
+                    Order.Done += 1
+
+                    if Order.Done >= Order.Count then
+                        EndOrder("DONE")
+                    end
+                end
+
                 return
             end
 
@@ -138,6 +171,10 @@ return {
                 S.Failures[Name] = 0
                 S.PausedUntil[Name] = now + FAILURE_PAUSE
                 NotifyAction("AUTO SMITHING", string.format("%s failed %d times; paused %ds", Name, MAX_FAILURES, FAILURE_PAUSE), 5)
+
+                if ForOrder then
+                    EndOrder("FAILED " .. MAX_FAILURES .. " TIMES")
+                end
             end
         end
 
@@ -387,6 +424,32 @@ return {
             return false
         end
 
+        --// The craft order's recipe when it can be crafted now. Otherwise
+        --// the order is ended, with why.
+        local function PickOrder()
+            local Order = S.Order
+            local State = Recipes:Describe(
+                { Name = Order.Name, Target = math.huge },
+                Recipes:GetInventory(),
+                Recipes:GetReserves(),
+                Recipes:GetSkill()
+            )
+
+            if not State.Known then
+                EndOrder("UNKNOWN RECIPE")
+            elseif State.Locked then
+                EndOrder("SMITHING SKILL TOO LOW")
+            elseif IsPaused(Order.Name) then
+                EndOrder("PAUSED AFTER FAILURES")
+            elseif State.Craftable < 1 then
+                EndOrder("OUT OF MATERIALS")
+            else
+                return State
+            end
+
+            return nil
+        end
+
         --// Chooses at most every SELECT_INTERVAL, idle or not; the plan
         --// reads the whole inventory. True while there is a job.
         local function UpdateJob(now, RootPart)
@@ -396,7 +459,16 @@ return {
 
             S.LastSelect = now
 
-            local Next, Plan = Recipes:PickNext(IsPaused)
+            local Next = S.Order and PickOrder()
+            local Plan = nil
+
+            if not Next then
+                if not FeatureState.AutoSmithing.Enabled then
+                    return GoIdle("NO CRAFT ORDER")
+                end
+
+                Next, Plan = Recipes:PickNext(IsPaused)
+            end
 
             if not Next then
                 return GoIdle(Feature.GetIdleReason(Plan))
@@ -421,11 +493,13 @@ return {
         end
 
         --// True while smithing owns the frame. False hands it back: smithing
-        --// is off, or nothing can be crafted (or there is no table).
+        --// is off with no craft order, or nothing can be crafted (or there
+        --// is no table).
         function Feature.Step(now)
             local _, Humanoid, RootPart = Runtime:GetCharacter()
+            local Active = FeatureState.AutoSmithing.Enabled or S.Order ~= nil
 
-            if not FeatureState.AutoSmithing.Enabled or not Humanoid or not RootPart then
+            if not Active or not Humanoid or not RootPart then
                 if S.State ~= "Idle" then
                     EndJob()
                 end
@@ -506,12 +580,18 @@ return {
         end
 
         local function GetStatusText()
-            if not FeatureState.AutoSmithing.Enabled then
+            local Order = S.Order
+
+            if not FeatureState.AutoSmithing.Enabled and not Order then
                 return "OFF"
             end
 
             local Counts = string.format("  (OK %d / FAIL %d)", S.Crafted, S.Failed)
             local Recipe = S.Recipe or ""
+
+            if Order then
+                Counts = string.format("  [ORDER %s %d/%d]", Order.Name, Order.Done, Order.Count) .. Counts
+            end
 
             if S.State == "Walking" then
                 return "WALKING TO TABLE  " .. Recipe .. Counts
@@ -596,9 +676,35 @@ return {
             end
         end
 
-        --// Drops the current craft. ClearMemory also forgets unreachable
-        --// tables and paused recipes, which another profile should not inherit.
+        --// Starts a craft order of Count crafts of Name, replacing any
+        --// order already running. A craft already under way finishes first.
+        function Feature:StartOrder(Name, Count)
+            Count = math.floor(tonumber(Count) or 0)
+
+            if Count < 1 or not Recipes:Get(Name) then
+                return false
+            end
+
+            S.Order = { Name = Name, Count = Count, Done = 0 }
+            S.PausedUntil[Name] = nil
+            S.LastSelect = 0
+            return true
+        end
+
+        function Feature:CancelOrder()
+            EndOrder("CANCELLED")
+        end
+
+        --// { Name, Count, Done } of the running craft order, or nil.
+        function Feature:GetOrder()
+            return S.Order
+        end
+
+        --// Drops the current craft and any craft order. ClearMemory also
+        --// forgets unreachable tables and paused recipes, which another
+        --// profile should not inherit.
         function Feature:Reset(ClearMemory)
+            EndOrder(S.Order and "CANCELLED" or nil)
             EndJob()
 
             if ClearMemory then

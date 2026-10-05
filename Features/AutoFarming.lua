@@ -133,7 +133,10 @@ return {
 
             AICUI.updatePosition()
 
-            if Humanoid then
+            --// Auto Mining holds WalkSpeed at 0 while it mines a node.
+            local SpeedLocked = AICFeature.IsWalkSpeedLocked and AICFeature.IsWalkSpeedLocked()
+
+            if Humanoid and not SpeedLocked then
                 if AICFeature.GetPlayerLevel() >= CONFIG.HIGH_LEVEL_THRESHOLD then
                     if Humanoid.WalkSpeed < CONFIG.MAXIMUM_WALKSPEED then
                         Humanoid.WalkSpeed = CONFIG.MAXIMUM_WALKSPEED

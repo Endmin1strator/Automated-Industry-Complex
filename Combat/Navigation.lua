@@ -39,7 +39,8 @@ return {
         local PATH_COMPUTE_TIMEOUT = 3
         --// With Safe Combat off, the spots tried around the target, nearest
         --// first: just clear of its body (TARGET_BODY_CLEARANCE) and in reach.
-        local CLOSE_COMBAT_DISTANCES = { 5, 6.5, 8 }
+        --// The last one is also how close it holds (CLOSE HOLD).
+        local CLOSE_COMBAT_DISTANCES = { 4, 5, 6 }
         --// With Safe Combat off, standing within this of the mob's facing
         --// (cosine; 0.5 = 60 degrees either side) counts as in front of it,
         --// the only place it moves away from.

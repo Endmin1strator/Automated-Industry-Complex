@@ -63,7 +63,9 @@ return {
 
         --// Normalizers turn whatever a save file holds into a valid value.
         --// They receive nil for a missing entry and must return the default.
-        local function NormalizeUserIdList(Value)
+
+        --// Numeric IDs (UserIds, group IDs) as text, duplicates dropped.
+        local function NormalizeIdList(Value)
             local Result = {}
 
             for _, Entry in ipairs(type(Value) == "table" and Value or {}) do
@@ -125,6 +127,8 @@ return {
             return {
                 Items = type(Value.Items) == "table" and Value.Items or {},
                 Floating = Value.Floating == true,
+                --// Closed with its × and shown again from the Status tab.
+                Visible = Value.Visible ~= false,
                 X = tonumber(Value.X),
                 Y = tonumber(Value.Y),
             }
@@ -164,7 +168,7 @@ return {
             { Key = "GATHER_RADIUS", Default = 40, Min = 15, Max = 80 },
 
             --// UserIds allowed to share the server. Auto Block ignores these.
-            { Key = "BLOCK_WHITELIST", Default = {}, Normalize = NormalizeUserIdList },
+            { Key = "BLOCK_WHITELIST", Default = {}, Normalize = NormalizeIdList },
 
             --// Seconds Auto Block waits after first seeing a non-whitelisted
             --// player before blocking them and leaving. 0 acts at once.
@@ -200,9 +204,12 @@ return {
         --// profile, shared by every profile and PlaceId. Same fields as
         --// Settings, without Scope.
         SaveConfig.GlobalSettings = {
+            --// Group IDs Leave On Danger Group leaves for.
+            { Key = "DANGER_GROUP_IDS", Default = { "5928691" }, Normalize = NormalizeIdList },
+
             --// UserIds Leave On Danger Group stays for. Separate from
             --// BLOCK_WHITELIST.
-            { Key = "DANGER_WHITELIST", Default = {}, Normalize = NormalizeUserIdList },
+            { Key = "DANGER_WHITELIST", Default = {}, Normalize = NormalizeIdList },
         }
 
         local FeatureByName = {}

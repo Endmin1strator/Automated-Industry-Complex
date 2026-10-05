@@ -266,13 +266,22 @@ return {
             UIRef.PinPanel:SetState(StoredPinned)
         end
 
+        UIRef.PinnedSection = UIRef.StatusTab:AddSection("Pinned Items")
+
+        --// The only way to show the panel again once its × closed it.
+        UIRef.PinnedVisibleToggle = UIRef.PinnedSection:AddToggle("Show Pinned Items", UIRef.PinPanel.Visible, function(Value)
+            UIRef.PinPanel:SetVisible(Value)
+            CONFIG.PINNED_STATE = UIRef.PinPanel:GetState()
+            AICProfile.QueuePinnedSave()
+        end)
+
         UIRef.PinPanel.OnChanged = function()
             CONFIG.PINNED_STATE = UIRef.PinPanel:GetState()
+            UIRef.PinnedVisibleToggle:Set(UIRef.PinPanel.Visible, false)
             AICProfile.QueuePinnedSave()
             AICProfile.QueueProfileSave()
         end
 
-        UIRef.PinnedSection = UIRef.StatusTab:AddSection("Pinned Items")
         UIRef.PinnedSection:AddButton("Reset Pinned Items Position", function()
             UIRef.PinPanel:ResetPosition()
             NotifyAction("Pinned Items", "Position reset")

@@ -1,108 +1,78 @@
--- SmithingBrowser is a window of its own, opened from the Crafting tab, for
--- finding recipes. The left side is a searchable list of every recipe; the
--- one picked shows on the right with what one craft needs and what is
--- missing. Tapping a material pops up what it is crafted from when it is a
--- recipe itself. Recipes are added to Recipe Priority from here, which
--- replaced the Add Recipe dropdown.
+-- SmithingBrowser is the Recipe Browser, a window of its own opened from the
+-- Crafting tab. Everything about crafting can be done from it, without the
+-- main window:
+--
+--   * The left side lists every recipe, narrowed by the search box (recipe
+--     or material name), the item type chips and READY ONLY.
+--   * The RECIPE tab (SmithingDetail) shows the one picked, with CRAFT NOW
+--     and the button that adds it to Recipe Priority.
+--   * The PRIORITY tab is the Recipe Priority list itself, the same one as
+--     on the Crafting tab.
 return {
     Name = "SmithingBrowser",
     IsFeature = true,
-    Dependencies = {"Runtime", "SaveConfig", "SmithingRecipes", "Floating"},
+    Dependencies = {"Runtime", "SaveConfig", "Components", "SmithingRecipes", "SmithingDetail", "Floating"},
 
     Start = function(Context)
         local UI = Context.UI
-        local UIRef = Context.UIRef
-        local NotifyAction = Context.NotifyAction
+        local CONFIG = Context.CONFIG
+        local AICUI = Context.AICUI
         local Recipes = Context.SmithingRecipes
+        local Detail = Context.SmithingDetail
         local Floating = Context.Floating
-        local UserInputService = Context.Services.UserInputService
 
-        local New, Corner, Stroke, Padding, List = Floating.New, Floating.Corner, Floating.Stroke, Floating.Padding, Floating.List
-        local Label, Button, ClearChildren, IsInside = Floating.Label, Floating.Button, Floating.ClearChildren, Floating.IsInside
+        local New, Corner, Stroke = Floating.New, Floating.Corner, Floating.Stroke
+        local Label, Button, ClearChildren = Floating.Label, Floating.Button, Floating.ClearChildren
+
+        local ReadInventory, Describe, GetCraftMax = Detail.ReadInventory, Detail.Describe, Detail.GetCraftMax
+        local IsInPriority, DescribeStatus, DescribeItem = Detail.IsInPriority, Detail.DescribeStatus, Detail.DescribeItem
 
         local MAX_STACK = Context.SaveConfig.ITEM_MAX_STACK
-        local WINDOW_WIDTH = 580
-        local WINDOW_HEIGHT = 400
-        --// Share of the window the recipe list takes; the details get the rest.
-        local LIST_WIDTH_SCALE = 0.46
+        local WINDOW_WIDTH = 720
+        local WINDOW_HEIGHT = 480
+        local MIN_WIDTH = 560
+        local MIN_HEIGHT = 360
+        --// Share of the window the recipe list takes; the tabs get the rest.
+        local LIST_WIDTH_SCALE = 0.42
         local ROW_HEIGHT = 34
-        local POPUP_WIDTH = 240
+        local BAR_HEIGHT = 26
+        local CHIP_HEIGHT = 22
+        local ALL_TYPES = "ALL"
         --// Inventory and skill are read again this often while open.
         local REFRESH_INTERVAL = 1
 
         local Browser = {
             Name = "SmithingBrowser",
             IsFeature = true,
+            --// Set by AutoSmithingUI: the PRIORITY tab changed the list.
+            OnPriorityChanged = nil,
             S = {
                 Built = false,
                 IsOpen = false,
-                Selected = nil,
+                --// "Recipe" or "Priority".
+                Tab = "Recipe",
+                TypeFilter = ALL_TYPES,
+                ReadyOnly = false,
                 --// Recipe name -> list row, kept between refreshes.
                 Rows = {},
-                --// Material name -> its row in the details, for the popup.
-                MaterialRows = {},
-                DetailSignature = nil,
-                PopupFor = nil,
-                PopupAnchor = nil,
+                --// Type -> chip button.
+                Chips = {},
+                ChipSignature = nil,
                 LastRefresh = 0,
+                --// Shows CONFIG.SMITH_RECIPES in the PRIORITY tab's list.
+                LoadPriority = nil,
             },
         }
 
         local S = Browser.S
-        local Theme, Window, SearchBox, ListScroll, EmptyLabel, DetailScroll, Popup, PopupContent
+        local Theme, Window, SearchBox, ReadyButton, ChipScroll, ListScroll, EmptyLabel
+        local DetailScroll, PriorityScroll, RecipeTabButton, PriorityTabButton
 
         ------------------------------------------------------------------------
-        --// What the inventory says about a recipe or a material
+        --// Filters
         ------------------------------------------------------------------------
 
-        local function ReadInventory()
-            return {
-                Inventory = Recipes:GetInventory(),
-                Reserves = Recipes:GetReserves(),
-                Skill = Recipes:GetSkill(),
-            }
-        end
-
-        local function Describe(Name, Stock)
-            return Recipes:Describe({ Name = Name, Target = 0 }, Stock.Inventory, Stock.Reserves, Stock.Skill)
-        end
-
-        --// One material of one craft: Have counts the whole inventory, Usable
-        --// what is left after Material Reserve, Missing what one craft lacks.
-        local function DescribeMaterial(Material, Stock)
-            local Have = Stock.Inventory[Material.Name] or 0
-            local Keep = Stock.Reserves[Material.Name] or 0
-            local Usable = math.max(0, Have - Keep)
-
-            return {
-                Have = Have,
-                Keep = Keep,
-                Usable = Usable,
-                Missing = math.max(0, Material.Amount - Usable),
-            }
-        end
-
-        local function GetRecipeList()
-            return UIRef.RecipePriorityComponent
-        end
-
-        local function IsInPriority(Name)
-            local RecipeList = GetRecipeList()
-            return RecipeList ~= nil and table.find(RecipeList.Priority, Name) ~= nil
-        end
-
-        --// The status line of a recipe and its colour.
-        local function DescribeStatus(State)
-            if State.Locked then
-                return "LOCKED", Theme.TextMuted
-            elseif State.Craftable > 0 or not State.Short then
-                return string.format("READY  x%d", State.Craftable), Theme.Cyan
-            end
-
-            return string.format("NEED %s %d/%d", State.Short.Name, State.Short.Have, State.Short.Need), Theme.Warning
-        end
-
-        local function Matches(Recipe, Query)
+        local function MatchesSearch(Recipe, Query)
             if Query == "" or string.find(string.lower(Recipe.Name), Query, 1, true) then
                 return true
             end
@@ -117,266 +87,145 @@ return {
             return false
         end
 
-        ------------------------------------------------------------------------
-        --// Material popup
-        ------------------------------------------------------------------------
-
-        local function HidePopup()
-            S.PopupFor = nil
-            S.PopupAnchor = nil
-
-            if Popup then
-                Popup.Visible = false
-            end
-        end
-
-        --// Beside the tapped row, flipped to its left when it would run off
-        --// the screen, then pulled inside once its height is known.
-        --// Deferred: a row just rebuilt has no position until layout runs.
-        local function PlacePopup(Anchor)
-            task.defer(function()
-                if not Popup.Visible or S.PopupAnchor ~= Anchor or not Anchor.Parent then
-                    return
-                end
-
-                local Screen = UI.ScreenGui.AbsoluteSize
-                local Left = Anchor.AbsolutePosition.X + Anchor.AbsoluteSize.X + 6
-
-                if Left + POPUP_WIDTH > Screen.X - Floating.SCREEN_MARGIN then
-                    Left = Anchor.AbsolutePosition.X - POPUP_WIDTH - 6
-                end
-
-                Popup.Position = UDim2.fromOffset(Left, Anchor.AbsolutePosition.Y)
-                UI._ClampToParent(Popup)
-            end)
-        end
-
-        local function ShowPopup(MaterialName, Anchor)
-            local Stock = ReadInventory()
-            local Recipe = Recipes:Get(MaterialName)
-            local Have = Stock.Inventory[MaterialName] or 0
-            local Keep = Stock.Reserves[MaterialName] or 0
-
-            ClearChildren(PopupContent)
-
-            local Header = New("Frame", { Parent = PopupContent, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20), LayoutOrder = 1 })
-            Label(Header, MaterialName, 13, { Size = UDim2.new(1, -24, 1, 0), TextColor3 = Theme.Cyan, Font = Enum.Font.GothamBold })
-
-            local Close = Button(Header, "×", Theme.Danger, {
-                AnchorPoint = Vector2.new(1, 0.5),
-                Position = UDim2.new(1, 0, 0.5, 0),
-                Size = UDim2.fromOffset(20, 18),
-            })
-            UI:_Connect(Close.Activated, HidePopup)
-
-            local HaveText = string.format("HAVE  %d", Have)
-
-            if Keep > 0 then
-                HaveText ..= string.format("   (KEEP %d)", Keep)
+        local function IsShown(Recipe, Query, Stock)
+            if S.TypeFilter ~= ALL_TYPES and Recipes:GetItemType(Recipe.Name) ~= S.TypeFilter then
+                return false
             end
 
-            Label(PopupContent, HaveText, 11, { TextColor3 = Theme.TextSecondary, LayoutOrder = 2 })
-
-            if not Recipe then
-                Label(PopupContent, "Not craftable: no smithing recipe makes it", 11, {
-                    TextColor3 = Theme.TextMuted,
-                    TextWrapped = true,
-                    TextTruncate = Enum.TextTruncate.None,
-                    AutomaticSize = Enum.AutomaticSize.Y,
-                    LayoutOrder = 3,
-                })
-            else
-                local Locked = Recipe.Skill > Stock.Skill
-
-                Label(PopupContent, string.format("CRAFTED FROM  ·  SKILL %s", tostring(Recipe.Skill)), 11, {
-                    TextColor3 = Locked and Theme.Danger or Theme.TextSecondary,
-                    LayoutOrder = 3,
-                })
-
-                for Index, Material in ipairs(Recipe.Materials) do
-                    local Info = DescribeMaterial(Material, Stock)
-
-                    Label(PopupContent, string.format("  %s   %d / %d", Material.Name, Info.Usable, Material.Amount), 11, {
-                        TextColor3 = Info.Missing > 0 and Theme.Warning or Theme.Text,
-                        LayoutOrder = 3 + Index,
-                    })
-                end
-
-                local Open = Button(PopupContent, "OPEN RECIPE", Theme.Cyan, { LayoutOrder = 100, Size = UDim2.new(1, 0, 0, 22) })
-
-                UI:_Connect(Open.Activated, function()
-                    Browser:Select(MaterialName)
-                end)
+            if S.ReadyOnly and GetCraftMax(Describe(Recipe.Name, Stock)) < 1 then
+                return false
             end
 
-            S.PopupFor = MaterialName
-            S.PopupAnchor = Anchor
-            Popup.Visible = true
-            PlacePopup(Anchor)
+            return MatchesSearch(Recipe, Query)
         end
 
         ------------------------------------------------------------------------
-        --// Details of the selected recipe
+        --// Tabs
         ------------------------------------------------------------------------
 
-        local function GetDetailSignature(Recipe, Stock)
-            local Parts = { Recipe.Name, tostring(Stock.Skill), tostring(Stock.Inventory[Recipe.Name] or 0), tostring(IsInPriority(Recipe.Name)) }
-
-            for _, Material in ipairs(Recipe.Materials) do
-                local Info = DescribeMaterial(Material, Stock)
-                table.insert(Parts, Material.Name .. ":" .. Info.Have .. ":" .. Info.Keep)
-            end
-
-            return table.concat(Parts, "|")
+        local function StyleTab(TabButton, Active)
+            TabButton.TextColor3 = Active and Theme.Cyan or Theme.TextMuted
+            TabButton.BackgroundColor3 = Active and Theme.PanelHover or Theme.Element
         end
 
-        local function AddMaterialRow(Material, Stock, Order)
-            local Info = DescribeMaterial(Material, Stock)
-            local Craftable = Recipes:Get(Material.Name) ~= nil
-
-            local Row = New("TextButton", {
-                Parent = DetailScroll,
-                Size = UDim2.new(1, -6, 0, ROW_HEIGHT),
-                BackgroundColor3 = Theme.Element,
-                BorderSizePixel = 0,
-                Text = "",
-                AutoButtonColor = true,
-                LayoutOrder = Order,
-            })
-
-            Corner(Row, 4)
-            Stroke(Row, Info.Missing > 0 and Theme.Warning or Theme.BorderDim, Info.Missing > 0 and 0.4 or 0.5)
-
-            Label(Row, Material.Name .. (Craftable and "  ›" or ""), 12, {
-                Position = UDim2.fromOffset(8, 3),
-                Size = UDim2.new(1, -90, 0, 15),
-            })
-
-            Label(Row, string.format("%d / %d", Info.Usable, Material.Amount), 12, {
-                AnchorPoint = Vector2.new(1, 0),
-                Position = UDim2.new(1, -8, 0, 3),
-                Size = UDim2.fromOffset(80, 15),
-                TextXAlignment = Enum.TextXAlignment.Right,
-                TextColor3 = Info.Missing > 0 and Theme.Warning or Theme.Cyan,
-            })
-
-            local Note = Info.Missing > 0 and string.format("MISSING %d", Info.Missing) or "OK"
-
-            if Info.Keep > 0 then
-                Note ..= string.format("   ·   HAVE %d, KEEP %d", Info.Have, Info.Keep)
-            end
-
-            Label(Row, Note, 10, {
-                Position = UDim2.fromOffset(8, 18),
-                Size = UDim2.new(1, -16, 0, 13),
-                TextColor3 = Info.Missing > 0 and Theme.Warning or Theme.TextMuted,
-            })
-
-            UI:_Connect(Row.Activated, function()
-                if S.PopupFor == Material.Name then
-                    HidePopup()
-                else
-                    ShowPopup(Material.Name, Row)
-                end
-            end)
-
-            S.MaterialRows[Material.Name] = Row
+        local function RefreshTabs()
+            DetailScroll.Visible = S.Tab == "Recipe"
+            PriorityScroll.Visible = S.Tab == "Priority"
+            PriorityTabButton.Text = string.format("PRIORITY  (%d)", #(CONFIG.SMITH_RECIPES or {}))
+            StyleTab(RecipeTabButton, S.Tab == "Recipe")
+            StyleTab(PriorityTabButton, S.Tab == "Priority")
         end
 
-        local function TogglePriority(Name)
-            local RecipeList = GetRecipeList()
-
-            if not RecipeList then
-                return
-            end
-
-            if IsInPriority(Name) then
-                RecipeList:Remove(Name)
-                NotifyAction("AUTO SMITHING", "Removed " .. Name)
-            elseif RecipeList:Add(Name, MAX_STACK) then
-                NotifyAction("AUTO SMITHING", "Added " .. Name)
-            end
-
-            Browser:Refresh()
+        local function SetTab(Tab)
+            S.Tab = Tab
+            Detail:HidePopup()
+            RefreshTabs()
         end
 
-        local function BuildDetail(Recipe, Stock)
-            ClearChildren(DetailScroll)
-            table.clear(S.MaterialRows)
+        --// PRIORITY: the Utils priority list, bound to SMITH_RECIPES like the
+        --// one on the Crafting tab. Either one changing reloads the other.
+        local function BuildPriorityTab()
+            local Section = Floating.Section(PriorityScroll, { Size = UDim2.new(1, -6, 0, 0) })
 
-            if not Recipe then
-                Label(DetailScroll, "Pick a recipe from the list", 12, { TextColor3 = Theme.TextMuted, LayoutOrder = 1 })
-                return
-            end
-
-            local State = Describe(Recipe.Name, Stock)
-            local Status, StatusColor = DescribeStatus(State)
-
-            Label(DetailScroll, Recipe.Name, 15, { TextColor3 = Theme.Cyan, Font = Enum.Font.GothamBold, LayoutOrder = 1 })
-            Label(DetailScroll, string.format("SKILL  %s  ·  YOURS  %s", tostring(Recipe.Skill), tostring(Stock.Skill)), 11, {
-                TextColor3 = State.Locked and Theme.Danger or Theme.TextSecondary,
-                LayoutOrder = 2,
-            })
-            Label(DetailScroll, string.format("TYPE  %s  ·  HAVE  %d", Recipe.CraftType, State.Have), 11, {
-                TextColor3 = Theme.TextSecondary,
-                LayoutOrder = 3,
-            })
-            Label(DetailScroll, Status, 12, { TextColor3 = StatusColor, Font = Enum.Font.GothamBold, LayoutOrder = 4 })
-            Label(DetailScroll, "MATERIALS PER CRAFT  (tap one to see how it is made)", 10, {
+            Label(Section.Holder, "Recipes are crafted top to bottom until each reaches its Target. Add them from the RECIPE tab.", 10, {
                 TextColor3 = Theme.TextMuted,
-                LayoutOrder = 5,
+                TextWrapped = true,
+                TextTruncate = Enum.TextTruncate.None,
+                AutomaticSize = Enum.AutomaticSize.Y,
+                LayoutOrder = 0,
             })
 
-            if #Recipe.Materials == 0 then
-                Label(DetailScroll, "  none", 11, { TextColor3 = Theme.TextMuted, LayoutOrder = 6 })
-            end
+            local PriorityList = Section:AddPriority("Recipe Priority", {}, {
+                Values = true,
+                ValueLabel = "Target",
+                Default = MAX_STACK,
+                Min = 0,
+                Max = MAX_STACK,
+            })
 
-            for Index, Material in ipairs(Recipe.Materials) do
-                AddMaterialRow(Material, Stock, 5 + Index)
-            end
+            S.LoadPriority = AICUI.BindCountList(PriorityList, "SMITH_RECIPES", "Target", function()
+                if Browser.OnPriorityChanged then
+                    Browser.OnPriorityChanged()
+                end
 
-            local InPriority = IsInPriority(Recipe.Name)
-            local Toggle = Button(DetailScroll, InPriority and "REMOVE FROM RECIPE PRIORITY" or "ADD TO RECIPE PRIORITY",
-                InPriority and Theme.Danger or Theme.Cyan, { LayoutOrder = 1000 })
-
-            UI:_Connect(Toggle.Activated, function()
-                TogglePriority(Recipe.Name)
+                Browser:Refresh()
             end)
+
+            S.LoadPriority()
         end
 
-        --// Rebuilt only when something it shows changed, so a refresh does
-        --// not reset the scroll or drop an open popup.
-        local function RefreshDetail(Stock)
-            local Recipe = S.Selected and Recipes:Get(S.Selected)
+        ------------------------------------------------------------------------
+        --// Filters and recipe list
+        ------------------------------------------------------------------------
 
-            if S.Selected and not Recipe then
-                S.Selected = nil
+        local function StyleChip(Chip, Active)
+            Chip.TextColor3 = Active and Theme.Cyan or Theme.TextMuted
+            Chip.BackgroundColor3 = Active and Theme.PanelHover or Theme.Element
+        end
+
+        --// One chip per item type among the recipes, rebuilt when the types
+        --// change; the active one is highlighted.
+        local function RefreshChips(All)
+            local Counts = { [ALL_TYPES] = #All }
+            local Types = {}
+
+            for _, Recipe in ipairs(All) do
+                local Type = Recipes:GetItemType(Recipe.Name)
+
+                if not Counts[Type] then
+                    Counts[Type] = 0
+                    table.insert(Types, Type)
+                end
+
+                Counts[Type] += 1
             end
 
-            local Signature = Recipe and GetDetailSignature(Recipe, Stock) or ""
+            table.sort(Types)
+            table.insert(Types, 1, ALL_TYPES)
 
-            if Signature == S.DetailSignature then
-                return
+            local Parts = {}
+
+            for _, Type in ipairs(Types) do
+                table.insert(Parts, Type .. "=" .. Counts[Type])
             end
 
-            S.DetailSignature = Signature
-            BuildDetail(Recipe, Stock)
+            local Signature = table.concat(Parts, "|")
 
-            --// The popup's row was replaced: follow the new one, or close.
-            if S.PopupFor then
-                local Anchor = S.MaterialRows[S.PopupFor]
+            if Signature ~= S.ChipSignature then
+                S.ChipSignature = Signature
+                ClearChildren(ChipScroll)
+                table.clear(S.Chips)
 
-                if Anchor then
-                    ShowPopup(S.PopupFor, Anchor)
-                else
-                    HidePopup()
+                if not Counts[S.TypeFilter] then
+                    S.TypeFilter = ALL_TYPES
+                end
+
+                for Index, Type in ipairs(Types) do
+                    local Text = string.format("%s  %d", Type:upper(), Counts[Type])
+                    local Chip = Button(ChipScroll, Text, Theme.TextMuted, {
+                        Size = UDim2.fromOffset(0, CHIP_HEIGHT),
+                        AutomaticSize = Enum.AutomaticSize.X,
+                        TextSize = 11,
+                        LayoutOrder = Index,
+                    })
+
+                    New("UIPadding", { Parent = Chip, PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
+
+                    UI:_Connect(Chip.Activated, function()
+                        S.TypeFilter = Type
+                        Browser:Refresh()
+                    end)
+
+                    S.Chips[Type] = Chip
                 end
             end
-        end
 
-        ------------------------------------------------------------------------
-        --// Recipe list
-        ------------------------------------------------------------------------
+            for Type, Chip in pairs(S.Chips) do
+                StyleChip(Chip, Type == S.TypeFilter)
+            end
+
+            StyleChip(ReadyButton, S.ReadyOnly)
+        end
 
         local function CreateRow(Name)
             local Row = New("TextButton", {
@@ -409,8 +258,8 @@ return {
 
         local function UpdateRow(Row, Recipe, Stock)
             local Status, Color = DescribeStatus(Describe(Recipe.Name, Stock))
-            local Selected = S.Selected == Recipe.Name
-            local Info = string.format("SKILL %s  ·  %s", tostring(Recipe.Skill), Status)
+            local Selected = Detail:GetSelected() == Recipe.Name
+            local Info = DescribeItem(Recipe.Name) .. "  ·  " .. Status
 
             if IsInPriority(Recipe.Name) then
                 Info = "✓ " .. Info
@@ -429,6 +278,8 @@ return {
             local Seen = {}
             local Shown = 0
 
+            RefreshChips(All)
+
             for Index, Recipe in ipairs(All) do
                 Seen[Recipe.Name] = true
 
@@ -439,7 +290,7 @@ return {
                     S.Rows[Recipe.Name] = Row
                 end
 
-                local Visible = Matches(Recipe, Query)
+                local Visible = IsShown(Recipe, Query, Stock)
                 Row.Button.Visible = Visible
                 Row.Button.LayoutOrder = Index
 
@@ -456,7 +307,7 @@ return {
                 end
             end
 
-            EmptyLabel.Text = #All == 0 and "No recipes found" or "No recipes match"
+            EmptyLabel.Text = #All == 0 and "No recipes found" or "No recipes match the filters"
             EmptyLabel.Visible = Shown == 0
         end
 
@@ -464,26 +315,10 @@ return {
         --// Window
         ------------------------------------------------------------------------
 
-        local function Build()
-            Theme = UI.Theme
-
-            Window = Floating.CreateWindow({
-                Title = "RECIPE BROWSER",
-                Width = WINDOW_WIDTH,
-                Height = WINDOW_HEIGHT,
-                OnClose = function()
-                    S.IsOpen = false
-                    HidePopup()
-                end,
-                --// The popup belongs to a row that is now hidden.
-                OnMinimize = function()
-                    HidePopup()
-                end,
-            })
-
+        local function BuildFilterBar(Body)
             SearchBox = New("TextBox", {
-                Parent = Window.Body,
-                Size = UDim2.new(1, 0, 0, 26),
+                Parent = Body,
+                Size = UDim2.new(1, -112, 0, BAR_HEIGHT),
                 BackgroundColor3 = Theme.Element,
                 BorderSizePixel = 0,
                 Text = "",
@@ -500,66 +335,112 @@ return {
             Stroke(SearchBox, Theme.BorderDim, 0.3)
             New("UIPadding", { Parent = SearchBox, PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
 
-            local Lists = New("Frame", {
-                Parent = Window.Body,
+            ReadyButton = Button(Body, "READY ONLY", Theme.TextMuted, {
+                AnchorPoint = Vector2.new(1, 0),
+                Position = UDim2.new(1, 0, 0, 0),
+                Size = UDim2.fromOffset(104, BAR_HEIGHT),
+            })
+
+            ChipScroll = New("ScrollingFrame", {
+                Parent = Body,
+                Position = UDim2.fromOffset(0, BAR_HEIGHT + 6),
+                Size = UDim2.new(1, 0, 0, CHIP_HEIGHT + 6),
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(0, 34),
-                Size = UDim2.new(1, 0, 1, -34),
-            })
-
-            ListScroll = Floating.Scroller(Lists, UDim2.new(), UDim2.new(LIST_WIDTH_SCALE, -4, 1, 0), 4, 4)
-            DetailScroll = Floating.Scroller(Lists, UDim2.new(LIST_WIDTH_SCALE, 4, 0, 0), UDim2.new(1 - LIST_WIDTH_SCALE, -4, 1, 0), 8, 6)
-
-            EmptyLabel = Label(ListScroll, "No recipes match", 12, {
-                TextColor3 = Theme.TextMuted,
-                Visible = false,
-                LayoutOrder = -1,
-            })
-
-            Popup = New("Frame", {
-                Name = "SmithingBrowserPopup",
-                Parent = UI.ScreenGui,
-                Size = UDim2.fromOffset(POPUP_WIDTH, 0),
-                AutomaticSize = Enum.AutomaticSize.Y,
-                BackgroundColor3 = Theme.Panel,
                 BorderSizePixel = 0,
-                Active = true,
-                Visible = false,
-                ZIndex = Floating.POPUP_Z,
+                CanvasSize = UDim2.new(),
+                AutomaticCanvasSize = Enum.AutomaticSize.X,
+                ScrollBarThickness = 3,
+                ScrollBarImageColor3 = Theme.Border,
+                ScrollingDirection = Enum.ScrollingDirection.X,
             })
 
-            Corner(Popup, 6)
-            Stroke(Popup, Theme.Border)
-            Padding(Popup, 8, 8)
-
-            PopupContent = New("Frame", {
-                Parent = Popup,
-                BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 0),
-                AutomaticSize = Enum.AutomaticSize.Y,
+            New("UIListLayout", {
+                Parent = ChipScroll,
+                FillDirection = Enum.FillDirection.Horizontal,
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Padding = UDim.new(0, 4),
             })
-
-            List(PopupContent, 3)
 
             UI:_Connect(SearchBox:GetPropertyChangedSignal("Text"), function()
                 RefreshList(ReadInventory())
             end)
 
-            --// A tap anywhere but the popup or its row closes the popup.
-            UI:_Connect(UserInputService.InputBegan, function(Input)
-                if not Popup.Visible
-                    or (Input.UserInputType ~= Enum.UserInputType.MouseButton1
-                        and Input.UserInputType ~= Enum.UserInputType.Touch)
-                then
-                    return
-                end
-
-                local Position = Vector2.new(Input.Position.X, Input.Position.Y)
-
-                if not IsInside(Popup, Position) and not IsInside(S.PopupAnchor, Position) then
-                    HidePopup()
-                end
+            UI:_Connect(ReadyButton.Activated, function()
+                S.ReadyOnly = not S.ReadyOnly
+                Browser:Refresh()
             end)
+        end
+
+        local function BuildRightSide(Lists)
+            local Right = New("Frame", {
+                Parent = Lists,
+                BackgroundTransparency = 1,
+                Position = UDim2.new(LIST_WIDTH_SCALE, 4, 0, 0),
+                Size = UDim2.new(1 - LIST_WIDTH_SCALE, -4, 1, 0),
+            })
+
+            RecipeTabButton = Button(Right, "RECIPE", Theme.Cyan, { Size = UDim2.new(0.5, -2, 0, BAR_HEIGHT) })
+            PriorityTabButton = Button(Right, "PRIORITY", Theme.TextMuted, {
+                Position = UDim2.new(0.5, 2, 0, 0),
+                Size = UDim2.new(0.5, -2, 0, BAR_HEIGHT),
+            })
+
+            local Below = UDim2.fromOffset(0, BAR_HEIGHT + 6)
+            local BelowSize = UDim2.new(1, 0, 1, -(BAR_HEIGHT + 6))
+
+            DetailScroll = Floating.Scroller(Right, Below, BelowSize, 8, 6)
+            PriorityScroll = Floating.Scroller(Right, Below, BelowSize, 8, 6)
+            Detail:Build(DetailScroll, Browser)
+
+            UI:_Connect(RecipeTabButton.Activated, function()
+                SetTab("Recipe")
+            end)
+
+            UI:_Connect(PriorityTabButton.Activated, function()
+                SetTab("Priority")
+            end)
+
+            BuildPriorityTab()
+        end
+
+        local function Build()
+            Theme = UI.Theme
+
+            Window = Floating.CreateWindow({
+                Title = "RECIPE BROWSER",
+                Width = WINDOW_WIDTH,
+                Height = WINDOW_HEIGHT,
+                MinWidth = MIN_WIDTH,
+                MinHeight = MIN_HEIGHT,
+                OnClose = function()
+                    S.IsOpen = false
+                    Detail:HidePopup()
+                end,
+                --// The popup belongs to a row that is now hidden.
+                OnMinimize = function()
+                    Detail:HidePopup()
+                end,
+            })
+
+            BuildFilterBar(Window.Body)
+
+            local Top = BAR_HEIGHT + CHIP_HEIGHT + 18
+            local Lists = New("Frame", {
+                Parent = Window.Body,
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(0, Top),
+                Size = UDim2.new(1, 0, 1, -Top),
+            })
+
+            ListScroll = Floating.Scroller(Lists, UDim2.new(), UDim2.new(LIST_WIDTH_SCALE, -4, 1, 0), 4, 4)
+            EmptyLabel = Label(ListScroll, "No recipes match the filters", 12, {
+                TextColor3 = Theme.TextMuted,
+                Visible = false,
+                LayoutOrder = -1,
+            })
+
+            BuildRightSide(Lists)
+            RefreshTabs()
 
             S.Built = true
         end
@@ -577,13 +458,27 @@ return {
 
             local Stock = ReadInventory()
             RefreshList(Stock)
-            RefreshDetail(Stock)
+            Detail:Refresh(Stock)
+            RefreshTabs()
+        end
+
+        --// Recipe Priority changed outside the window (the Crafting tab, a
+        --// profile load): show it in the PRIORITY tab too.
+        function Browser:SyncPriority()
+            if S.LoadPriority then
+                S.LoadPriority()
+            end
+
+            Browser:Refresh()
         end
 
         function Browser:Select(Name)
-            S.Selected = Name
-            S.DetailSignature = nil
-            HidePopup()
+            Detail:Select(Name)
+
+            if S.Tab ~= "Recipe" then
+                SetTab("Recipe")
+            end
+
             Browser:Refresh()
         end
 
@@ -597,7 +492,7 @@ return {
             end
 
             S.IsOpen = true
-            S.DetailSignature = nil
+            Detail:Invalidate()
             Window:Open()
             Browser:Refresh()
         end

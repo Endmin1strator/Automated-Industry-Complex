@@ -94,13 +94,20 @@ return {
 
         local LoadRecipeList = AICUI.BindCountList(RecipeList, "SMITH_RECIPES", "Target", function()
             AutoSmithing:Rescan()
-            Browser:Refresh()
+            Browser:SyncPriority()
             Module.LastInfo = 0
         end)
 
         LoadRecipeList()
 
-        --// Recipes are found and added in the Recipe Browser window.
+        --// The Recipe Browser's PRIORITY tab is the same list.
+        Browser.OnPriorityChanged = function()
+            LoadRecipeList()
+            AutoSmithing:Rescan()
+            Module.LastInfo = 0
+        end
+
+        --// Recipes are found, added and crafted now in the Recipe Browser.
         Section:AddButton("Open Recipe Browser", function()
             Browser:Toggle()
         end)
@@ -241,7 +248,7 @@ return {
         function AICUI.RefreshSmithingUI()
             LoadRecipeList()
             LoadReserveList()
-            Browser:Refresh()
+            Browser:SyncPriority()
             AICUI.RefreshMaterialPicker(true)
             AutoSmithing:Reset(true)
             Module.LastInfo = 0

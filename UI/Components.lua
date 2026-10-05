@@ -327,6 +327,10 @@ return {
             --// separate refresh is needed here any more.
             if UIRef.PinPanel and type(CONFIG.PINNED_STATE) == "table" then
                 UIRef.PinPanel:SetState(CONFIG.PINNED_STATE)
+
+                if UIRef.PinnedVisibleToggle then
+                    UIRef.PinnedVisibleToggle:Set(UIRef.PinPanel.Visible, false)
+                end
             end
         
             if UIRef.ExecuteChargeSlider then

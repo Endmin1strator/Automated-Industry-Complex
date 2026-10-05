@@ -13,8 +13,8 @@
 --   * Walking is WalkController's job. Within CLAIM_DISTANCE the ore is
 --     claimed and the character holds still until the mining cooldown ends.
 --   * Anything within DEFEND_RANGE while a job is on is fought: the weapon is
---     drawn and it is hit once in range. While mining the character never
---     steps off the spot to do it.
+--     drawn and it is hit once in range. While claiming or mining, WalkSpeed
+--     is held at 0, so the character never steps off the spot.
 --   * Each ore shows its state on a billboard through the Debug Visualizer
 --     ("Debug Ore Status").
 --
@@ -48,7 +48,13 @@ return {
         local SCAN_INTERVAL = 0.5
         --// The claim is accepted from this far away.
         local CLAIM_DISTANCE = 15
-        local DEFEND_RANGE = 15
+        --// Only an enemy this close is fought.
+        local DEFEND_RANGE = 10
+        --// WalkSpeed is held at 0 while claiming or mining, so nothing walks
+        --// the character away from the node (the game cancels mining, and
+        --// can kick, when it is too far). Step not running for this long
+        --// (Auto Farm switched off mid-mining) gives the speed back.
+        local STEP_STALE_SECONDS = 0.5
         --// Give up on a node not reached in this long.
         local APPROACH_TIMEOUT = 15
         --// A node given up on is skipped for this long.
@@ -97,6 +103,10 @@ return {
                 LastBillboards = 0,
                 BillboardsShown = false,
                 WarnedNoRemote = false,
+                LastStep = 0,
+                --// The humanoid held at WalkSpeed 0, and its speed before.
+                LockedHumanoid = nil,
+                SavedWalkSpeed = nil,
             },
         }
 
@@ -438,6 +448,53 @@ return {
         end
 
         ------------------------------------------------------------------------
+        --// WalkSpeed lock
+        ------------------------------------------------------------------------
+
+        local function ReleaseWalkSpeed()
+            local Humanoid = S.LockedHumanoid
+
+            if not Humanoid then
+                return
+            end
+
+            S.LockedHumanoid = nil
+
+            if Humanoid.Parent and Humanoid.WalkSpeed == 0 then
+                Humanoid.WalkSpeed = S.SavedWalkSpeed or 0
+            end
+        end
+
+        local function LockWalkSpeed(Humanoid)
+            if S.LockedHumanoid ~= Humanoid then
+                ReleaseWalkSpeed()
+                S.LockedHumanoid = Humanoid
+                S.SavedWalkSpeed = Humanoid.WalkSpeed
+            end
+
+            if Humanoid.WalkSpeed ~= 0 then
+                Humanoid.WalkSpeed = 0
+            end
+        end
+
+        --// Every frame: locked while a job claims or mines a node and Step is
+        --// still being run, released otherwise.
+        local function UpdateWalkSpeedLock(now)
+            local Committed = S.State == "Claiming" or S.State == "Mining"
+            local _, Humanoid = Runtime:GetCharacter()
+
+            if Committed and Humanoid and now - S.LastStep <= STEP_STALE_SECONDS then
+                LockWalkSpeed(Humanoid)
+            else
+                ReleaseWalkSpeed()
+            end
+        end
+
+        AICFeature.IsWalkSpeedLocked = function()
+            return S.LockedHumanoid ~= nil
+        end
+
+        ------------------------------------------------------------------------
         --// Defence
         ------------------------------------------------------------------------
 
@@ -538,9 +595,7 @@ return {
             end
         end
 
-        --// True while mining owns the frame. False hands it back to farming:
-        --// mining is off or there is nothing in the zones to mine.
-        function Feature.Step(now)
+        local function RunStep(now)
             local _, Humanoid, RootPart = Runtime:GetCharacter()
 
             if not FeatureState.AutoMining.Enabled or not Humanoid or not RootPart then
@@ -583,6 +638,16 @@ return {
             end
 
             return true
+        end
+
+        --// True while mining owns the frame. False hands it back to farming:
+        --// mining is off or there is nothing in the zones to mine.
+        function Feature.Step(now)
+            S.LastStep = now
+
+            local Taken = RunStep(now)
+            UpdateWalkSpeedLock(now)
+            return Taken
         end
 
         AICFeature.MiningStep = Feature.Step
@@ -705,6 +770,8 @@ return {
 
         function Feature:Update()
             local now = os.clock()
+
+            UpdateWalkSpeedLock(now)
 
             if now - S.LastStatus >= STATUS_INTERVAL then
                 S.LastStatus = now

@@ -141,6 +141,28 @@ return {
             return Scroll
         end
 
+        --// A stand-in for a main window section, so the UI/Utils widgets
+        --// (AddSlider, AddPriority...) can be used inside a floating window:
+        --// they only need Holder, Components and Library. The holder grows
+        --// with its content; Properties are applied to it.
+        function Floating.Section(Parent, Properties)
+            local Holder = New("Frame", {
+                Parent = Parent,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+            })
+
+            Floating.List(Holder, 5)
+            Apply(Holder, Properties)
+
+            return setmetatable({
+                Library = UI,
+                Holder = Holder,
+                Components = {},
+            }, { __index = UI.SectionMethods })
+        end
+
         function Floating.ClearChildren(Parent)
             for _, Child in ipairs(Parent:GetChildren()) do
                 if Child:IsA("GuiObject") then

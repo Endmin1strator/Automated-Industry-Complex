@@ -1,11 +1,10 @@
 -- WalkController walks Auto Mining and Auto Smithing to a spot.
 --
 -- Pathfinding comes first whenever the straight line is not clean: an
--- obstacle in the body's way (anything solid that is not walkable ground,
--- even one a hop could clear), a hole too wide to jump, a climb higher
--- than a jump, a deadzone, or (with KeepInsideMine) leaving the mine zone.
--- An open line is walked straight, and a jumpable hole is jumped at its
--- edge. Paths are solved off the heartbeat, so a slow solve never stalls a
+-- obstacle in the body's way taller than a hop (MAX_HOP_RISE), a hole too
+-- wide to jump, a climb higher than a jump, a deadzone, or (with
+-- KeepInsideMine) leaving the mine zone. An open line is walked straight;
+-- a jumpable hole is jumped at its edge and a low bump is hopped. Paths are solved off the heartbeat, so a slow solve never stalls a
 -- frame, and a path that enters a deadzone (or leaves the mine zone) is
 -- refused.
 --
@@ -41,6 +40,13 @@ return {
         local WALKABLE_NORMAL_Y = 0.6
         --// Jump once the hole edge is this close.
         local HOLE_JUMP_EDGE = 2.5
+        --// An obstacle with nothing above this height over it (measured from
+        --// the feet) is a bump: walked straight at and hopped, not pathed
+        --// round. HOP_LANDING is the clear room needed past its edge.
+        local MAX_HOP_RISE = 3
+        local HOP_LANDING = 2
+        --// Hop once the bump is this close.
+        local HOP_EDGE = 2
         --// Once on a path, stay on it at least this long so a borderline
         --// straight line does not flip the mode every frame.
         local PATH_HOLD_SECONDS = 4
@@ -76,6 +82,9 @@ return {
                 Unsafe = false,
                 HoleCanJump = false,
                 HoleEdge = nil,
+                --// Distance to an obstacle on the straight line low enough
+                --// to hop, or nil.
+                BumpDistance = nil,
                 PathToken = 0,
                 Path = {},
                 Detour = nil,
@@ -160,16 +169,36 @@ return {
             return nil
         end
 
-        local function IsObstacleAhead(RootPart, Humanoid, Character, Destination, IgnoreModel)
+        --// A body probe lifted MAX_HOP_RISE: nothing there over the obstacle
+        --// and HOP_LANDING past it means a jump clears it.
+        local function IsHoppable(RootPart, Humanoid, Params, Direction, HitDistance)
+            local Center = GetFeet(RootPart, Humanoid) + Vector3.new(0, MAX_HOP_RISE + BODY_PROBE_SIZE.Y * 0.5, 0)
+            return workspace:Blockcast(CFrame.new(Center), BODY_PROBE_SIZE, Direction * (HitDistance + HOP_LANDING), Params) == nil
+        end
+
+        --// Blocked, and the distance to an obstacle low enough to hop (nil
+        --// when there is none, or the one ahead is too tall to hop).
+        local function CheckObstacleAhead(RootPart, Humanoid, Character, Destination, IgnoreModel)
             local Offset = Destination - RootPart.Position
             local Flat = Vector3.new(Offset.X, 0, Offset.Z)
 
             if Flat.Magnitude <= 0.5 then
-                return false
+                return false, nil
             end
 
+            local Params = BuildWallParams(Character, IgnoreModel)
             local Distance = math.min(Flat.Magnitude, OBSTACLE_PROBE_DISTANCE)
-            return CastBody(RootPart, Humanoid, BuildWallParams(Character, IgnoreModel), Flat.Unit, Distance) ~= nil
+            local HitDistance = CastBody(RootPart, Humanoid, Params, Flat.Unit, Distance)
+
+            if not HitDistance then
+                return false, nil
+            end
+
+            if IsHoppable(RootPart, Humanoid, Params, Flat.Unit, HitDistance) then
+                return false, HitDistance
+            end
+
+            return true, nil
         end
 
         --// Re-tests the straight line at most every DIRECT_CHECK_INTERVAL.
@@ -189,12 +218,19 @@ return {
                 or AICCombatUtils.IsPathThroughDeadzone(Destination)
                 or (Options.KeepInsideMine and not SegmentStaysInMine(RootPart.Position, Destination))
 
-            S.DirectBlocked = S.Unsafe
-                or IsObstacleAhead(RootPart, Humanoid, Character, Destination, Options.Ignore)
+            local Blocked, BumpDistance = CheckObstacleAhead(RootPart, Humanoid, Character, Destination, Options.Ignore)
+            S.BumpDistance = BumpDistance
+            S.DirectBlocked = S.Unsafe or Blocked
         end
 
         local function JumpHoleIfClose()
             if S.HoleCanJump and S.HoleEdge and S.HoleEdge <= HOLE_JUMP_EDGE then
+                AICCombatUtils.DoJump()
+            end
+        end
+
+        local function JumpBumpIfClose()
+            if S.BumpDistance and S.BumpDistance <= HOP_EDGE then
                 AICCombatUtils.DoJump()
             end
         end
@@ -502,6 +538,7 @@ return {
             end
 
             JumpHoleIfClose()
+            JumpBumpIfClose()
             AICCombatUtils.DoJumpIfObstacle(Destination)
             Humanoid:MoveTo(Destination)
             return "moving"
@@ -533,6 +570,7 @@ return {
             S.StuckSince = nil
             S.LastDirectCheck = 0
             S.DirectBlocked = false
+            S.BumpDistance = nil
             S.Unsafe = false
             S.HoleCanJump = false
             S.HoleEdge = nil

@@ -5023,27 +5023,8 @@ function Library:AddPin(name: string?)
     emptyLabel.LayoutOrder = 5
     emptyLabel.ZIndex = 41
 
-    local pinReopen = New("TextButton", {
-        Name = "PinReopen",
-        Parent = self.ScreenGui,
-        AnchorPoint = Vector2.new(0, 0),
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.fromOffset(72, 28),
-        BackgroundColor3 = self.Theme.Panel,
-        BackgroundTransparency = 0.05,
-        BorderSizePixel = 0,
-        Text = "◇ OPEN",
-        TextColor3 = self.Theme.Cyan,
-        TextSize = 11,
-        Font = Enum.Font.GothamBold,
-        AutoButtonColor = false,
-        Visible = false,
-        ZIndex = 80,
-    })
-    AddCorner(pinReopen, 3)
-    AddStroke(pinReopen, self.Theme.CyanDark, 0.1, 1)
-    component.ReopenButton = pinReopen
-
+    --// Closed, the panel leaves nothing on screen; the caller offers a way
+    --// to show it again (SetVisible), and hears of a close via OnChanged.
     local resizeHandle = New("TextButton", {
         Name = "PinResizeHandle",
         Parent = self.ScreenGui,
@@ -5391,6 +5372,7 @@ function Library:AddPin(name: string?)
         return {
             Items = self:GetItems(),
             Floating = self.Floating,
+            Visible = self.Visible,
             X = math.round(panel.AbsolutePosition.X),
             Y = math.round(panel.AbsolutePosition.Y),
         }
@@ -5403,6 +5385,7 @@ function Library:AddPin(name: string?)
 
         self:SetItems(state.Items)
         self:SetFloating(state.Floating == true)
+        self:SetVisible(state.Visible ~= false)
 
         if state.Floating then
             self:SetPosition(state.X, state.Y)
@@ -5418,13 +5401,6 @@ function Library:AddPin(name: string?)
         local size = panel.AbsoluteSize
         resizeHandle.Position = UDim2.fromOffset(pos.X + size.X, pos.Y + size.Y)
         resizeHandle.Visible = component.Visible and not component.Minimized
-
-        if not component.Visible then
-            pinReopen.Position = UDim2.fromOffset(pos.X, pos.Y)
-            pinReopen.Visible = true
-        else
-            pinReopen.Visible = false
-        end
     end
 
     function component:SetMinimized(value: boolean)
@@ -5456,14 +5432,12 @@ function Library:AddPin(name: string?)
     function component:SetVisible(value: boolean)
         self.Visible = value and true or false
         panel.Visible = self.Visible
-        pinReopen.Visible = not self.Visible
         resizeHandle.Visible = self.Visible and not self.Minimized
         UpdatePinControls()
     end
 
     function component:Destroy()
         panel:Destroy()
-        pinReopen:Destroy()
         resizeHandle:Destroy()
     end
 
@@ -5473,10 +5447,10 @@ function Library:AddPin(name: string?)
 
     self:_Connect(closeButton.MouseButton1Click, function()
         component:SetVisible(false)
-    end)
 
-    self:_Connect(pinReopen.MouseButton1Click, function()
-        component:SetVisible(true)
+        if component.OnChanged then
+            task.spawn(component.OnChanged, component)
+        end
     end)
 
     self:_Connect(popButton.MouseButton1Click, function()

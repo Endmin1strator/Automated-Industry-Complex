@@ -7,6 +7,11 @@
 --   CraftType      the kind of craft
 --   <Material>     a number value per material: how many one craft uses
 -- The crafted item is assumed to be named like the recipe ("Iron Ingot").
+--
+-- What an item is comes from the game's assets, Commons.getAssets(true)
+-- from CoreCommons: Assets[Name].Value is its type, and its children
+-- LVL, Skill, DMG, DEF and DEX its stats. A Bound child means it cannot
+-- be traded.
 return {
     Name = "SmithingRecipes",
     Dependencies = {"Runtime", "SaveConfig"},
@@ -19,19 +24,127 @@ return {
         local SKILL_STAT = "SmithingSkill"
         --// Recipe children that are settings rather than materials.
         local NON_MATERIALS = { CraftType = true, CraftingSkill = true }
+        --// Assets that could not be read are tried again after this long.
+        local ASSETS_RETRY_SECONDS = 10
+        --// An item with no type in the assets is filed under this.
+        local UNKNOWN_TYPE = "Other"
 
         local Recipes = {
             Name = "SmithingRecipes",
+            UNKNOWN_TYPE = UNKNOWN_TYPE,
             S = {
                 --// Recipe name -> parsed recipe; nil until read, and dropped
                 --// whenever the recipe folder changes.
                 Cache = nil,
                 Folder = nil,
                 Connections = {},
+                Assets = nil,
+                AssetsRetryAt = 0,
+                --// Item name -> GetItemInfo result (false when not an asset).
+                ItemInfo = {},
             },
         }
 
         local S = Recipes.S
+
+        local function GetAssets()
+            if S.Assets or os.clock() < S.AssetsRetryAt then
+                return S.Assets
+            end
+
+            local Module = Replicated:FindFirstChild("CoreCommons", true)
+            local Ok, Assets = pcall(function()
+                local Commons = Module and require(Module)
+                return Commons and Commons.getAssets and Commons.getAssets(true)
+            end)
+
+            if Ok and type(Assets) == "table" then
+                S.Assets = Assets
+                table.clear(S.ItemInfo)
+            else
+                S.AssetsRetryAt = os.clock() + ASSETS_RETRY_SECONDS
+
+                if not S.WarnedAssets then
+                    S.WarnedAssets = true
+                    warn("[SmithingRecipes] Could not read the game's assets:", Assets)
+                end
+            end
+
+            return S.Assets
+        end
+
+        --// An asset is an Instance with value children; a plain table of the
+        --// same shape is read the same way.
+        local function GetChild(Asset, ChildName)
+            if typeof(Asset) == "Instance" then
+                return Asset:FindFirstChild(ChildName)
+            end
+
+            return type(Asset) == "table" and Asset[ChildName] or nil
+        end
+
+        --// The Value of a child of Asset, or nil when it has none.
+        local function ReadChild(Asset, ChildName)
+            local Child = GetChild(Asset, ChildName)
+
+            if not Child then
+                return nil
+            end
+
+            local Ok, Value = pcall(function()
+                return Child.Value
+            end)
+
+            return Ok and Value or nil
+        end
+
+        local function ReadItemInfo(Asset)
+            local Ok, Type = pcall(function()
+                return Asset.Value
+            end)
+
+            Type = Ok and Type ~= nil and tostring(Type) or ""
+
+            return {
+                Type = Type ~= "" and Type or UNKNOWN_TYPE,
+                Level = ReadChild(Asset, "LVL"),
+                Skill = ReadChild(Asset, "Skill"),
+                DMG = ReadChild(Asset, "DMG"),
+                DEF = ReadChild(Asset, "DEF"),
+                DEX = ReadChild(Asset, "DEX"),
+                Bound = GetChild(Asset, "Bound") ~= nil,
+            }
+        end
+
+        --// What the game's assets say about an item: { Type, Level, Skill,
+        --// DMG, DEF, DEX, Bound }, the stats nil when it has none. Nil when
+        --// the item is not in the assets or they cannot be read.
+        function Recipes:GetItemInfo(Name)
+            local Cached = S.ItemInfo[Name]
+
+            if Cached ~= nil then
+                return Cached or nil
+            end
+
+            local Assets = GetAssets()
+
+            if not Assets then
+                return nil
+            end
+
+            local Asset = Assets[Name]
+            local IsAsset = typeof(Asset) == "Instance" or type(Asset) == "table"
+            local Info = IsAsset and ReadItemInfo(Asset) or false
+
+            S.ItemInfo[Name] = Info
+            return Info or nil
+        end
+
+        --// The item's type for filtering; UNKNOWN_TYPE when it has none.
+        function Recipes:GetItemType(Name)
+            local Info = self:GetItemInfo(Name)
+            return Info and Info.Type or UNKNOWN_TYPE
+        end
 
         local function ReadRecipe(Recipe)
             local Skill = Recipe:FindFirstChild("CraftingSkill")

@@ -2,9 +2,9 @@
 -- ported from Iambatman:
 --   Rejoin, Server Hop (a random public server with a free slot) and joining
 --   a server by Job ID; reading the public server list for the browser;
---   Leave On Danger Group, which leaves at once when a member of
---   DANGER_GROUP_ID who is not on the Danger Whitelist is in the server
---   (toggle and whitelist are global, not per profile); Join Alerts for players off the Auto
+--   Leave On Danger Group, which leaves at once when a member of any group
+--   in DANGER_GROUP_IDS who is not on the Danger Whitelist is in the server
+--   (toggle, groups and whitelist are global, not per profile); Join Alerts for players off the Auto
 --   Block whitelist; and the Player Log of who joined and left.
 -- ServerUI draws all of it on the Server tab.
 return {
@@ -23,8 +23,6 @@ return {
         local AICFeature = Context.AICFeature
         local NotifyAction = Context.NotifyAction
 
-        --// The group Iambatman leaves the server for.
-        local DANGER_GROUP_ID = 5928691
         local DANGER_HOP_MAX_ATTEMPTS = 3
         local DANGER_HOP_RETRY_DELAY = 3
         local GROUP_CHECK_MAX_ATTEMPTS = 3
@@ -52,7 +50,6 @@ return {
         local ServerHop = {
             Name = "ServerHop",
             IsFeature = true,
-            DANGER_GROUP_ID = DANGER_GROUP_ID,
             S = {
                 Teleporting = false,
                 --// A hop is reading the server list.
@@ -63,8 +60,11 @@ return {
                 --// Join alerts waiting to be shown together.
                 AlertQueue = {},
                 AlertFlushScheduled = false,
-                --// UserId -> true once found in the danger group.
+                --// UserId -> the danger group ID they were found in.
                 DangerUsers = {},
+                --// Bumped when the group list changes, so a check that was
+                --// asking about the old list is dropped.
+                GroupListVersion = 0,
                 CheckedUsers = {},
                 CheckInFlight = {},
                 CheckFailures = {},
@@ -121,7 +121,33 @@ return {
         end
 
         function ServerHop:IsDangerPlayer(OtherPlayer)
-            return S.DangerUsers[tostring(OtherPlayer.UserId)] == true
+            return S.DangerUsers[tostring(OtherPlayer.UserId)] ~= nil
+        end
+
+        --// CONFIG.DANGER_GROUP_IDS as numbers.
+        local function GetDangerGroupIds()
+            local Ids = {}
+
+            for _, Text in ipairs(CONFIG.DANGER_GROUP_IDS or {}) do
+                local Id = tonumber(Text)
+
+                if Id then
+                    table.insert(Ids, Id)
+                end
+            end
+
+            return Ids
+        end
+
+        --// The group list changed: everyone is asked again about the new one.
+        function ServerHop:ResetGroupChecks()
+            S.GroupListVersion += 1
+            table.clear(S.DangerUsers)
+            table.clear(S.CheckedUsers)
+            table.clear(S.CheckInFlight)
+            table.clear(S.CheckFailures)
+            S.LastScan = 0
+            S.LogVersion += 1
         end
 
         ------------------------------------------------------------------------
@@ -338,7 +364,8 @@ return {
             SetStatus("LEAVING (DANGER GROUP)")
 
             if S.DangerHopAttempts == 1 then
-                Notify("DANGER", string.format("@%s is in group %d. Leaving this server.", OtherPlayer.Name, DANGER_GROUP_ID), 7)
+                local GroupId = S.DangerUsers[tostring(OtherPlayer.UserId)]
+                Notify("DANGER", string.format("@%s is in group %s. Leaving this server.", OtherPlayer.Name, tostring(GroupId)), 7)
             end
 
             task.spawn(function()
@@ -365,16 +392,27 @@ return {
 
         --// IsInGroupAsync where the client has it, IsInGroup otherwise. Errors
         --// from the second reach the caller's pcall.
-        local function IsInDangerGroup(OtherPlayer)
+        local function IsInGroup(OtherPlayer, GroupId)
             local Success, IsMember = pcall(function()
-                return OtherPlayer:IsInGroupAsync(DANGER_GROUP_ID)
+                return OtherPlayer:IsInGroupAsync(GroupId)
             end)
 
             if Success then
                 return IsMember
             end
 
-            return OtherPlayer:IsInGroup(DANGER_GROUP_ID)
+            return OtherPlayer:IsInGroup(GroupId)
+        end
+
+        --// The first of GroupIds the player is in, or nil.
+        local function FindDangerGroup(OtherPlayer, GroupIds)
+            for _, GroupId in ipairs(GroupIds) do
+                if IsInGroup(OtherPlayer, GroupId) then
+                    return GroupId
+                end
+            end
+
+            return nil
         end
 
         --// Group membership is asked once per player; the answer is kept for
@@ -395,14 +433,27 @@ return {
                 return
             end
 
+            local GroupIds = GetDangerGroupIds()
+
+            if #GroupIds == 0 then
+                return
+            end
+
             S.CheckInFlight[UserId] = true
 
+            local Version = S.GroupListVersion
+
             task.spawn(function()
-                local Success, IsMember = pcall(IsInDangerGroup, OtherPlayer)
+                local Success, GroupId = pcall(FindDangerGroup, OtherPlayer, GroupIds)
+
+                --// The group list changed while asking: the scan asks again.
+                if Version ~= S.GroupListVersion then
+                    return
+                end
 
                 if not Success then
                     S.CheckFailures[UserId] = (S.CheckFailures[UserId] or 0) + 1
-                    warn("[ServerHop] Group check failed for @" .. OtherPlayer.Name .. ":", IsMember)
+                    warn("[ServerHop] Group check failed for @" .. OtherPlayer.Name .. ":", GroupId)
 
                     --// Not marked checked: a scan after the retry delay asks
                     --// again, until the last attempt has failed.
@@ -422,8 +473,8 @@ return {
                 S.CheckFailures[UserId] = nil
                 S.CheckedUsers[UserId] = true
 
-                if IsMember and OtherPlayer.Parent == Players then
-                    S.DangerUsers[UserId] = true
+                if GroupId and OtherPlayer.Parent == Players then
+                    S.DangerUsers[UserId] = GroupId
                     S.LogVersion += 1
                     LeaveFor(OtherPlayer)
                 end
