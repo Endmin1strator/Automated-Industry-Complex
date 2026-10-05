@@ -2,11 +2,12 @@
 -- ported from Iambatman:
 --   Rejoin, Server Hop (a random public server with a free slot) and joining
 --   a server by Job ID; reading the public server list for the browser;
---   Leave On Danger Group, which leaves at once when a member of any group
---   in DANGER_GROUP_IDS who is not on the Danger Whitelist (nor, with Whitelist
---   Skips Safety on, the Auto Block whitelist) is in the server
---   (toggle, groups and whitelist are global, not per profile); Join Alerts for players off the Auto
---   Block whitelist; and the Player Log of who joined and left.
+--   Leave On Danger Group: when a member of any group in DANGER_GROUP_IDS
+--   who is not on the Danger Whitelist (nor, with Whitelist Skips Safety on,
+--   the Auto Block whitelist) is in the server, it blocks them and then
+--   joins another public server (toggle, groups and whitelist are global,
+--   not per profile); Join Alerts for players off the Auto Block whitelist;
+--   and the Player Log of who joined and left.
 -- ServerUI draws all of it on the Server tab.
 return {
     Name = "ServerHop",
@@ -26,6 +27,11 @@ return {
 
         local DANGER_HOP_MAX_ATTEMPTS = 3
         local DANGER_HOP_RETRY_DELAY = 3
+        --// How long a danger hop waits for the block to take before leaving
+        --// anyway (time to press Block by hand when Auto Confirm Block is
+        --// off), and how often it looks.
+        local DANGER_BLOCK_WAIT = 10
+        local DANGER_BLOCK_POLL = 0.25
         local GROUP_CHECK_MAX_ATTEMPTS = 3
         local GROUP_CHECK_RETRY_DELAY = 5
         --// Players are checked again this often, so a player taken off the
@@ -288,6 +294,32 @@ return {
             return Servers, NextCursor
         end
 
+        --// The Job ID of a random public server with a free slot other than
+        --// this one, or nil and why (nil error: there is none). Yields.
+        local function FindOtherServer()
+            local Cursor
+
+            for _ = 1, HOP_MAX_PAGES do
+                local Servers, NextCursor, ReadError = ServerHop:ReadPublicServers(Cursor)
+
+                if not Servers then
+                    return nil, ReadError
+                end
+
+                if #Servers > 0 then
+                    return Servers[math.random(1, #Servers)].Id
+                end
+
+                Cursor = NextCursor
+
+                if not Cursor then
+                    break
+                end
+            end
+
+            return nil, nil
+        end
+
         function ServerHop:Hop()
             --// A second press while one is finding or teleporting does nothing.
             if S.Teleporting or S.Finding then
@@ -298,28 +330,7 @@ return {
             SetStatus("FINDING SERVER")
 
             task.spawn(function()
-                local Cursor
-                local Target, Error
-
-                for _ = 1, HOP_MAX_PAGES do
-                    local Servers, NextCursor, ReadError = ServerHop:ReadPublicServers(Cursor)
-
-                    if not Servers then
-                        Error = ReadError
-                        break
-                    end
-
-                    if #Servers > 0 then
-                        Target = Servers[math.random(1, #Servers)].Id
-                        break
-                    end
-
-                    Cursor = NextCursor
-
-                    if not Cursor then
-                        break
-                    end
-                end
+                local Target, Error = FindOtherServer()
 
                 S.Finding = false
 
@@ -355,8 +366,39 @@ return {
                 and not IsSafetyExempt(OtherPlayer)
         end
 
-        --// Any server will do, so this lets Roblox pick one: it does not
-        --// depend on the server list being readable.
+        local function IsBlocked(OtherPlayer)
+            return AICFeature.isBlocked ~= nil and AICFeature.isBlocked(OtherPlayer.UserId) == true
+        end
+
+        --// Blocks the player through Auto Block's prompt (Auto Confirm Block
+        --// presses it when on) and waits, at most DANGER_BLOCK_WAIT, for the
+        --// block to take. Roblox does not put us in a server with someone we
+        --// blocked, so without this a hop can land straight back here.
+        --// True when they are blocked. Yields.
+        local function BlockBeforeLeaving(OtherPlayer)
+            if IsBlocked(OtherPlayer) or not AICFeature.promptBlockPlayer then
+                return IsBlocked(OtherPlayer)
+            end
+
+            SetStatus("BLOCKING @" .. OtherPlayer.Name .. " (DANGER GROUP)")
+            AICFeature.promptBlockPlayer(OtherPlayer)
+
+            local Deadline = os.clock() + DANGER_BLOCK_WAIT
+
+            while os.clock() < Deadline and OtherPlayer.Parent == Players do
+                if IsBlocked(OtherPlayer) then
+                    return true
+                end
+
+                task.wait(DANGER_BLOCK_POLL)
+            end
+
+            return IsBlocked(OtherPlayer)
+        end
+
+        --// Blocks the danger player first, then joins another public server
+        --// from the list, so it cannot be this one. Without a readable list
+        --// it lets Roblox pick a server instead.
         local function LeaveFor(OtherPlayer)
             if S.DangerHopStarted
                 or S.DangerHopAttempts >= DANGER_HOP_MAX_ATTEMPTS
@@ -368,16 +410,37 @@ return {
             S.DangerHopStarted = true
             S.DangerHopAttempts += 1
             S.Teleporting = true
-            SetStatus("LEAVING (DANGER GROUP)")
 
             if S.DangerHopAttempts == 1 then
                 local GroupId = S.DangerUsers[tostring(OtherPlayer.UserId)]
-                Notify("DANGER", string.format("@%s is in group %s. Leaving this server.", OtherPlayer.Name, tostring(GroupId)), 7)
+                Notify("DANGER", string.format("@%s is in group %s. Blocking, then leaving this server.", OtherPlayer.Name, tostring(GroupId)), 7)
             end
 
             task.spawn(function()
+                local Blocked = BlockBeforeLeaving(OtherPlayer)
+
+                --// They left while we waited: nothing to leave for any more.
+                if OtherPlayer.Parent ~= Players then
+                    S.DangerHopStarted = false
+                    S.Teleporting = false
+                    SetStatus("IDLE")
+                    return
+                end
+
+                if not Blocked then
+                    Notify("DANGER", "@" .. OtherPlayer.Name .. " is not blocked yet; leaving anyway", 6)
+                end
+
+                SetStatus("LEAVING (DANGER GROUP)")
+
+                local Target = FindOtherServer()
+
                 local Success, Error = pcall(function()
-                    TeleportService:Teleport(game.PlaceId, Player)
+                    if Target then
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, Target, Player)
+                    else
+                        TeleportService:Teleport(game.PlaceId, Player)
+                    end
                 end)
 
                 if Success then

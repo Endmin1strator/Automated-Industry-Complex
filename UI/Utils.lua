@@ -260,6 +260,40 @@ local function AddAngularCorners(parent: Instance, color: Color3?)
 end
 
 --//==============================================================
+--// Descriptions and hover highlight
+--//==============================================================
+
+--// A widget with a description is this much taller; the description
+--// line sits under its name.
+local DESCRIPTION_EXTRA = 12
+local DESCRIPTION_TEXT_SIZE = 8
+
+--// The muted line under a widget's name.
+local function AddDescription(library, parent: Instance, text: string, position: UDim2, size: UDim2)
+    local label = AddText(parent, text, DESCRIPTION_TEXT_SIZE, position, size)
+
+    label.TextColor3 = library.Theme.TextMuted
+    label.TextTruncate = Enum.TextTruncate.AtEnd
+    label.ZIndex = 16
+
+    return label
+end
+
+--// Hovering the target lights its stroke up in the accent colour.
+local function AddHoverHighlight(library, target: GuiObject, stroke: UIStroke)
+    local baseColor = stroke.Color
+    local baseTransparency = stroke.Transparency
+
+    library:_Connect(target.MouseEnter, function()
+        Tween(stroke, TWEEN_FAST, { Color = library.Theme.Cyan, Transparency = 0 })
+    end)
+
+    library:_Connect(target.MouseLeave, function()
+        Tween(stroke, TWEEN_FAST, { Color = baseColor, Transparency = baseTransparency })
+    end)
+end
+
+--//==============================================================
 --// Connection Manager
 --//==============================================================
 
@@ -269,6 +303,34 @@ function Library:_Connect(signal, callback)
     table.insert(self._connections, connection)
 
     return connection
+end
+
+--// Name -> description shown under that widget's name. Looked up by the
+--// name in upper case, so the label's own casing does not matter. A
+--// description passed to a widget directly wins over this map.
+function Library:SetDescriptions(map: {[string]: string})
+    self.Descriptions = {}
+
+    for name, text in pairs(map) do
+        self.Descriptions[string.upper(name)] = text
+    end
+end
+
+function Library:_GetDescription(name: string, description: string?): string?
+    if type(description) == "string" and description ~= "" then
+        return description
+    end
+
+    return self.Descriptions and self.Descriptions[string.upper(tostring(name))] or nil
+end
+
+--// For windows built outside this file (UI/Floating), in the same look.
+function Library:_AddAngularCorners(parent: Instance, color: Color3?)
+    return AddAngularCorners(parent, color)
+end
+
+function Library:_AddHoverHighlight(target: GuiObject, stroke: UIStroke)
+    return AddHoverHighlight(self, target, stroke)
 end
 
 --//==============================================================
@@ -2967,7 +3029,10 @@ end
 --// Button
 --//==============================================================
 
-function Library.SectionMethods:AddButton(name: string, callback)
+function Library.SectionMethods:AddButton(name: string, callback, description: string?)
+    local descriptionText = self.Library:_GetDescription(name, description)
+    local height = descriptionText and 42 + DESCRIPTION_EXTRA or 42
+
     local button = New("TextButton", {
         Parent = self.Holder,
 
@@ -2977,7 +3042,7 @@ function Library.SectionMethods:AddButton(name: string, callback)
 
         BorderSizePixel = 0,
 
-        Size = UDim2.new(1, 0, 0, 42),
+        Size = UDim2.new(1, 0, 0, height),
 
         Text = "",
 
@@ -2988,19 +3053,21 @@ function Library.SectionMethods:AddButton(name: string, callback)
         ZIndex = 15,
     })
 
-    AddStroke(
+    local stroke = AddStroke(
         button,
         self.Library.Theme.BorderDim,
         0.25,
         1
     )
 
+    AddHoverHighlight(self.Library, button, stroke)
+
     local diamond = AddText(
         button,
         "◇",
         13,
         UDim2.fromOffset(13, 0),
-        UDim2.fromOffset(22, 42)
+        UDim2.new(0, 22, 1, 0)
     )
 
     diamond.TextColor3 = self.Library.Theme.Cyan
@@ -3015,12 +3082,18 @@ function Library.SectionMethods:AddButton(name: string, callback)
 
     label.Font = Enum.Font.GothamBold
 
+    if descriptionText then
+        label.Position = UDim2.fromOffset(42, 8)
+        label.Size = UDim2.new(1, -70, 0, 18)
+        AddDescription(self.Library, button, descriptionText, UDim2.fromOffset(42, 27), UDim2.new(1, -70, 0, 14))
+    end
+
     local arrow = AddText(
         button,
         "›",
         18,
         UDim2.new(1, -34, 0, 0),
-        UDim2.fromOffset(24, 42)
+        UDim2.new(0, 24, 1, 0)
     )
 
     arrow.TextColor3 = self.Library.Theme.TextMuted
@@ -3069,12 +3142,15 @@ end
 --// Toggle
 --//==============================================================
 
-function Library.SectionMethods:AddToggle(name: string, default: boolean?, callback)
+function Library.SectionMethods:AddToggle(name: string, default: boolean?, callback, description: string?)
     local component = {}
     component.Library = self.Library
 
     component.Value = default == true
     component.Callback = callback
+
+    local descriptionText = self.Library:_GetDescription(name, description)
+    local height = descriptionText and 42 + DESCRIPTION_EXTRA or 42
 
     local button = New("TextButton", {
         Parent = self.Holder,
@@ -3085,7 +3161,7 @@ function Library.SectionMethods:AddToggle(name: string, default: boolean?, callb
 
         BorderSizePixel = 0,
 
-        Size = UDim2.new(1, 0, 0, 42),
+        Size = UDim2.new(1, 0, 0, height),
 
         Text = "",
 
@@ -3098,6 +3174,8 @@ function Library.SectionMethods:AddToggle(name: string, default: boolean?, callb
 
     component.Frame = button
 
+    AddHoverHighlight(self.Library, button, AddStroke(button, self.Library.Theme.BorderDim, 0.25, 1))
+
     local label = AddText(
         button,
         name:upper(),
@@ -3108,6 +3186,12 @@ function Library.SectionMethods:AddToggle(name: string, default: boolean?, callb
 
     label.Font = Enum.Font.GothamBold
 
+    if descriptionText then
+        label.Position = UDim2.fromOffset(13, 8)
+        label.Size = UDim2.new(1, -130, 0, 18)
+        AddDescription(self.Library, button, descriptionText, UDim2.fromOffset(13, 27), UDim2.new(1, -130, 0, 14))
+    end
+
     -- Toggle background
     local toggle = New("Frame", {
         Parent = button,
@@ -3116,7 +3200,7 @@ function Library.SectionMethods:AddToggle(name: string, default: boolean?, callb
 
         BorderSizePixel = 0,
 
-        Position = UDim2.new(1, -68, 0, 11),
+        Position = UDim2.new(1, -68, 0.5, -10),
 
         Size = UDim2.fromOffset(42, 20),
 
@@ -3147,7 +3231,7 @@ function Library.SectionMethods:AddToggle(name: string, default: boolean?, callb
         component.Value and "ON" or "OFF",
         8,
         UDim2.new(1, -116, 0, 0),
-        UDim2.fromOffset(40, 42)
+        UDim2.new(0, 40, 1, 0)
     )
 
     state.TextXAlignment = Enum.TextXAlignment.Right
@@ -3227,7 +3311,8 @@ function Library.SectionMethods:AddSlider(
     default: number,
     minimum: number,
     maximum: number,
-    callback
+    callback,
+    description: string?
 )
     local component = {}
     component.Library = self.Library
@@ -3236,6 +3321,10 @@ function Library.SectionMethods:AddSlider(
     component.Minimum = minimum
     component.Maximum = maximum
     component.Callback = callback
+
+    local descriptionText = self.Library:_GetDescription(name, description)
+    --// The track moves down to make room for the description.
+    local trackY = descriptionText and 34 + DESCRIPTION_EXTRA or 34
 
     local frame = New("Frame", {
         Parent = self.Holder,
@@ -3246,7 +3335,7 @@ function Library.SectionMethods:AddSlider(
 
         BorderSizePixel = 0,
 
-        Size = UDim2.new(1, 0, 0, 58),
+        Size = UDim2.new(1, 0, 0, trackY + 24),
 
         LayoutOrder = #self.Components + 1,
 
@@ -3279,6 +3368,10 @@ function Library.SectionMethods:AddSlider(
     valueLabel.TextColor3 = self.Library.Theme.Cyan
     valueLabel.Font = Enum.Font.GothamBold
 
+    if descriptionText then
+        AddDescription(self.Library, frame, descriptionText, UDim2.fromOffset(13, 24), UDim2.new(1, -28, 0, 14))
+    end
+
     -- Track
     local track = New("Frame", {
         Parent = frame,
@@ -3287,7 +3380,7 @@ function Library.SectionMethods:AddSlider(
 
         BorderSizePixel = 0,
 
-        Position = UDim2.fromOffset(14, 34),
+        Position = UDim2.fromOffset(14, trackY),
 
         Size = UDim2.new(1, -28, 0, 5),
 
@@ -3415,12 +3508,15 @@ end
 --// Textbox
 --//==============================================================
 
-function Library.SectionMethods:AddTextbox(name: string, default: string?, callback)
+function Library.SectionMethods:AddTextbox(name: string, default: string?, callback, description: string?)
     local component = {}
     component.Library = self.Library
 
     component.Value = default or ""
     component.Callback = callback
+
+    local descriptionText = self.Library:_GetDescription(name, description)
+    local height = descriptionText and 42 + DESCRIPTION_EXTRA or 42
 
     local frame = New("Frame", {
         Parent = self.Holder,
@@ -3431,7 +3527,7 @@ function Library.SectionMethods:AddTextbox(name: string, default: string?, callb
 
         BorderSizePixel = 0,
 
-        Size = UDim2.new(1, 0, 0, 42),
+        Size = UDim2.new(1, 0, 0, height),
 
         LayoutOrder = #self.Components + 1,
 
@@ -3445,10 +3541,16 @@ function Library.SectionMethods:AddTextbox(name: string, default: string?, callb
         name:upper(),
         9,
         UDim2.fromOffset(13, 0),
-        UDim2.fromOffset(170, 42)
+        UDim2.new(1, -235, 1, 0)
     )
 
     label.Font = Enum.Font.GothamBold
+
+    if descriptionText then
+        label.Position = UDim2.fromOffset(13, 8)
+        label.Size = UDim2.new(1, -235, 0, 18)
+        AddDescription(self.Library, frame, descriptionText, UDim2.fromOffset(13, 27), UDim2.new(1, -235, 0, 14))
+    end
 
     local box = New("TextBox", {
         Parent = frame,
@@ -3457,7 +3559,7 @@ function Library.SectionMethods:AddTextbox(name: string, default: string?, callb
 
         BorderSizePixel = 0,
 
-        Position = UDim2.new(1, -220, 0, 7),
+        Position = UDim2.new(1, -220, 0.5, -14),
 
         Size = UDim2.fromOffset(205, 28),
 
@@ -3481,7 +3583,7 @@ function Library.SectionMethods:AddTextbox(name: string, default: string?, callb
     })
 
     AddPadding(box, 9, 9, 0, 0)
-    AddStroke(box, self.Library.Theme.BorderDim, 0.15, 1)
+    AddHoverHighlight(self.Library, box, AddStroke(box, self.Library.Theme.BorderDim, 0.15, 1))
 
     component.TextBox = box
 
@@ -3514,7 +3616,8 @@ end
 function Library.SectionMethods:AddDropdown(
     name: string,
     options: {string},
-    callback
+    callback,
+    description: string?
 )
     local component = {}
     component.Library = self.Library
@@ -3523,6 +3626,9 @@ function Library.SectionMethods:AddDropdown(
     component.Value = options[1]
     component.Callback = callback
     component.IsOpen = false
+
+    local descriptionText = self.Library:_GetDescription(name, description)
+    local height = descriptionText and 48 + DESCRIPTION_EXTRA or 48
 
     local frame = New("Frame", {
         Parent = self.Holder,
@@ -3533,7 +3639,7 @@ function Library.SectionMethods:AddDropdown(
 
         BorderSizePixel = 0,
 
-        Size = UDim2.new(1, 0, 0, 48),
+        Size = UDim2.new(1, 0, 0, height),
 
         LayoutOrder = #self.Components + 1,
 
@@ -3547,10 +3653,16 @@ function Library.SectionMethods:AddDropdown(
         name:upper(),
         9,
         UDim2.fromOffset(13, 0),
-        UDim2.fromOffset(170, 48)
+        UDim2.new(1, -245, 1, 0)
     )
 
     label.Font = Enum.Font.GothamBold
+
+    if descriptionText then
+        label.Position = UDim2.fromOffset(13, 10)
+        label.Size = UDim2.new(1, -245, 0, 18)
+        AddDescription(self.Library, frame, descriptionText, UDim2.fromOffset(13, 29), UDim2.new(1, -245, 0, 14))
+    end
 
     local button = New("TextButton", {
         Parent = frame,
@@ -3559,7 +3671,7 @@ function Library.SectionMethods:AddDropdown(
 
         BorderSizePixel = 0,
 
-        Position = UDim2.new(1, -230, 0, 8),
+        Position = UDim2.new(1, -230, 0.5, -16),
 
         Size = UDim2.fromOffset(215, 32),
 
@@ -3570,7 +3682,7 @@ function Library.SectionMethods:AddDropdown(
         ZIndex = 16,
     })
 
-    AddStroke(button, self.Library.Theme.BorderDim, 0.15, 1)
+    AddHoverHighlight(self.Library, button, AddStroke(button, self.Library.Theme.BorderDim, 0.15, 1))
 
     local valueLabel = AddText(
         button,
@@ -4156,7 +4268,10 @@ function Library.SectionMethods:AddPriority(
 
     title.Font = Enum.Font.GothamBold
 
-    local subtitleText = "TARGET PRIORITY LIST"
+    --// The description (options.Description or the map) replaces the
+    --// generic first part of the subtitle.
+    local descriptionText = self.Library:_GetDescription(name, options.Description)
+    local subtitleText = descriptionText and string.upper(descriptionText) or "TARGET PRIORITY LIST"
 
     if draggable then
         subtitleText = subtitleText .. "  ·  DRAG TO REORDER"
@@ -4175,6 +4290,7 @@ function Library.SectionMethods:AddPriority(
     )
 
     subtitle.TextColor3 = self.Library.Theme.TextMuted
+    subtitle.TextTruncate = Enum.TextTruncate.AtEnd
 
     local addButton = New("TextButton", {
         Parent = header,

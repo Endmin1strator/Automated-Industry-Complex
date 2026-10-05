@@ -21,7 +21,7 @@ return {
         local Detail = Context.SmithingDetail
         local Floating = Context.Floating
 
-        local New, Corner, Stroke = Floating.New, Floating.Corner, Floating.Stroke
+        local New, Stroke = Floating.New, Floating.Stroke
         local Label, Button, ClearChildren = Floating.Label, Floating.Button, Floating.ClearChildren
 
         local ReadInventory, Describe, GetCraftMax = Detail.ReadInventory, Detail.Describe, Detail.GetCraftMax
@@ -205,7 +205,7 @@ return {
                     local Chip = Button(ChipScroll, Text, Theme.TextMuted, {
                         Size = UDim2.fromOffset(0, CHIP_HEIGHT),
                         AutomaticSize = Enum.AutomaticSize.X,
-                        TextSize = 11,
+                        TextSize = 9,
                         LayoutOrder = Index,
                     })
 
@@ -232,22 +232,27 @@ return {
                 Parent = ListScroll,
                 Size = UDim2.new(1, -6, 0, ROW_HEIGHT),
                 BackgroundColor3 = Theme.Element,
+                BackgroundTransparency = 0.1,
                 BorderSizePixel = 0,
                 Text = "",
-                AutoButtonColor = true,
+                AutoButtonColor = false,
             })
 
-            Corner(Row, 4)
+            Floating.Hover(Row)
 
             local Bar = New("Frame", {
                 Parent = Row,
-                Position = UDim2.fromOffset(0, 5),
-                Size = UDim2.new(0, 3, 1, -10),
+                Position = UDim2.fromOffset(0, 6),
+                Size = UDim2.new(0, 2, 1, -12),
                 BorderSizePixel = 0,
             })
 
-            local NameLabel = Label(Row, Name, 12, { Position = UDim2.fromOffset(10, 3), Size = UDim2.new(1, -16, 0, 15) })
-            local InfoLabel = Label(Row, "", 10, { Position = UDim2.fromOffset(10, 18), Size = UDim2.new(1, -16, 0, 13) })
+            local NameLabel = Label(Row, string.upper(Name), 10, {
+                Position = UDim2.fromOffset(10, 5),
+                Size = UDim2.new(1, -18, 0, 15),
+                Font = Enum.Font.GothamBold,
+            })
+            local InfoLabel = Label(Row, "", 8, { Position = UDim2.fromOffset(10, 21), Size = UDim2.new(1, -18, 0, 12) })
 
             UI:_Connect(Row.Activated, function()
                 Browser:Select(Name)
@@ -322,20 +327,19 @@ return {
                 BackgroundColor3 = Theme.Element,
                 BorderSizePixel = 0,
                 Text = "",
-                PlaceholderText = "search recipe or material...",
+                PlaceholderText = "SEARCH RECIPE OR MATERIAL...",
                 PlaceholderColor3 = Theme.TextMuted,
                 TextColor3 = Theme.Text,
-                TextSize = 12,
+                TextSize = 10,
                 Font = Enum.Font.GothamMedium,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 ClearTextOnFocus = false,
             })
 
-            Corner(SearchBox, 4)
-            Stroke(SearchBox, Theme.BorderDim, 0.3)
-            New("UIPadding", { Parent = SearchBox, PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
+            Floating.Hover(SearchBox, Stroke(SearchBox, Theme.BorderDim, 0.15))
+            New("UIPadding", { Parent = SearchBox, PaddingLeft = UDim.new(0, 9), PaddingRight = UDim.new(0, 9) })
 
-            ReadyButton = Button(Body, "READY ONLY", Theme.TextMuted, {
+            ReadyButton = Button(Body, "◇  READY ONLY", Theme.TextMuted, {
                 AnchorPoint = Vector2.new(1, 0),
                 Position = UDim2.new(1, 0, 0, 0),
                 Size = UDim2.fromOffset(104, BAR_HEIGHT),
@@ -408,6 +412,7 @@ return {
 
             Window = Floating.CreateWindow({
                 Title = "RECIPE BROWSER",
+                Subtitle = "Find recipes  //  craft now  //  edit Recipe Priority",
                 Width = WINDOW_WIDTH,
                 Height = WINDOW_HEIGHT,
                 MinWidth = MIN_WIDTH,
@@ -433,7 +438,7 @@ return {
             })
 
             ListScroll = Floating.Scroller(Lists, UDim2.new(), UDim2.new(LIST_WIDTH_SCALE, -4, 1, 0), 4, 4)
-            EmptyLabel = Label(ListScroll, "No recipes match the filters", 12, {
+            EmptyLabel = Label(ListScroll, "No recipes match the filters", 10, {
                 TextColor3 = Theme.TextMuted,
                 Visible = false,
                 LayoutOrder = -1,

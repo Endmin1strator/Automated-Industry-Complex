@@ -19,7 +19,7 @@ return {
         local Floating = Context.Floating
         local UserInputService = Context.Services.UserInputService
 
-        local New, Corner, Stroke, Padding, List = Floating.New, Floating.Corner, Floating.Stroke, Floating.Padding, Floating.List
+        local New, Stroke, Padding, List = Floating.New, Floating.Stroke, Floating.Padding, Floating.List
         local Label, Button, ClearChildren, IsInside = Floating.Label, Floating.Button, Floating.ClearChildren, Floating.IsInside
 
         local MAX_STACK = Context.SaveConfig.ITEM_MAX_STACK
@@ -201,7 +201,7 @@ return {
             ClearChildren(PopupContent)
 
             local Header = New("Frame", { Parent = PopupContent, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20), LayoutOrder = 1 })
-            Label(Header, MaterialName, 13, { Size = UDim2.new(1, -24, 1, 0), TextColor3 = Theme.Cyan, Font = Enum.Font.GothamBold })
+            Label(Header, MaterialName, 12, { Size = UDim2.new(1, -24, 1, 0), TextColor3 = Theme.Cyan, Font = Enum.Font.GothamBold })
 
             local Close = Button(Header, "×", Theme.Danger, {
                 AnchorPoint = Vector2.new(1, 0.5),
@@ -216,10 +216,10 @@ return {
                 HaveText ..= string.format("   (KEEP %d)", Keep)
             end
 
-            Label(PopupContent, HaveText, 11, { TextColor3 = Theme.TextSecondary, LayoutOrder = 2 })
+            Label(PopupContent, HaveText, 9, { TextColor3 = Theme.TextSecondary, LayoutOrder = 2 })
 
             if not Recipe then
-                Label(PopupContent, "Not craftable: no smithing recipe makes it", 11, {
+                Label(PopupContent, "Not craftable: no smithing recipe makes it", 9, {
                     TextColor3 = Theme.TextMuted,
                     TextWrapped = true,
                     TextTruncate = Enum.TextTruncate.None,
@@ -229,7 +229,7 @@ return {
             else
                 local Locked = Recipe.Skill > Stock.Skill
 
-                Label(PopupContent, string.format("CRAFTED FROM  ·  SKILL %s", tostring(Recipe.Skill)), 11, {
+                Label(PopupContent, string.format("CRAFTED FROM  ·  SKILL %s", tostring(Recipe.Skill)), 9, {
                     TextColor3 = Locked and Theme.Danger or Theme.TextSecondary,
                     LayoutOrder = 3,
                 })
@@ -237,7 +237,7 @@ return {
                 for Index, Material in ipairs(Recipe.Materials) do
                     local Info = DescribeMaterial(Material, Stock)
 
-                    Label(PopupContent, string.format("  %s   %d / %d", Material.Name, Info.Usable, Material.Amount), 11, {
+                    Label(PopupContent, string.format("  %s   %d / %d", Material.Name, Info.Usable, Material.Amount), 9, {
                         TextColor3 = Info.Missing > 0 and Theme.Warning or Theme.Text,
                         LayoutOrder = 3 + Index,
                     })
@@ -281,19 +281,19 @@ return {
                 BackgroundColor3 = Theme.Element,
                 BorderSizePixel = 0,
                 Text = "",
-                AutoButtonColor = true,
+                AutoButtonColor = false,
                 LayoutOrder = Order,
             })
 
-            Corner(Row, 4)
-            Stroke(Row, Info.Missing > 0 and Theme.Warning or Theme.BorderDim, Info.Missing > 0 and 0.4 or 0.5)
+            local RowStroke = Stroke(Row, Info.Missing > 0 and Theme.Warning or Theme.BorderDim, Info.Missing > 0 and 0.4 or 0.3)
+            Floating.Hover(Row, RowStroke)
 
-            Label(Row, Material.Name .. (Craftable and "  ›" or ""), 12, {
+            Label(Row, Material.Name .. (Craftable and "  ›" or ""), 10, {
                 Position = UDim2.fromOffset(8, 3),
                 Size = UDim2.new(1, -90, 0, 15),
             })
 
-            Label(Row, string.format("%d / %d", Info.Usable, Material.Amount), 12, {
+            Label(Row, string.format("%d / %d", Info.Usable, Material.Amount), 10, {
                 AnchorPoint = Vector2.new(1, 0),
                 Position = UDim2.new(1, -8, 0, 3),
                 Size = UDim2.fromOffset(80, 15),
@@ -396,12 +396,12 @@ return {
                 LayoutOrder = Order,
             })
 
-            Corner(Panel, 4)
-            Stroke(Panel, Theme.BorderDim, 0.5)
+            Panel.BackgroundTransparency = 0.1
+            Stroke(Panel, Theme.BorderDim, 0.25)
             Padding(Panel, 8, 8)
             List(Panel, 5)
 
-            Label(Panel, string.format("CRAFT NOW  ·  UP TO %d", S.CraftMax), 11, {
+            Label(Panel, string.format("CRAFT NOW  ·  UP TO %d", S.CraftMax), 10, {
                 TextColor3 = S.CraftMax > 0 and Theme.Cyan or Theme.TextMuted,
                 Font = Enum.Font.GothamBold,
                 LayoutOrder = 1,
@@ -424,13 +424,12 @@ return {
                 PlaceholderText = "amount",
                 PlaceholderColor3 = Theme.TextMuted,
                 TextColor3 = Theme.Text,
-                TextSize = 12,
+                TextSize = 10,
                 Font = Enum.Font.GothamBold,
                 ClearTextOnFocus = false,
             })
 
-            Corner(Craft.AmountBox, 4)
-            Stroke(Craft.AmountBox, Theme.BorderDim, 0.3)
+            Floating.Hover(Craft.AmountBox, Stroke(Craft.AmountBox, Theme.BorderDim, 0.15))
 
             local MaxButton = Button(Controls, "MAX", Theme.Text, {
                 Position = UDim2.fromOffset(70, 0),
@@ -443,7 +442,7 @@ return {
             })
 
             local OrderRow = New("Frame", { Parent = Panel, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 22), LayoutOrder = 4 })
-            Craft.OrderLabel = Label(OrderRow, "", 11, { Size = UDim2.new(1, -76, 1, 0) })
+            Craft.OrderLabel = Label(OrderRow, "", 9, { Size = UDim2.new(1, -76, 1, 0) })
             Craft.CancelButton = Button(OrderRow, "CANCEL", Theme.Danger, {
                 AnchorPoint = Vector2.new(1, 0),
                 Position = UDim2.new(1, 0, 0, 0),
@@ -477,7 +476,7 @@ return {
             table.clear(Craft)
 
             if not Recipe then
-                Label(DetailScroll, "Pick a recipe from the list", 12, { TextColor3 = Theme.TextMuted, LayoutOrder = 1 })
+                Label(DetailScroll, "Pick a recipe from the list", 10, { TextColor3 = Theme.TextMuted, LayoutOrder = 1 })
                 return
             end
 
@@ -486,28 +485,28 @@ return {
             local Info = Recipes:GetItemInfo(Recipe.Name)
             local Stats = DescribeStats(Recipe.Name)
 
-            Label(DetailScroll, Recipe.Name, 15, { TextColor3 = Theme.Cyan, Font = Enum.Font.GothamBold, LayoutOrder = 1 })
-            Label(DetailScroll, DescribeItem(Recipe.Name) .. ((Info and not Info.Bound) and "  ·  TRADEABLE" or ""), 11, {
+            Label(DetailScroll, "◇  " .. string.upper(Recipe.Name), 13, { TextColor3 = Theme.Cyan, Font = Enum.Font.GothamBold, LayoutOrder = 1 })
+            Label(DetailScroll, DescribeItem(Recipe.Name) .. ((Info and not Info.Bound) and "  ·  TRADEABLE" or ""), 9, {
                 TextColor3 = (Info and Info.Bound) and Theme.Warning or Theme.TextSecondary,
                 LayoutOrder = 2,
             })
 
             if Stats then
-                Label(DetailScroll, Stats, 11, { TextColor3 = Theme.Text, LayoutOrder = 3 })
+                Label(DetailScroll, Stats, 10, { TextColor3 = Theme.Text, LayoutOrder = 3 })
             end
 
-            Label(DetailScroll, string.format("SMITHING SKILL  %s  ·  YOURS  %s  ·  HAVE  %d", tostring(Recipe.Skill), tostring(Stock.Skill), State.Have), 11, {
+            Label(DetailScroll, string.format("SMITHING SKILL  %s  ·  YOURS  %s  ·  HAVE  %d", tostring(Recipe.Skill), tostring(Stock.Skill), State.Have), 9, {
                 TextColor3 = State.Locked and Theme.Danger or Theme.TextSecondary,
                 LayoutOrder = 4,
             })
-            Label(DetailScroll, Status, 12, { TextColor3 = StatusColor, Font = Enum.Font.GothamBold, LayoutOrder = 5 })
+            Label(DetailScroll, Status, 10, { TextColor3 = StatusColor, Font = Enum.Font.GothamBold, LayoutOrder = 5 })
             Label(DetailScroll, "MATERIALS PER CRAFT  (tap one to see how it is made)", 10, {
                 TextColor3 = Theme.TextMuted,
                 LayoutOrder = 6,
             })
 
             if #Recipe.Materials == 0 then
-                Label(DetailScroll, "  none", 11, { TextColor3 = Theme.TextMuted, LayoutOrder = 7 })
+                Label(DetailScroll, "  none", 9, { TextColor3 = Theme.TextMuted, LayoutOrder = 7 })
             end
 
             for Index, Material in ipairs(Recipe.Materials) do
@@ -569,8 +568,7 @@ return {
                 ZIndex = Floating.POPUP_Z,
             })
 
-            Corner(Popup, 6)
-            Stroke(Popup, Theme.Border)
+            Stroke(Popup, Theme.CyanDark, 0.1)
             Padding(Popup, 8, 8)
 
             PopupContent = New("Frame", {

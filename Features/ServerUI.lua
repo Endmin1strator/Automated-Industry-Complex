@@ -21,7 +21,7 @@ return {
         local ServerHop = Context.ServerHop
         local Floating = Context.Floating
 
-        local New, Corner, Label, Button = Floating.New, Floating.Corner, Floating.Label, Floating.Button
+        local New, Label, Button = Floating.New, Floating.Label, Floating.Button
         local ClearChildren = Floating.ClearChildren
 
         local INFO_INTERVAL = 1
@@ -428,17 +428,20 @@ return {
                 Server = CurrentServerEntry()
             end
 
-            Label(DetailScroll, IsCurrent and "THIS SERVER" or "PUBLIC SERVER", 15, {
+            Label(DetailScroll, (IsCurrent and "◇  THIS SERVER" or "◇  PUBLIC SERVER"), 13, {
                 TextColor3 = Theme.Cyan,
                 Font = Enum.Font.GothamBold,
                 LayoutOrder = 1,
             })
-            Label(DetailScroll, string.format("PLAYERS  %d / %d", Server.Playing or 0, Server.MaxPlayers or 0), 12, { LayoutOrder = 2 })
-            Label(DetailScroll, string.format("PING  %s  ·  FPS  %s", PingText(Server.Ping), FPSText(Server.FPS)), 12, {
+            Label(DetailScroll, string.format("PLAYERS  %d / %d", Server.Playing or 0, Server.MaxPlayers or 0), 10, {
+                Font = Enum.Font.GothamBold,
+                LayoutOrder = 2,
+            })
+            Label(DetailScroll, string.format("PING  %s  ·  FPS  %s", PingText(Server.Ping), FPSText(Server.FPS)):upper(), 10, {
                 TextColor3 = Theme.TextSecondary,
                 LayoutOrder = 3,
             })
-            Label(DetailScroll, "JOB ID  " .. Server.Id, 10, {
+            Label(DetailScroll, "JOB ID  " .. Server.Id, 9, {
                 TextColor3 = Theme.TextMuted,
                 TextWrapped = true,
                 TextTruncate = Enum.TextTruncate.None,
@@ -457,7 +460,7 @@ return {
                     ServerHop:Join(Server.Id)
                 end)
 
-                Label(DetailScroll, "Roblox's server list gives player counts only, not names, for other servers", 10, {
+                Label(DetailScroll, "Roblox's server list gives player counts only, not names, for other servers", 9, {
                     TextColor3 = Theme.TextMuted,
                     TextWrapped = true,
                     TextTruncate = Enum.TextTruncate.None,
@@ -467,7 +470,11 @@ return {
                 return
             end
 
-            Label(DetailScroll, "PLAYERS IN THIS SERVER", 10, { TextColor3 = Theme.TextMuted, LayoutOrder = 6 })
+            Label(DetailScroll, "PLAYERS IN THIS SERVER", 8, {
+                TextColor3 = Theme.TextMuted,
+                Font = Enum.Font.GothamBold,
+                LayoutOrder = 6,
+            })
 
             local Here = Players:GetPlayers()
 
@@ -487,7 +494,7 @@ return {
                     Text ..= "  [DANGER]"
                 end
 
-                Label(DetailScroll, Text, 11, {
+                Label(DetailScroll, Text, 10, {
                     TextColor3 = OtherPlayer == Player and Theme.Cyan
                         or (ServerHop:IsDangerPlayer(OtherPlayer) and Theme.Danger or Theme.Text),
                     LayoutOrder = 6 + Index,
@@ -509,22 +516,33 @@ return {
                 Parent = ListScroll,
                 Size = UDim2.new(1, -6, 0, ROW_HEIGHT),
                 BackgroundColor3 = IsCurrent and Theme.PanelHover or Theme.Element,
+                BackgroundTransparency = 0.1,
                 BorderSizePixel = 0,
                 Text = "",
-                AutoButtonColor = true,
+                AutoButtonColor = false,
                 LayoutOrder = Order,
             })
 
-            Corner(Row, 4)
+            Floating.Hover(Row)
 
-            Label(Row, string.format("%s%d / %d players", IsCurrent and "YOU ARE HERE  ·  " or "", Server.Playing or 0, Server.MaxPlayers or 0), 12, {
-                Position = UDim2.fromOffset(8, 4),
-                Size = UDim2.new(1, -16, 0, 15),
-                TextColor3 = IsCurrent and Theme.Cyan or Theme.Text,
+            --// Accent bar on the left: cyan for the server we are in.
+            New("Frame", {
+                Parent = Row,
+                BackgroundColor3 = IsCurrent and Theme.Cyan or Theme.BorderDim,
+                BorderSizePixel = 0,
+                Position = UDim2.fromOffset(0, 6),
+                Size = UDim2.new(0, 2, 1, -12),
             })
-            Label(Row, string.format("Ping %s  ·  FPS %s  ·  %s", PingText(Server.Ping), FPSText(Server.FPS), ShortJobId(Server.Id)), 10, {
-                Position = UDim2.fromOffset(8, 21),
-                Size = UDim2.new(1, -16, 0, 14),
+
+            Label(Row, string.format("%s%d / %d PLAYERS", IsCurrent and "◆  YOU ARE HERE  ·  " or "◇  ", Server.Playing or 0, Server.MaxPlayers or 0), 10, {
+                Position = UDim2.fromOffset(10, 5),
+                Size = UDim2.new(1, -18, 0, 15),
+                TextColor3 = IsCurrent and Theme.Cyan or Theme.Text,
+                Font = Enum.Font.GothamBold,
+            })
+            Label(Row, string.format("PING %s  ·  FPS %s  ·  %s", PingText(Server.Ping), FPSText(Server.FPS), ShortJobId(Server.Id)):upper(), 8, {
+                Position = UDim2.fromOffset(10, 22),
+                Size = UDim2.new(1, -18, 0, 12),
                 TextColor3 = Theme.TextMuted,
             })
 
@@ -592,19 +610,20 @@ return {
 
             Window = Floating.CreateWindow({
                 Title = "SERVER BROWSER",
+                Subtitle = "Public servers  //  pick one to see it and join",
                 Width = WINDOW_WIDTH,
                 Height = WINDOW_HEIGHT,
             })
 
-            RefreshButton = Button(Window.Body, "REFRESH", Theme.Text, { Size = UDim2.fromOffset(90, 26) })
+            RefreshButton = Button(Window.Body, "◇  REFRESH", Theme.Cyan, { Size = UDim2.fromOffset(100, 26) })
             MoreButton = Button(Window.Body, "LOAD MORE", Theme.Text, {
-                Position = UDim2.fromOffset(96, 0),
+                Position = UDim2.fromOffset(106, 0),
                 Size = UDim2.fromOffset(90, 26),
                 Visible = false,
             })
-            StatusLabel = Label(Window.Body, "", 11, {
-                Position = UDim2.fromOffset(196, 0),
-                Size = UDim2.new(1, -196, 0, 26),
+            StatusLabel = Label(Window.Body, "", 9, {
+                Position = UDim2.fromOffset(206, 0),
+                Size = UDim2.new(1, -206, 0, 26),
                 TextColor3 = Theme.TextMuted,
             })
 

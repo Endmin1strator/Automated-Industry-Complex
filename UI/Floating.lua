@@ -1,7 +1,9 @@
 -- Floating builds windows that sit outside the main UI (Recipe Browser,
 -- Server Browser): a draggable frame with a title bar and a close button,
--- plus the small instance helpers they share, in the look of UI/Utils.
--- Colours come from the window library's theme at the time of each call.
+-- plus the small instance helpers they share, in the AIC look of UI/Utils
+-- (angular corner accents, ◇ title header, square bordered elements whose
+-- border lights up on hover). Colours come from the window library's theme
+-- at the time of each call.
 return {
     Name = "Floating",
     Dependencies = {"Runtime"},
@@ -15,7 +17,10 @@ return {
         --// Above the main window and the pinned items panel; popups above that.
         local WINDOW_Z = 60
         local POPUP_Z = 70
-        local HEADER_HEIGHT = 32
+        local HEADER_HEIGHT = 44
+        --// The main window is near square; rounder radii asked for are
+        --// capped at this.
+        local MAX_CORNER_RADIUS = 2
         --// Smallest a window can be resized to, unless it asks otherwise.
         local DEFAULT_MIN_WIDTH = 360
         local DEFAULT_MIN_HEIGHT = 240
@@ -51,7 +56,7 @@ return {
         local New = Floating.New
 
         function Floating.Corner(Parent, Radius)
-            return New("UICorner", { Parent = Parent, CornerRadius = UDim.new(0, Radius or 4) })
+            return New("UICorner", { Parent = Parent, CornerRadius = UDim.new(0, math.min(Radius or MAX_CORNER_RADIUS, MAX_CORNER_RADIUS)) })
         end
 
         function Floating.Stroke(Parent, Color, Transparency)
@@ -103,22 +108,46 @@ return {
             }), Properties)
         end
 
+        --// Hovering Object lights its border up (Stroke, or a new one) and
+        --// brightens its background, like the main window's buttons.
+        function Floating.Hover(Object, Stroke)
+            local Theme = UI.Theme
+            Stroke = Stroke or Floating.Stroke(Object, Theme.BorderDim, 0.3)
+            UI:_AddHoverHighlight(Object, Stroke)
+
+            local Base = Object.BackgroundColor3
+
+            UI:_Connect(Object.MouseEnter, function()
+                Base = Object.BackgroundColor3
+                Object.BackgroundColor3 = Theme.ElementHover
+            end)
+
+            UI:_Connect(Object.MouseLeave, function()
+                if Object.BackgroundColor3 == Theme.ElementHover then
+                    Object.BackgroundColor3 = Base
+                end
+            end)
+
+            return Stroke
+        end
+
         function Floating.Button(Parent, Text, Color, Properties)
             local Object = New("TextButton", {
                 Parent = Parent,
                 Size = UDim2.new(1, 0, 0, 26),
                 BackgroundColor3 = UI.Theme.Element,
+                BackgroundTransparency = 0.1,
                 BorderSizePixel = 0,
                 Text = Text,
                 TextColor3 = Color or UI.Theme.Text,
-                TextSize = 12,
+                TextSize = 10,
                 Font = Enum.Font.GothamBold,
-                AutoButtonColor = true,
+                AutoButtonColor = false,
             })
 
-            Floating.Corner(Object, 4)
-            Floating.Stroke(Object, UI.Theme.BorderDim, 0.3)
-            return Apply(Object, Properties)
+            Apply(Object, Properties)
+            Floating.Hover(Object)
+            return Object
         end
 
         function Floating.Scroller(Parent, Position, Size, PadX, PadY, Gap)
@@ -127,15 +156,16 @@ return {
                 Position = Position,
                 Size = Size,
                 BackgroundColor3 = UI.Theme.Panel,
+                BackgroundTransparency = 0.12,
                 BorderSizePixel = 0,
                 CanvasSize = UDim2.new(),
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
-                ScrollBarThickness = 4,
-                ScrollBarImageColor3 = UI.Theme.Border,
+                ScrollBarThickness = 3,
+                ScrollBarImageColor3 = UI.Theme.CyanDark,
                 ScrollingDirection = Enum.ScrollingDirection.Y,
             })
 
-            Floating.Corner(Scroll, 4)
+            Floating.Stroke(Scroll, UI.Theme.BorderDim, 0.1)
             Floating.Padding(Scroll, PadX or 4, PadY or 4)
             Floating.List(Scroll, Gap or 3)
             return Scroll
@@ -192,8 +222,9 @@ return {
             return pcall(Copy, Text)
         end
 
-        --// A window of its own. Options: Title, Width, Height (its starting
-        --// size), MinWidth, MinHeight, OnClose, OnMinimize(Minimized).
+        --// A window of its own. Options: Title, Subtitle (a muted line under
+        --// the title), Width, Height (its starting size), MinWidth,
+        --// MinHeight, OnClose, OnMinimize(Minimized).
         --// Content goes in Window.Body, the area under the title bar, and
         --// should size by scale so it follows a resize.
         --// The title bar drags it, "—" folds it to the title bar and back,
@@ -215,65 +246,100 @@ return {
                 Parent = UI.ScreenGui,
                 Size = UDim2.fromOffset(Options.Width, Options.Height),
                 BackgroundColor3 = Theme.Background,
-                BackgroundTransparency = 0.03,
                 BorderSizePixel = 0,
                 Active = true,
                 Visible = false,
                 ZIndex = WINDOW_Z,
             })
 
-            Floating.Corner(Frame, 6)
-            Floating.Stroke(Frame, Theme.BorderDim)
+            Floating.Stroke(Frame, Theme.Border, 0.15)
+            UI:_AddAngularCorners(Frame)
 
             local Header = New("Frame", {
                 Parent = Frame,
                 BackgroundColor3 = Theme.BackgroundLight,
+                BackgroundTransparency = 0.05,
                 BorderSizePixel = 0,
                 Size = UDim2.new(1, 0, 0, HEADER_HEIGHT),
                 Active = true,
             })
 
-            Floating.Corner(Header, 6)
-            Floating.Label(Header, Options.Title, 13, {
+            New("Frame", {
+                Parent = Header,
+                BackgroundColor3 = Theme.BorderDim,
+                BorderSizePixel = 0,
+                Position = UDim2.new(0, 0, 1, -1),
+                Size = UDim2.new(1, 0, 0, 1),
+            })
+
+            Floating.Label(Header, "◇", 22, {
                 Position = UDim2.fromOffset(12, 0),
-                Size = UDim2.new(1, -76, 1, 0),
+                Size = UDim2.new(0, 26, 1, 0),
                 TextColor3 = Theme.Cyan,
+                Font = Enum.Font.GothamBold,
+                TextXAlignment = Enum.TextXAlignment.Center,
+            })
+
+            local HasSubtitle = type(Options.Subtitle) == "string" and Options.Subtitle ~= ""
+
+            Floating.Label(Header, string.upper(Options.Title), 13, {
+                Position = UDim2.fromOffset(46, HasSubtitle and 6 or 0),
+                Size = UDim2.new(1, -110, 0, HasSubtitle and 18 or HEADER_HEIGHT),
                 Font = Enum.Font.GothamBold,
             })
 
-            local Close = Floating.Button(Header, "×", Theme.Danger, {
+            if HasSubtitle then
+                Floating.Label(Header, string.upper(Options.Subtitle), 8, {
+                    Position = UDim2.fromOffset(47, 25),
+                    Size = UDim2.new(1, -110, 0, 12),
+                    TextColor3 = Theme.TextMuted,
+                })
+            end
+
+            local Close = Floating.Button(Header, "×", Theme.White, {
                 AnchorPoint = Vector2.new(1, 0.5),
-                Position = UDim2.new(1, -8, 0.5, 0),
-                Size = UDim2.fromOffset(22, 20),
+                Position = UDim2.new(1, -10, 0.5, 0),
+                Size = UDim2.fromOffset(24, 22),
+                BackgroundColor3 = Theme.Danger,
+                TextSize = 14,
             })
 
             local Minimize = Floating.Button(Header, "—", Theme.TextMuted, {
                 AnchorPoint = Vector2.new(1, 0.5),
-                Position = UDim2.new(1, -34, 0.5, 0),
-                Size = UDim2.fromOffset(22, 20),
+                Position = UDim2.new(1, -40, 0.5, 0),
+                Size = UDim2.fromOffset(24, 22),
             })
 
             Window.Frame = Frame
             Window.Body = New("Frame", {
                 Parent = Frame,
                 BackgroundTransparency = 1,
-                Position = UDim2.fromOffset(10, HEADER_HEIGHT + 8),
-                Size = UDim2.new(1, -20, 1, -(HEADER_HEIGHT + 18)),
+                Position = UDim2.fromOffset(12, HEADER_HEIGHT + 10),
+                Size = UDim2.new(1, -24, 1, -(HEADER_HEIGHT + 22)),
             })
 
+            --// Three short lines in the corner, as on the main window.
             local Grip = New("TextButton", {
                 Parent = Frame,
                 AnchorPoint = Vector2.new(1, 1),
                 Position = UDim2.fromScale(1, 1),
                 Size = UDim2.fromOffset(RESIZE_GRIP_SIZE, RESIZE_GRIP_SIZE),
                 BackgroundTransparency = 1,
-                Text = "◢",
-                TextColor3 = Theme.TextMuted,
-                TextSize = 12,
-                Font = Enum.Font.GothamBold,
+                Text = "",
                 AutoButtonColor = false,
                 ZIndex = 2,
             })
+
+            for Index = 0, 2 do
+                New("Frame", {
+                    Parent = Grip,
+                    BackgroundColor3 = Theme.Border,
+                    BackgroundTransparency = 0.15,
+                    BorderSizePixel = 0,
+                    Position = UDim2.new(1, -7 - Index * 5, 1, -2),
+                    Size = UDim2.fromOffset(7 + Index * 5, 1),
+                })
+            end
 
             UI:_MakeDraggable(Header, Frame, true)
 
