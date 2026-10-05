@@ -43,6 +43,8 @@ return {
             { Name = "JoinAlerts",        Default = false, Key = "s" },
             --// Pull a pack of mobs together, then use the skill (MobGather).
             { Name = "MobGather",         Default = false, Key = "t" },
+            --// Click through the title screen (AutoStartGame).
+            { Name = "AutoStartGame",     Default = false, Key = "u" },
             { Name = "DebugWaypoints",    Default = true },
             { Name = "DebugFarmZones",    Default = true },
             { Name = "DebugDeadzones",    Default = true },
