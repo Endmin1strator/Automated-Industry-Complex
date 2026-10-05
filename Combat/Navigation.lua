@@ -38,9 +38,18 @@ return {
         --// A path solve not back after this long is given up on.
         local PATH_COMPUTE_TIMEOUT = 3
         --// With Safe Combat off, the spots tried around the target, nearest
-        --// first: just clear of its body (TARGET_BODY_CLEARANCE) and in reach.
-        --// The last one is also how close it holds (CLOSE HOLD).
-        local CLOSE_COMBAT_DISTANCES = { 4, 5, 6 }
+        --// first, step back from the Close Combat Range setting by these.
+        --// None is closer than CLOSE_COMBAT_MIN (clear of the body,
+        --// TARGET_BODY_CLEARANCE); the range itself is how close it holds
+        --// (CLOSE HOLD).
+        local CLOSE_COMBAT_STEPS = { 2, 1, 0 }
+        local CLOSE_COMBAT_MIN = 4
+        --// While Character.NoDamage is on us: circle the target this far
+        --// outside its reach, aiming this far round the circle each frame,
+        --// and turn the other way at most this often when the way is shut.
+        local ORBIT_PADDING = 2
+        local ORBIT_STEP_ANGLE = math.rad(35)
+        local ORBIT_FLIP_COOLDOWN = 1.5
         --// With Safe Combat off, standing within this of the mob's facing
         --// (cosine; 0.5 = 60 degrees either side) counts as in front of it,
         --// the only place it moves away from.
@@ -124,11 +133,29 @@ return {
             return Miss < (tonumber(CONFIG.TARGET_BODY_CLEARANCE) or 3.5)
         end
 
+        --// Close Combat Range (CONFIG.CLOSE_COMBAT_RANGE), never under
+        --// CLOSE_COMBAT_MIN.
+        local function GetCloseCombatRange()
+            return math.max(tonumber(CONFIG.CLOSE_COMBAT_RANGE) or 6, CLOSE_COMBAT_MIN)
+        end
+
+        --// The spots Safe Combat off tries, nearest first.
+        local function GetCloseCombatDistances()
+            local Range = GetCloseCombatRange()
+            local Distances = {}
+
+            for _, Step in ipairs(CLOSE_COMBAT_STEPS) do
+                table.insert(Distances, math.max(Range - Step, CLOSE_COMBAT_MIN))
+            end
+
+            return Distances
+        end
+
         --// Get a safe combat position around the Target.
         --// Cheap checks are performed first. Expensive path/visibility checks are
         --// only run for the best few candidates to reduce physics-query spikes.
         --// Close is the Safe Combat off version: the same rear-first spots and
-        --// the same circling as the mob turns, but CLOSE_COMBAT_DISTANCES from
+        --// the same circling as the mob turns, but Close Combat Range from
         --// it instead of outside its blade reach. Only the spacing differs.
         function AICCombat.GetSafeCombatPosition(TargetMob, Close)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
@@ -185,8 +212,10 @@ return {
         
             --// A spot past a player's body is skipped: they stand and face us,
             --// so the walk round them never ends. A mob's rear is still preferred;
-            --// ChaseMoveTo walks round the body to get there.
+            --// ChaseMoveTo walks round the body to get there. A duel opponent
+            --// is fought like a mob we are hitting: walked round to its rear.
             local IsPlayerTarget = Players:GetPlayerFromCharacter(TargetMob) ~= nil
+                and not AICCombat.IsOwnDuelOpponent(TargetMob)
             local Candidates = {}
             local DirectionCount = CONFIG.SAFE_COMBAT_DIRECTIONS
             local PreferredDirections = {}
@@ -194,7 +223,7 @@ return {
             --// Farm Zone can make the normal attack radius unreachable when the mob
             --// is close to the edge of the zone. Try progressively closer combat
             --// positions instead of giving up at PLAYER_ATTACK_DISTANCE.
-            local CombatDistances = Close and CLOSE_COMBAT_DISTANCES or {
+            local CombatDistances = Close and GetCloseCombatDistances() or {
                 CombatDistance,
                 math.max(CONFIG.GOBLIN_REACH_DISTANCE, CombatDistance - 2),
                 math.max(CONFIG.GOBLIN_REACH_DISTANCE, CombatDistance - 4),
@@ -1745,8 +1774,11 @@ return {
                 return nil
             end
         
+            --// Our own fight: a mob whose LastAttacker is us, or our duel
+            --// opponent (players carry no LastAttacker).
             local LastAttacker = Goblin:FindFirstChild("LastAttacker")
-            local IsPlayerAttacker = LastAttacker and LastAttacker.Value == Player
+            local IsPlayerAttacker = (LastAttacker and LastAttacker.Value == Player)
+                or AICCombat.IsOwnDuelOpponent(Goblin)
         
             local ClosestBlade = nil
             local ClosestPoint = nil
@@ -1767,8 +1799,8 @@ return {
         
             local CurrentPosition = RootPart.Position
         
-            --// When the local player is the LastAttacker, prefer the mob's rear
-            --// first, then the two sides. No visibility/path/water checks are used.
+            --// In our own fight, prefer the target's rear first, then the two
+            --// sides. No visibility/path/water checks are used.
             local Look = TargetRoot.CFrame.LookVector
             local Right = TargetRoot.CFrame.RightVector
             local Back = Vector3.new(-Look.X, 0, -Look.Z)
@@ -1838,6 +1870,68 @@ return {
         --// ============================================================
         --// MOVE TO GOBLIN
         --// ============================================================
+        --// The game puts NoDamage in our character while our hits do nothing
+        --// (just spawned, say). Rushing in then only takes damage.
+        function AICCombat.HasNoDamage()
+            local Character = Runtime:GetCharacter()
+            return Character ~= nil and Character:FindFirstChild("NoDamage") ~= nil
+        end
+
+        --// Outside the target's blade reach, as Safe Combat stands, and never
+        --// inside our attack distance; plus ORBIT_PADDING.
+        local function GetOrbitRadius(Goblin, GoblinRoot)
+            local Radius = CONFIG.PLAYER_ATTACK_DISTANCE
+
+            for _, BladePart in AICCombat.GetCombatBladeParts(Goblin) do
+                local Offset = BladePart.Position - GoblinRoot.Position
+                local BladeDistance = Vector3.new(Offset.X, 0, Offset.Z).Magnitude
+                Radius = math.max(Radius, BladeDistance + AICCombatUtils.GetBladeDangerDistance())
+            end
+
+            return Radius + ORBIT_PADDING
+        end
+
+        --// Walks round the target without closing in, facing it, until
+        --// NoDamage is gone. Each frame it heads ORBIT_STEP_ANGLE further
+        --// round the circle from where it stands, so it settles onto the
+        --// circle from any distance. A spot off the farm zone, in a
+        --// deadzone, in water or behind a wall turns it the other way.
+        function AICCombat.OrbitTarget(Goblin)
+            local _, Humanoid, RootPart = Runtime:GetCharacter()
+            local GoblinRoot = Goblin and Goblin:FindFirstChild("HumanoidRootPart")
+
+            if not Humanoid or not RootPart or not GoblinRoot then
+                return
+            end
+
+            local now = os.clock()
+            local Offset = RootPart.Position - GoblinRoot.Position
+            local Angle = (Offset.X ~= 0 or Offset.Z ~= 0) and math.atan2(Offset.Z, Offset.X) or 0
+            local Radius = GetOrbitRadius(Goblin, GoblinRoot)
+
+            AICCombat.S.OrbitSide = AICCombat.S.OrbitSide or 1
+
+            local function PointAt(Side)
+                local Next = Angle + Side * ORBIT_STEP_ANGLE
+                return GoblinRoot.Position + Vector3.new(math.cos(Next), 0, math.sin(Next)) * Radius
+            end
+
+            local Point = PointAt(AICCombat.S.OrbitSide)
+
+            if not AICCombat.IsApproachPositionClear(Point, Goblin) and now >= (AICCombat.S.OrbitFlipAt or 0) then
+                AICCombat.S.OrbitSide = -AICCombat.S.OrbitSide
+                AICCombat.S.OrbitFlipAt = now + ORBIT_FLIP_COOLDOWN
+                Point = PointAt(AICCombat.S.OrbitSide)
+            end
+
+            if not AICCombat.ChaseMoveTo(Goblin, Point) then
+                Humanoid:MoveTo(Point)
+            end
+
+            AICCombat.FaceGoblin(Goblin)
+            AICCombat.S.ChaseStep = "NO DAMAGE, CIRCLING"
+        end
+
         function AICCombat.MoveToGoblin(Goblin)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             local FaceOrientation = Runtime:GetFaceOrientation()
@@ -1930,7 +2024,7 @@ return {
 
             --// Safe Combat off fights as Safe Combat on does (rear first,
             --// circling round as the mob turns to face us, paths round
-            --// obstacles) but close: CLOSE_COMBAT_DISTANCES from the mob, with
+            --// obstacles) but close: Close Combat Range from the mob, with
             --// no backing off at all. In reach and out of the mob's front, it
             --// stays put and fights; it only moves when the mob turns to face it.
             if CloseCombat then
@@ -1942,7 +2036,7 @@ return {
                     and FlatLook.Magnitude > 0.01
                     and FlatOffset.Unit:Dot(FlatLook.Unit) > CLOSE_FRONT_DOT
 
-                if FlatOffset.Magnitude <= CLOSE_COMBAT_DISTANCES[#CLOSE_COMBAT_DISTANCES] and not InFront then
+                if FlatOffset.Magnitude <= GetCloseCombatRange() and not InFront then
                     Humanoid.AutoRotate = false
                     Humanoid:Move(Vector3.zero)
                     AICCombat.FaceGoblin(Goblin)

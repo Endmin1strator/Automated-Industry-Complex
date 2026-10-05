@@ -150,11 +150,14 @@ return {
             { Key = "REACH_DISTANCE", Scope = "Place", Default = 5 },
             { Key = "AUTOBLOCK", Scope = "Place", Default = false },
 
-            --// Retreat below this share of health, and drink at or below the
+            --// Retreat below this share of health (0 = never), and drink at or below the
             --// heal share.
-            { Key = "RETREAT_HEALTH_PERCENT", Default = 40, Min = 30, Max = 80 },
+            { Key = "RETREAT_HEALTH_PERCENT", Default = 40, Min = 0, Max = 80 },
             { Key = "AUTO_HEAL_HEALTH_PERCENT", Default = 65, Min = 30, Max = 80 },
             { Key = "SAFE_ENEMY_RANGE", Default = 4, Min = 0, Max = 30 },
+            --// With Safe Combat off: how far from the target it fights
+            --// (studs). 4 is just clear of its body, 12 the attack reach.
+            { Key = "CLOSE_COMBAT_RANGE", Default = 6, Min = 4, Max = 12 },
 
             --// Tie break between mobs of equal priority.
             --// "Disabled" keeps the original nearest-first behaviour.

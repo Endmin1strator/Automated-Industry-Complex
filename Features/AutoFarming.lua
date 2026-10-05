@@ -239,6 +239,17 @@ return {
             return string.format("CHASE  %s  %s  //  %s", Target and Target.Name or "?", tostring(Distance), Step)
         end
 
+        --// Goes for the locked target. While Character.NoDamage is on us our
+        --// hits do nothing, so it circles the target outside its reach
+        --// instead of running in, until NoDamage is gone.
+        local function ApproachTarget(Target)
+            if AICCombat.HasNoDamage() then
+                AICCombat.OrbitTarget(Target)
+            else
+                AICCombat.MoveToGoblin(Target)
+            end
+        end
+
         --// Gather Mobs, once the route is walked and the character is inside
         --// the farm zone. True while it pulls a pack together or uses the
         --// skill on it; it moves and fights by itself then, so the combat at
@@ -412,7 +423,7 @@ return {
             end
 
             --// Emergency Retreat
-            local RetreatHealthPercent = math.clamp(tonumber(CONFIG.RETREAT_HEALTH_PERCENT) or 40, 30, 80)
+            local RetreatHealthPercent = math.clamp(tonumber(CONFIG.RETREAT_HEALTH_PERCENT) or 40, 0, 80)
             local AutoHealHealthPercent = math.clamp(tonumber(CONFIG.AUTO_HEAL_HEALTH_PERCENT) or 65, 30, 80)
             local RetreatHealthRatio = RetreatHealthPercent / 100
             local AutoHealHealthRatio = AutoHealHealthPercent / 100
@@ -774,7 +785,7 @@ return {
                             --// patrol was doing rather than leaving a pause or a leg
                             --// chain to resume once the fight is over.
                             AICFeature.CancelPatrol()
-                            AICCombat.MoveToGoblin(AICCombat.S.ClosestTarget)
+                            ApproachTarget(AICCombat.S.ClosestTarget)
                             SetFarmState(DescribeChase())
                         elseif FeatureState.AutoPatrol.Enabled then
                             SetFarmState("PATROL")
@@ -826,7 +837,7 @@ return {
                         --// was doing rather than leaving a pause or a leg chain to
                         --// resume once the fight is over.
                         AICFeature.CancelPatrol()
-                        AICCombat.MoveToGoblin(AICCombat.S.ClosestTarget)
+                        ApproachTarget(AICCombat.S.ClosestTarget)
                         SetFarmState(DescribeChase())
                     elseif FeatureState.AutoPatrol.Enabled then
                         SetFarmState("PATROL")
@@ -908,6 +919,11 @@ return {
                     end
 
                     if EnsureWeaponDrawn(now, InputBindableFunction, MainWeld) then
+                        return
+                    end
+
+                    --// Circling (ApproachTarget): no attacks until NoDamage goes.
+                    if AICCombat.HasNoDamage() then
                         return
                     end
 

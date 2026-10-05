@@ -425,6 +425,10 @@ return {
                 UIRef.BlockDelaySlider:Set(CONFIG.AUTO_BLOCK_DELAY, false)
             end
 
+            if UIRef.CloseCombatRangeSlider then
+                UIRef.CloseCombatRangeSlider:Set(CONFIG.CLOSE_COMBAT_RANGE, false)
+            end
+
             if UIRef.BlockWhitelistComponent then
                 UIRef.BlockWhitelistComponent:SetPriority(table.clone(CONFIG.BLOCK_WHITELIST or {}))
                 CONFIG.BLOCK_WHITELIST = UIRef.BlockWhitelistComponent.Priority

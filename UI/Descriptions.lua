@@ -42,10 +42,11 @@ return {
             ["Radius Billboard Labels"] = "Shows each zone's number and radius over it",
 
             --// Combat and targets
-            ["Retreat At HP%"] = "Backs off to heal below this much health",
+            ["Retreat At HP%"] = "Backs off to heal below this much health (0 = never)",
             ["Auto Heal at HP%"] = "Drinks the last used potion at or below this much health",
             ["Execute Charge at HP%"] = "Finishes a target below this health instead of retreating",
             ["Safe Enemy Range"] = "Extra gap kept from enemy weapons (Safe Combat on)",
+            ["Close Combat Range"] = "How far from the target it fights with Safe Combat off",
             ["Target Type"] = "Tie break between targets of equal priority",
             ["Refresh Detected Targets"] = "Reloads the player and mob lists below",
             ["Enemy Priority"] = "Targets fought first to last",

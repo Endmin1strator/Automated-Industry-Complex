@@ -162,6 +162,17 @@ return {
             return AICCombat.GetOwnDuelOpponents() ~= nil
         end
 
+        --// Model is the character of a player we are dueling.
+        function AICCombat.IsOwnDuelOpponent(Model)
+            for _, Opponent in ipairs(Model and AICCombat.GetOwnDuelOpponents() or {}) do
+                if Opponent.Character == Model then
+                    return true
+                end
+            end
+
+            return false
+        end
+
         --// A player dueling somebody else is off limits. A player with no
         --// DuelOpponents value, or one naming us, may be attacked.
         function AICCombat.IsPlayerDuelBlocked(OtherPlayer)
@@ -1054,6 +1065,9 @@ return {
             if UIRef.TargetSection then
                 UIRef.SafeEnemyRangeSlider = AICUI.AddSettingSlider(
                     UIRef.TargetSection, "Safe Enemy Range", "SAFE_ENEMY_RANGE"
+                )
+                UIRef.CloseCombatRangeSlider = AICUI.AddSettingSlider(
+                    UIRef.TargetSection, "Close Combat Range", "CLOSE_COMBAT_RANGE"
                 )
             end
         end
