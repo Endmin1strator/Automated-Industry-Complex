@@ -4496,9 +4496,11 @@ function Library.SectionMethods:AddPriority(
                 and self.Library.Theme.Cyan
                 or self.Library.Theme.TextMuted
 
+            --// component.Format(value), when set, gives the shown text (the
+            --// stored value stays as it is); otherwise the value in capitals.
             local nameLabel = AddText(
                 row,
-                value:upper(),
+                component.Format and component.Format(value) or value:upper(),
                 9,
                 UDim2.fromOffset(60, 0),
                 UDim2.new(1, -(rightReserve + 60), 1, 0)

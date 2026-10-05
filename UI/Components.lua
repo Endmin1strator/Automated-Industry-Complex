@@ -77,6 +77,83 @@ return {
             return State.Button
         end
 
+        --// UserId -> Roblox username: a string once known, false while the
+        --// lookup runs or after it failed (not asked again this session).
+        AICUI.S.UserNames = {}
+        --// UserId -> callbacks waiting on its lookup.
+        AICUI.S.UserNameWaiters = {}
+
+        --// The username of UserId, or nil when not known yet. Someone in the
+        --// server is answered at once; anyone else is looked up in the
+        --// background and OnFound(Name) runs when it arrives.
+        function AICUI.GetUserName(UserId, OnFound)
+            local Id = tonumber(UserId)
+
+            if not Id then
+                return nil
+            end
+
+            local Cached = AICUI.S.UserNames[Id]
+
+            if Cached then
+                return Cached
+            end
+
+            local InServer = Players:GetPlayerByUserId(Id)
+
+            if InServer then
+                AICUI.S.UserNames[Id] = InServer.Name
+                return InServer.Name
+            end
+
+            local Waiters = AICUI.S.UserNameWaiters[Id]
+
+            if Waiters and OnFound and not table.find(Waiters, OnFound) then
+                table.insert(Waiters, OnFound)
+            end
+
+            if Cached == nil then
+                AICUI.S.UserNames[Id] = false
+                AICUI.S.UserNameWaiters[Id] = { OnFound }
+
+                task.spawn(function()
+                    local Ok, Name = pcall(Players.GetNameFromUserIdAsync, Players, Id)
+                    local Callbacks = AICUI.S.UserNameWaiters[Id] or {}
+
+                    AICUI.S.UserNameWaiters[Id] = nil
+
+                    if not Ok or type(Name) ~= "string" then
+                        return
+                    end
+
+                    AICUI.S.UserNames[Id] = Name
+
+                    for _, Callback in ipairs(Callbacks) do
+                        Callback(Name)
+                    end
+                end)
+            end
+
+            return nil
+        end
+
+        --// Makes a priority list of UserIds show "UserId  ·  @Name", redrawn
+        --// as names arrive.
+        function AICUI.ShowUserNames(Component)
+            --// One callback per list, so a list waits on each id only once.
+            local function Redraw()
+                Component:_Refresh()
+            end
+
+            Component.Format = function(Value)
+                local Name = AICUI.GetUserName(Value, Redraw)
+
+                return Name and string.format("%s  ·  @%s", Value, Name) or Value
+            end
+
+            Component:_Refresh()
+        end
+
         --// A slider bound to a numeric SaveConfig.Settings entry, using its
         --// range. Whole rounds the value down to an integer.
         function AICUI.AddSettingSlider(Section, Label, Key, Whole)

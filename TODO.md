@@ -241,6 +241,11 @@
 > - ช่องสี/ตั้งค่าใน Settings ที่เคยเป็น font Code เปลี่ยนเป็น font เดียวกันแล้ว
 > - ข้อความที่ไม่ได้ตั้ง font (เดิมได้ font ตั้งต้นของ Roblox) ได้ font ปกติอัตโนมัติ ทั้งหน้าหลัก, Server Browser, Recipe Browser และป้ายลอยของ Debug Visualizer
 
+### [x] Whitelist: โชว์ชื่อต่อจาก User ID
+> ทำแล้ว (v2.92): Block Whitelist กับ Danger Whitelist โชว์เป็น `UserId  ·  @ชื่อ` (ค่าที่เซฟยังเป็น UserId เหมือนเดิม)
+> - คนที่อยู่ในเซิร์ฟได้ชื่อทันที คนที่ไม่อยู่ถามชื่อจาก Roblox เบื้องหลัง (`GetNameFromUserIdAsync`) ได้มาแล้วรายการวาดใหม่เอง จำไว้ตลอดรอบที่เปิดสคริปต์
+> - ถามชื่อไม่สำเร็จจะโชว์แค่ UserId
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

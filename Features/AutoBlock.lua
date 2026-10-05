@@ -255,6 +255,7 @@ return {
                 CONFIG.BLOCK_WHITELIST or {}
             )
             UIRef.BlockWhitelistComponent = self.WhitelistComponent
+            AICUI.ShowUserNames(self.WhitelistComponent)
             CONFIG.BLOCK_WHITELIST = self.WhitelistComponent.Priority
 
             self.WhitelistBox = BlockSection:AddTextbox("User ID", "", function() end)

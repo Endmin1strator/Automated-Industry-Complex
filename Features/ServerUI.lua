@@ -232,6 +232,8 @@ return {
             task.defer(RefreshDangerPlayerDropdown)
         end)
 
+        AICUI.ShowUserNames(DangerWhitelist)
+
         local function AddDangerWhitelist(UserId, Label)
             if ServerHop:IsDangerWhitelisted(UserId) then
                 NotifyAction("Danger Whitelist", tostring(Label) .. " is already on the list")
