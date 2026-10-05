@@ -31,12 +31,16 @@ return {
         --// Consecutive empty scans before a screen counts as passed, so a
         --// blinking label that is briefly hidden is not taken for a click.
         local GONE_CHECKS = 3
-        --// Stop scanning when no title screen shows up for this long.
-        local IDLE_TIMEOUT = 180
-        --// Rounds of every click method on one screen before giving up.
+        --// Seconds without a title screen before scanning slows down, and the
+        --// scan interval after that. It never stops on its own.
+        local IDLE_SLOW_AFTER = 60
+        local IDLE_SCAN_INTERVAL = 2
+        --// Failed rounds before a minimized window waits to be restored.
         local MAX_FAILED_ROUNDS = 3
-        --// Seconds per failed round, so retries slow down.
+        --// Seconds per failed round, so retries slow down, up to the cap. It
+        --// keeps retrying until the screen passes.
         local RETRY_DELAY = 2
+        local MAX_RETRY_DELAY = 10
         --// Debug: seconds between dumps of visible texts while nothing matches.
         local DUMP_INTERVAL = 10
         local DUMP_LIMIT = 40
@@ -848,10 +852,13 @@ return {
             }, StartGone, "start", Token)
         end
 
-        --// Runs until the game is entered, the title screen never shows up,
-        --// clicking keeps failing, or the toggle is turned off. It does not
-        --// keep watching the screen during gameplay.
+        --// Runs until Start Game is pressed, the place changes, or the toggle is
+        --// turned off. The script can load long before the title screen does,
+        --// or before its buttons respond, so it never gives up: failed rounds
+        --// only space the retries out and no title screen only slows the scan.
+        --// It stops watching once the game is entered.
         local function RunLoop(Token)
+            local StartPlaceId = game.PlaceId
             local IdleSince = os.clock()
             local LastDump = 0
             local FailedRounds = 0
@@ -859,6 +866,11 @@ return {
             print("[AutoStartGame] Watching for the title screen")
 
             while IsCurrent(Token) do
+                if game.PlaceId ~= StartPlaceId then
+                    print("[AutoStartGame] Place changed; stopping")
+                    break
+                end
+
                 local ContinueNode, StartNode = FindTargets()
 
                 if ContinueNode or StartNode then
@@ -882,8 +894,13 @@ return {
                     elseif Advanced then
                         FailedRounds = 0
                     else
+                        --// Usually the screen is still loading: its buttons are
+                        --// not wired up yet.
                         FailedRounds += 1
-                        warn("[AutoStartGame] Could not pass the " .. Phase .. " screen (round " .. FailedRounds .. ")")
+
+                        if FailedRounds <= MAX_FAILED_ROUNDS or FailedRounds % 10 == 0 then
+                            warn("[AutoStartGame] Could not pass the " .. Phase .. " screen yet (round " .. FailedRounds .. "); retrying")
+                        end
 
                         if FailedRounds >= MAX_FAILED_ROUNDS and not IsWindowActive() then
                             --// The normal methods work once the window is back.
@@ -894,25 +911,19 @@ return {
                             end
 
                             FailedRounds = 0
-                        elseif FailedRounds >= MAX_FAILED_ROUNDS then
-                            NotifyAction("Auto Start Game", "Could not press the title screen. Click it manually.", 6)
-                            break
                         end
 
-                        task.wait(RETRY_DELAY * FailedRounds)
+                        task.wait(math.min(RETRY_DELAY * FailedRounds, MAX_RETRY_DELAY))
                     end
-                elseif not IsWindowActive() then
-                    --// A minimized window may hide the title screen; keep waiting.
-                    IdleSince = os.clock()
-                elseif os.clock() - IdleSince > IDLE_TIMEOUT then
-                    print("[AutoStartGame] No title screen found for " .. IDLE_TIMEOUT .. "s; stopping")
-                    break
                 elseif IsDebug() and os.clock() - LastDump > DUMP_INTERVAL then
                     LastDump = os.clock()
                     DumpVisibleTexts()
                 end
 
-                task.wait(SCAN_INTERVAL)
+                --// No title screen for a while (still loading, or already in
+                --// the game): scan less often.
+                local Quiet = IsWindowActive() and os.clock() - IdleSince > IDLE_SLOW_AFTER
+                task.wait(Quiet and IDLE_SCAN_INTERVAL or SCAN_INTERVAL)
             end
 
             if IsCurrent(Token) then
