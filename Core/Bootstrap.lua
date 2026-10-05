@@ -252,6 +252,18 @@ return {
             end
         )
 
+        --// UI font, picked in Configuration and kept in the global file.
+        if UI.SetFont then
+            if CONFIG.UI_FONT ~= "" and not UI:SetFont(CONFIG.UI_FONT) then
+                CONFIG.UI_FONT = ""
+            end
+
+            UI.OnFontChanged = function(Name)
+                CONFIG.UI_FONT = Name
+                AICProfile.WriteGlobalStore()
+            end
+        end
+
         --// Pinned items
         --// Lives outside the tabs so the panel can be dragged or popped out.
         UIRef.PinPanel = UI:AddPin("Pinned Items")

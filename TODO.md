@@ -246,6 +246,12 @@
 > - คนที่อยู่ในเซิร์ฟได้ชื่อทันที คนที่ไม่อยู่ถามชื่อจาก Roblox เบื้องหลัง (`GetNameFromUserIdAsync`) ได้มาแล้วรายการวาดใหม่เอง จำไว้ตลอดรอบที่เปิดสคริปต์
 > - ถามชื่อไม่สำเร็จจะโชว์แค่ UserId
 
+### [x] UI: เลือก font ได้ใน Configuration
+> ทำแล้ว (v2.93): หน้า Configuration (ปุ่มล่างซ้ายของเมนู) มี dropdown **FONT** รายชื่อ font ทั้งหมดของ Roblox (`Enum.Font`)
+> - เลือกแล้วเปลี่ยนทั้ง UI ทันที: หน้าหลัก, หน้า Configuration, Server Browser, Recipe Browser, Pinned Items, แจ้งเตือน และป้ายลอยของ Debug Visualizer ตัวหนายังเป็นตัวหนา (ถ้า font นั้นมีตัวหนา)
+> - ข้อความที่สร้างใหม่ทีหลังก็ใช้ font ที่เลือก · เซฟแบบ global ใน `Global.json` (`UI_FONT`) ใช้ทุกโปรไฟล์ เปิดสคริปต์ใหม่ยังเป็น font เดิม
+> - กด **RESET DEFAULT** กลับเป็น Gotham
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

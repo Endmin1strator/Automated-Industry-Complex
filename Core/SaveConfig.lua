@@ -207,6 +207,12 @@ return {
         --// profile, shared by every profile and PlaceId. Same fields as
         --// Settings, without Scope.
         SaveConfig.GlobalSettings = {
+            --// Enum.Font name the UI uses, picked in Configuration; "" keeps
+            --// the built-in fonts.
+            { Key = "UI_FONT", Default = "", Normalize = function(Value)
+                return type(Value) == "string" and Value or ""
+            end },
+
             --// Group IDs Leave On Danger Group leaves for.
             { Key = "DANGER_GROUP_IDS", Default = { "5928691" }, Normalize = NormalizeIdList },
 

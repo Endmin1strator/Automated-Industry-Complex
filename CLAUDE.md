@@ -60,6 +60,8 @@ Waypoints, Farmzone and Deadzone are spatial modules and are not part of Profile
 
 `UI/Utils.lua` (~5.9k lines) is the self-contained window/widget library (`Utils.new(title, opts)`, `AddTab`, `AddPriority`, loader progress…). It is loaded before any spec so the boot loader can show progress. `UI/Components.lua` binds feature toggles and shared controls to it.
 
+The UI font is chosen in Configuration (`UI:SetFont`, saved as the global `UI_FONT`); text under the ScreenGui and any root passed to `UI:AddFontRoot` follows it, keeping its weight. Code that sets `Font` keeps working: new text is retargeted right after it is created.
+
 Every control in the main window shows a one-line description under its name, looked up by its label in `UI/Descriptions.lua` (`UI:SetDescriptions`; a widget can also take a `description` argument). Add a line there when adding a control. Hovering a button, toggle, dropdown or textbox lights its border in the accent colour. `UI/Floating.lua` builds the floating windows (Server Browser, Recipe Browser) in the same look; `Floating.Section` lets the Utils widgets live inside them.
 
 ## Release conventions

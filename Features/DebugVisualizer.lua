@@ -33,6 +33,11 @@ return {
                 AICCombatUtils.S.DebugFolder = Instance.new("Folder")
                 AICCombatUtils.S.DebugFolder.Name = "AutoFarmDebug"
                 AICCombatUtils.S.DebugFolder.Parent = workspace
+
+                --// Billboard text follows the font picked in Configuration.
+                if UI and UI.AddFontRoot then
+                    UI:AddFontRoot(AICCombatUtils.S.DebugFolder)
+                end
             end
         
             return AICCombatUtils.S.DebugFolder

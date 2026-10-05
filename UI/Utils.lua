@@ -67,6 +67,17 @@ Library.Fonts = {
     Bold = FONT_BOLD,
 }
 
+--// Moves one text object onto the chosen font family, keeping its own
+--// weight and style, so bold text stays bold.
+local function ApplyFontFamily(object: Instance, family: string)
+    local ok = pcall(function()
+        local face = (object :: any).FontFace
+        ;(object :: any).FontFace = Font.new(family, face.Weight, face.Style)
+    end)
+
+    return ok
+end
+
 local TWEEN_FAST   = TweenInfo.new(0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 local TWEEN_NORMAL = TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 local TWEEN_SMOOTH = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
@@ -724,6 +735,17 @@ function Library:_CreateSettingsPanel()
     self._MaxHeightInput=makeNumberRow(#THEME_KEYS+6,"MAX HEIGHT",self.MaxWindowSize.Y,"MaxHeight",300,2200,0)
     self._TextScaleInput=makeNumberRow(#THEME_KEYS+7,"TEXT SCALE",self.TextScale,"TextScale",0.8,2.2,2)
 
+    --// FONT: every Roblox font; picking one applies it to the whole UI at
+    --// once. Built with the section dropdown on a stand-in section.
+    local fontSection = setmetatable({ Library = self, Holder = scroll, Components = {} }, { __index = Library.SectionMethods })
+    local fontDropdown = fontSection:AddDropdown("Font", self:GetFontNames(), function(name)
+        self:SetFont(name)
+    end, "Font used by the whole UI, saved for every profile")
+    fontDropdown.Frame.Size = UDim2.new(1, -4, 0, fontDropdown.Frame.Size.Y.Offset)
+    fontDropdown.Frame.LayoutOrder = #THEME_KEYS + 8
+    fontDropdown:Set(self.FontName or FONT_REGULAR.Name, false)
+    self._FontDropdown = fontDropdown
+
     local hint=AddText(scroll,"SELECT SWATCH TO OPEN COLOR PICKER  //  HEX / RGB + LIMITS",7,UDim2.fromOffset(4,0),UDim2.new(1,-8,0,18))
     hint.TextColor3=self.Theme.TextMuted
     hint.LayoutOrder=#THEME_KEYS+10
@@ -798,6 +820,7 @@ function Library:_CreateSettingsPanel()
         self.MinWindowSize=Vector2.new(self._DefaultMinWindowSize.X,self._DefaultMinWindowSize.Y)
         self.MaxWindowSize=Vector2.new(self._DefaultMaxWindowSize.X,self._DefaultMaxWindowSize.Y)
         self:SetWindowSize(Vector2.new(self._DefaultWindowSize.X,self._DefaultWindowSize.Y)); self:SetTextScale(self._DefaultTextScale)
+        self:SetFont(FONT_REGULAR)
         refreshInputs(); self:Notify("CONFIGURATION","Default configuration restored.",2)
     end)
     self.SettingsReturn = makeFooterButton("RETURN", 3, function() setOpen(false) end)
@@ -926,6 +949,13 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
     })
 
     self.ScreenGui = screenGui
+
+    --// The font chosen in Configuration (nil: the built-in fonts) and the
+    --// other places, outside this ScreenGui, whose text follows it.
+    self.FontName = nil
+    self.FontFamily = nil
+    self._FontRoots = {}
+    self:AddFontRoot(screenGui)
 
     --==========================================================
     -- Scale
@@ -1554,6 +1584,11 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
     })
 
     self.Overlay = overlay
+
+    --// The Configuration font dropdown was built before the overlay.
+    if self._FontDropdown and self._FontDropdown.Popup then
+        self._FontDropdown.Popup.Parent = overlay
+    end
 
     --==========================================================
     -- Reopen Button
@@ -5888,6 +5923,92 @@ function Library:SetTheme(theme: {[string]: any})
     if self._RefreshSettingsInputs then
         self._RefreshSettingsInputs()
     end
+end
+
+--// Every Roblox font that can be chosen in Configuration, by name, sorted.
+function Library:GetFontNames(): {string}
+    local names = {}
+
+    for _, item in ipairs(Enum.Font:GetEnumItems()) do
+        if item.Name ~= "Unknown" and pcall(Font.fromEnum, item) then
+            table.insert(names, item.Name)
+        end
+    end
+
+    table.sort(names)
+    return names
+end
+
+--// Text under root (now and added later) follows the chosen font. The
+--// ScreenGui is one; other modules add places such as world billboards.
+function Library:AddFontRoot(root: Instance)
+    if table.find(self._FontRoots, root) then
+        return
+    end
+
+    table.insert(self._FontRoots, root)
+
+    self:_Connect(root.DescendantAdded, function(object)
+        if self.FontFamily and TEXT_CLASSES[object.ClassName] then
+            --// Deferred: whoever created it sets its Font right after.
+            task.defer(function()
+                if self.FontFamily and object.Parent then
+                    ApplyFontFamily(object, self.FontFamily)
+                end
+            end)
+        end
+    end)
+
+    if self.FontFamily then
+        for _, object in ipairs(root:GetDescendants()) do
+            if TEXT_CLASSES[object.ClassName] then
+                ApplyFontFamily(object, self.FontFamily)
+            end
+        end
+    end
+end
+
+--// Puts the whole UI on one Roblox font (an Enum.Font or its name),
+--// keeping each text's weight. Returns false for an unknown font.
+function Library:SetFont(font: any): boolean
+    if type(font) == "string" then
+        local ok, item = pcall(function()
+            return (Enum.Font :: any)[font]
+        end)
+
+        font = ok and item or nil
+    end
+
+    if typeof(font) ~= "EnumItem" then
+        return false
+    end
+
+    local ok, face = pcall(Font.fromEnum, font)
+
+    if not ok then
+        return false
+    end
+
+    self.FontName = font.Name
+    self.FontFamily = face.Family
+
+    for _, root in ipairs(self._FontRoots) do
+        for _, object in ipairs(root:GetDescendants()) do
+            if TEXT_CLASSES[object.ClassName] then
+                ApplyFontFamily(object, face.Family)
+            end
+        end
+    end
+
+    if self._FontDropdown then
+        self._FontDropdown:Set(font.Name, false)
+    end
+
+    if self.OnFontChanged then
+        task.spawn(self.OnFontChanged, font.Name)
+    end
+
+    return true
 end
 
 function Library:SetTextScale(scale: number)
