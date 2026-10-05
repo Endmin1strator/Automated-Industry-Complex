@@ -195,6 +195,13 @@
 > - ย่อหน้าต่างอยู่: ไม่ใช้เมาส์จริง ถ้ากดไม่ผ่านจะรอจนเปิดหน้าต่างกลับมา · ไม่เจอหน้า title 180 วิ = หยุด · กดไม่ผ่าน 3 รอบ = แจ้งเตือนแล้วหยุด
 > - ไม่กด Customize / Credits / Reset Data · debug: `getgenv().AICStartGameDebug = true`
 
+### [x] Server: Leave On Danger Group เซฟแบบ global และมี whitelist ของตัวเอง
+> ทำแล้ว (v2.87): toggle **Leave On Danger Group** กับ **Danger Whitelist** เก็บใน `AutoFarmProfiles/Global.json` ใช้ร่วมกันทุกโปรไฟล์และทุก PlaceId
+> - โหลด/สร้าง/import โปรไฟล์ไม่เปลี่ยนค่านี้ และ export โปรไฟล์ไม่รวมค่านี้ (key `r` ยังจองไว้ ห้ามใช้ซ้ำ)
+> - Danger Whitelist แยกจาก Block Whitelist: คนในกลุ่มอันตรายที่อยู่ใน Danger Whitelist จะไม่ทำให้ออกจากเซิร์ฟ ส่วน Block Whitelist ไม่มีผลกับฟีเจอร์นี้แล้ว
+> - เพิ่มได้จาก dropdown คนในเซิร์ฟ หรือพิมพ์ User ID · ลบออกแล้วถ้าคนนั้นอยู่ในเซิร์ฟจะออกทันที · Player Log มีแท็ก `[DANGER WL]`
+> - ครั้งแรกหลังอัปเดต toggle จะเริ่มที่ปิด (ค่าเดิมในโปรไฟล์ไม่ถูกย้ายมา) ต้องเปิดใหม่หนึ่งครั้ง
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

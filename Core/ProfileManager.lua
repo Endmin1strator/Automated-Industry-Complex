@@ -23,13 +23,17 @@ return {
         local PROFILE_FILE = PROFILE_FOLDER .. "/" .. tostring(game.PlaceId) .. ".json"
         --// Not keyed by PlaceId: pinned items follow the player between places.
         local PINNED_FILE = PROFILE_FOLDER .. "/PinnedItems.json"
+        --// Global toggles and SaveConfig.GlobalSettings, shared by every
+        --// profile and PlaceId.
+        local GLOBAL_FILE = PROFILE_FOLDER .. "/Global.json"
 
         --// Short keys for feature toggles in exported/imported profile text,
         --// taken from SaveConfig.Features so a new toggle exports on its own.
+        --// Global toggles are not part of a profile, so they are not exported.
         local COMPACT_FEATURE_KEYS = {}
 
         for _, Entry in ipairs(SaveConfig.Features) do
-            if Entry.Key then
+            if Entry.Key and not Entry.Global then
                 COMPACT_FEATURE_KEYS[Entry.Name] = Entry.Key
             end
         end
@@ -341,12 +345,102 @@ return {
             end)
         end
 
+        --// { FEATURES = { Name = bool }, SETTINGS = { Key = value } } from
+        --// GLOBAL_FILE, or nil when there is none or it cannot be read.
+        function AICProfile.ReadGlobalStore()
+            if not AICProfile.CanUseFileStorage() then
+                return nil
+            end
+
+            local CheckSuccess, Exists = pcall(isfile, GLOBAL_FILE)
+
+            if not CheckSuccess or not Exists then
+                return nil
+            end
+
+            local Success, Decoded = pcall(function()
+                return HttpService:JSONDecode(readfile(GLOBAL_FILE))
+            end)
+
+            if not Success or type(Decoded) ~= "table" then
+                warn("AutoFarm global settings read failed:", Decoded)
+                return nil
+            end
+
+            return Decoded
+        end
+
+        --// Puts the stored global toggles on Feature and the global
+        --// settings on CONFIG. A missing entry gets its default.
+        function AICProfile.ApplyGlobalStore(Store)
+            Store = type(Store) == "table" and Store or {}
+
+            local Features = type(Store.FEATURES) == "table" and Store.FEATURES or {}
+            local Settings = type(Store.SETTINGS) == "table" and Store.SETTINGS or {}
+
+            for _, Entry in ipairs(SaveConfig.Features) do
+                if Entry.Global then
+                    local Value = Features[Entry.Name]
+
+                    if type(Value) ~= "boolean" then
+                        Value = Entry.Default
+                    end
+
+                    Feature[Entry.Name].Enabled = Value
+                end
+            end
+
+            for _, Entry in ipairs(SaveConfig.GlobalSettings) do
+                CONFIG[Entry.Key] = SaveConfig.NormalizeSetting(Entry, Settings[Entry.Key])
+            end
+        end
+
+        function AICProfile.WriteGlobalStore()
+            if not AICProfile.CanUseFileStorage() then
+                return false
+            end
+
+            local Store = { FEATURES = {}, SETTINGS = {} }
+
+            for _, Entry in ipairs(SaveConfig.Features) do
+                if Entry.Global then
+                    Store.FEATURES[Entry.Name] = Feature[Entry.Name].Enabled == true
+                end
+            end
+
+            for _, Entry in ipairs(SaveConfig.GlobalSettings) do
+                Store.SETTINGS[Entry.Key] = SaveConfig.NormalizeSetting(Entry, CONFIG[Entry.Key])
+            end
+
+            AICProfile.EnsureProfileFolder()
+
+            local Success, Raw = pcall(function()
+                return HttpService:JSONEncode(Store)
+            end)
+
+            if not Success then
+                warn("AutoFarm global settings encode failed:", Raw)
+                return false
+            end
+
+            local WriteSuccess, WriteError = pcall(writefile, GLOBAL_FILE, Raw)
+
+            if not WriteSuccess then
+                warn("AutoFarm global settings save failed:", WriteError)
+                return false
+            end
+
+            return true
+        end
+
         function AICProfile.CaptureFeatureState()
             local Result = {}
 
             for _, Entry in ipairs(SaveConfig.Features) do
-                local Data = Feature[Entry.Name]
-                Result[Entry.Name] = Data and Data.Enabled == true
+                if not Entry.Global then
+                    local Data = Feature[Entry.Name]
+                    Result[Entry.Name] = Data and Data.Enabled == true
+                end
             end
 
             --// AutoFarm runs off AICFeature.S.Enabled; the Feature entry only
@@ -359,10 +453,15 @@ return {
         --// Every saved toggle is set, and one the profile does not mention
         --// goes back to its default. Keeping the old value instead let a
         --// toggle from the previous profile leak into the one being loaded.
+        --// Global toggles are left as they are.
         function AICProfile.ApplyFeatureState(State)
             State = type(State) == "table" and State or {}
 
             for _, Entry in ipairs(SaveConfig.Features) do
+                if Entry.Global then
+                    continue
+                end
+
                 local Data = Feature[Entry.Name]
                 local Value = State[Entry.Name]
 
@@ -385,7 +484,7 @@ return {
             for _, Entry in ipairs(SaveConfig.Features) do
                 local Module = Context.Modules[Entry.Name]
 
-                if type(Module) == "table" and Module.Enabled ~= nil and Entry.Name ~= "AutoBlock" then
+                if type(Module) == "table" and Module.Enabled ~= nil and Entry.Name ~= "AutoBlock" and not Entry.Global then
                     Module.Enabled = Feature[Entry.Name].Enabled
                 end
             end
@@ -854,6 +953,7 @@ return {
         end
 
         AICProfile.S.ProfileStore = AICProfile.ReadProfileStore()
+        AICProfile.ApplyGlobalStore(AICProfile.ReadGlobalStore())
 
         Context.PROFILE_FOLDER = PROFILE_FOLDER
         Context.PROFILE_FILE = PROFILE_FILE

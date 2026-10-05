@@ -17,6 +17,9 @@ return {
         --//   Key     : short key in exported profile text. Must never change
         --//             or be reused, or old exports load into the wrong toggle.
         --//             Toggles without one are saved but not exported.
+        --//   Global  : stored in ProfileManager's global file, shared by every
+        --//             profile and PlaceId; profiles neither save, load nor
+        --//             export it. Its Key stays reserved.
         SaveConfig.Features = {
             { Name = "AutoFarm",          Default = true,  Key = "a" },
             { Name = "AutoBlock",         Default = true,  Key = "b" },
@@ -39,7 +42,7 @@ return {
             { Name = "AutoSmithing",      Default = false, Key = "q" },
             --// Server tab (ServerUI): leave when a danger group member is here,
             --// and notify about players off the whitelist.
-            { Name = "DangerGroupHop",    Default = false, Key = "r" },
+            { Name = "DangerGroupHop",    Default = false, Key = "r", Global = true },
             { Name = "JoinAlerts",        Default = false, Key = "s" },
             --// Pull a pack of mobs together, then use the skill (MobGather).
             { Name = "MobGather",         Default = false, Key = "t" },
@@ -191,6 +194,15 @@ return {
             --// Pinned item panel: items, popped out or not, and position.
             --// Shared by every PlaceId, so it lives in its own file.
             { Key = "PINNED_STATE", Default = {}, Normalize = NormalizePinnedState, Global = true },
+        }
+
+        --// Settings kept in ProfileManager's global file instead of a
+        --// profile, shared by every profile and PlaceId. Same fields as
+        --// Settings, without Scope.
+        SaveConfig.GlobalSettings = {
+            --// UserIds Leave On Danger Group stays for. Separate from
+            --// BLOCK_WHITELIST.
+            { Key = "DANGER_WHITELIST", Default = {}, Normalize = NormalizeUserIdList },
         }
 
         local FeatureByName = {}

@@ -11,7 +11,9 @@ return {
     Start = function(Context)
         local UI = Context.UI
         local UIRef = Context.UIRef
+        local CONFIG = Context.CONFIG
         local AICUI = Context.AICUI
+        local AICProfile = Context.AICProfile
         local Services = Context.Services
         local Players = Services.Players
         local Player = Context.Player
@@ -150,7 +152,138 @@ return {
             ServerHop.S.LastScan = 0
         end, SafetySection)
 
-        SafetySection:AddLabel(string.format("Leaves if a group %d member is here (whitelist exempt)", ServerHop.DANGER_GROUP_ID))
+        SafetySection:AddLabel(string.format("Leaves if a group %d member is here (Danger Whitelist exempt)", ServerHop.DANGER_GROUP_ID))
+        SafetySection:AddLabel("Toggle and whitelist are shared by every profile")
+
+        --// Players Leave On Danger Group stays for. Global like the toggle,
+        --// and separate from the Auto Block whitelist.
+        local DangerWhitelist = SafetySection:AddPriority("Danger Whitelist", CONFIG.DANGER_WHITELIST or {})
+        CONFIG.DANGER_WHITELIST = DangerWhitelist.Priority
+
+        --// Dropdown label -> UserId text, rebuilt with the dropdown.
+        local DangerPlayerOptions = {}
+        local DangerPlayerDropdown
+
+        local function SaveDangerWhitelist()
+            CONFIG.DANGER_WHITELIST = DangerWhitelist.Priority
+            AICProfile.WriteGlobalStore()
+            --// Someone taken off the list is acted on at the next frame.
+            ServerHop.S.LastScan = 0
+        end
+
+        local function AddDangerWhitelist(UserId, Label)
+            if ServerHop:IsDangerWhitelisted(UserId) then
+                NotifyAction("Danger Whitelist", tostring(Label) .. " is already on the list")
+                return false
+            end
+
+            DangerWhitelist:Add(UserId)
+            SaveDangerWhitelist()
+            NotifyAction("Danger Whitelist", "Added " .. tostring(Label))
+            return true
+        end
+
+        local function RefreshDangerPlayerDropdown()
+            table.clear(DangerPlayerOptions)
+
+            local Options = {}
+
+            for _, OtherPlayer in ipairs(Players:GetPlayers()) do
+                if OtherPlayer ~= Player and not ServerHop:IsDangerWhitelisted(OtherPlayer.UserId) then
+                    local Text = string.format("%s (@%s)  %d", OtherPlayer.DisplayName, OtherPlayer.Name, OtherPlayer.UserId)
+                    DangerPlayerOptions[Text] = tostring(OtherPlayer.UserId)
+                    table.insert(Options, Text)
+                end
+            end
+
+            table.sort(Options, function(A, B)
+                return string.lower(A) < string.lower(B)
+            end)
+
+            if #Options == 0 then
+                Options = {"No other players"}
+            end
+
+            --// A new dropdown is appended to the section, so it takes the
+            --// old one's slot to keep its place in the list.
+            local Order = DangerPlayerDropdown and DangerPlayerDropdown.Frame and DangerPlayerDropdown.Frame.LayoutOrder
+
+            if DangerPlayerDropdown then
+                if DangerPlayerDropdown.Popup then
+                    DangerPlayerDropdown.Popup:Destroy()
+                end
+
+                if DangerPlayerDropdown.Frame then
+                    DangerPlayerDropdown.Frame:Destroy()
+                end
+            end
+
+            DangerPlayerDropdown = SafetySection:AddDropdown("Add Player In Server", Options, function(Value)
+                local Id = DangerPlayerOptions[Value]
+
+                if Id and AddDangerWhitelist(Id, Value) then
+                    task.defer(RefreshDangerPlayerDropdown)
+                end
+            end)
+
+            if Order and DangerPlayerDropdown.Frame then
+                DangerPlayerDropdown.Frame.LayoutOrder = Order
+            end
+        end
+
+        RefreshDangerPlayerDropdown()
+
+        local DangerWhitelistBox = SafetySection:AddTextbox("User ID", "", function() end)
+
+        SafetySection:AddButton("Add User ID", function()
+            local Id = tostring(DangerWhitelistBox:Get() or ""):gsub("%s+", "")
+
+            if not Id:match("^%d+$") then
+                NotifyAction("Danger Whitelist", "Enter a numeric UserId")
+                return
+            end
+
+            if AddDangerWhitelist(Id, Id) then
+                DangerWhitelistBox:Set("")
+                RefreshDangerPlayerDropdown()
+            end
+        end)
+
+        SafetySection:AddButton("Clear Danger Whitelist", function()
+            DangerWhitelist:SetPriority({})
+            SaveDangerWhitelist()
+            NotifyAction("Danger Whitelist", "Cleared")
+            RefreshDangerPlayerDropdown()
+        end)
+
+        local OriginalRemove = DangerWhitelist.Remove
+        local OriginalMoveUp = DangerWhitelist.MoveUp
+        local OriginalMoveDown = DangerWhitelist.MoveDown
+
+        function DangerWhitelist:Remove(Entry)
+            local Changed = OriginalRemove(self, Entry)
+            SaveDangerWhitelist()
+            RefreshDangerPlayerDropdown()
+            return Changed
+        end
+
+        function DangerWhitelist:MoveUp(Entry)
+            OriginalMoveUp(self, Entry)
+            SaveDangerWhitelist()
+        end
+
+        function DangerWhitelist:MoveDown(Entry)
+            OriginalMoveDown(self, Entry)
+            SaveDangerWhitelist()
+        end
+
+        Players.PlayerAdded:Connect(function()
+            RefreshDangerPlayerDropdown()
+        end)
+
+        Players.PlayerRemoving:Connect(function()
+            task.defer(RefreshDangerPlayerDropdown)
+        end)
 
         AICUI.BindFeatureToggle("JoinAlerts", "Join Alerts", function(Enabled)
             if Enabled then
@@ -176,6 +309,10 @@ return {
 
             if Context.AICFeature.IsWhitelisted and Context.AICFeature.IsWhitelisted(Entry.UserId) then
                 Tags ..= "  [WL]"
+            end
+
+            if ServerHop:IsDangerWhitelisted(Entry.UserId) then
+                Tags ..= "  [DANGER WL]"
             end
 
             if OtherPlayer and ServerHop:IsDangerPlayer(OtherPlayer) then

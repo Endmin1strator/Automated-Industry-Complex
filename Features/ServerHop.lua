@@ -3,7 +3,8 @@
 --   Rejoin, Server Hop (a random public server with a free slot) and joining
 --   a server by Job ID; reading the public server list for the browser;
 --   Leave On Danger Group, which leaves at once when a member of
---   DANGER_GROUP_ID is in the server; Join Alerts for players off the Auto
+--   DANGER_GROUP_ID who is not on the Danger Whitelist is in the server
+--   (toggle and whitelist are global, not per profile); Join Alerts for players off the Auto
 --   Block whitelist; and the Player Log of who joined and left.
 -- ServerUI draws all of it on the Server tab.
 return {
@@ -18,6 +19,7 @@ return {
         local TeleportService = game:GetService("TeleportService")
         local Player = Context.Player
         local Feature = Context.Feature
+        local CONFIG = Context.CONFIG
         local AICFeature = Context.AICFeature
         local NotifyAction = Context.NotifyAction
 
@@ -82,8 +84,16 @@ return {
 
         local S = ServerHop.S
 
+        --// The Auto Block whitelist, which Join Alerts goes by.
         local function IsWhitelisted(OtherPlayer)
             return AICFeature.IsWhitelisted ~= nil and AICFeature.IsWhitelisted(OtherPlayer.UserId) == true
+        end
+
+        --// Leave On Danger Group's own whitelist (CONFIG.DANGER_WHITELIST),
+        --// global and separate from the Auto Block one.
+        function ServerHop:IsDangerWhitelisted(UserId)
+            local Id = tostring(UserId or ""):gsub("%s+", "")
+            return table.find(CONFIG.DANGER_WHITELIST or {}, Id) ~= nil
         end
 
         local function SetStatus(Text)
@@ -309,7 +319,7 @@ return {
             return Feature.DangerGroupHop.Enabled
                 and OtherPlayer.Parent == Players
                 and ServerHop:IsDangerPlayer(OtherPlayer)
-                and not IsWhitelisted(OtherPlayer)
+                and not ServerHop:IsDangerWhitelisted(OtherPlayer.UserId)
         end
 
         --// Any server will do, so this lets Roblox pick one: it does not

@@ -48,9 +48,12 @@ return {
         --// saved value, writes Feature[Name].Enabled, saves the profile, and
         --// is refreshed by updateFeatureButtons on every profile load. A
         --// module only supplies its label and what else should happen.
+        --// A Global toggle is saved to the global file instead.
         function AICUI.BindFeatureToggle(Name, Label, OnChanged, Section)
             local State = FeatureState[Name]
             assert(State, "Feature not declared in SaveConfig.Features: " .. tostring(Name))
+
+            local IsGlobal = Context.SaveConfig.GetFeature(Name).Global == true
 
             Section = Section or UIRef.FeatureSection
             if not Section then
@@ -64,7 +67,11 @@ return {
                     OnChanged(State.Enabled)
                 end
 
-                AICProfile.SaveActiveProfile()
+                if IsGlobal then
+                    AICProfile.WriteGlobalStore()
+                else
+                    AICProfile.SaveActiveProfile()
+                end
             end)
 
             return State.Button

@@ -46,6 +46,7 @@ Much of the old monolith is still in Runtime.lua ("compatibility layer") and is 
 This is the single schema for everything a profile saves. `Features` lists the toggles (`Name`, `Default`, `Key`) and `Settings` lists the settings (default, range/options, normalizers). Runtime, ProfileManager (save/load/export/reset) and Components (refresh) all read from it.
 
 - An export `Key` must never change or be reused, or old exported profiles will load into the wrong toggle.
+- A `Global = true` feature (e.g. `DangerGroupHop`) and every entry in `SaveConfig.GlobalSettings` (e.g. `DANGER_WHITELIST`) are kept in `AutoFarmProfiles/Global.json` by ProfileManager (`ReadGlobalStore`/`ApplyGlobalStore`/`WriteGlobalStore`), shared by every profile and PlaceId; profiles never save, load or export them. `PINNED_STATE` is global through its own older mechanism (`PinnedItems.json`).
 
 Adding a feature with a saved toggle (from README):
 1. Create `Features/MyFeature.lua` returning the spec.
