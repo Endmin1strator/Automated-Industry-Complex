@@ -60,6 +60,8 @@ return {
         --// Exact match after normalizing: Customize, Credits and Reset Data
         --// must never be pressed.
         local START_TEXT = "START GAME"
+        --// The place with the title screen; nothing is pressed anywhere else.
+        local MENU_PLACE_ID = 4733278992
 
         local CloneReference = type(cloneref) == "function" and cloneref or function(Instance)
             return Instance
@@ -852,13 +854,24 @@ return {
             }, StartGone, "start", Token)
         end
 
-        --// Runs until Start Game is pressed, the place changes, or the toggle is
-        --// turned off. The script can load long before the title screen does,
-        --// or before its buttons respond, so it never gives up: failed rounds
-        --// only space the retries out and no title screen only slows the scan.
-        --// It stops watching once the game is entered.
+        --// Runs only on the menu place, until Start Game is pressed, the place
+        --// is no longer the menu, or the toggle is turned off. The script can
+        --// load long before the title screen does, or before its buttons
+        --// respond, so it never gives up: failed rounds only space the retries
+        --// out and no title screen only slows the scan. On any other place it
+        --// does nothing, so it can never press an in-game screen.
         local function RunLoop(Token)
-            local StartPlaceId = game.PlaceId
+            if game.PlaceId ~= MENU_PLACE_ID then
+                Log("not on the menu place (" .. tostring(game.PlaceId) .. "); nothing to do")
+
+                if IsCurrent(Token) then
+                    S.Running = false
+                    S.Done = true
+                end
+
+                return
+            end
+
             local IdleSince = os.clock()
             local LastDump = 0
             local FailedRounds = 0
@@ -866,8 +879,8 @@ return {
             print("[AutoStartGame] Watching for the title screen")
 
             while IsCurrent(Token) do
-                if game.PlaceId ~= StartPlaceId then
-                    print("[AutoStartGame] Place changed; stopping")
+                if game.PlaceId ~= MENU_PLACE_ID then
+                    print("[AutoStartGame] Left the menu place; stopping")
                     break
                 end
 
