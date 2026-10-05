@@ -48,6 +48,9 @@ return {
             { Name = "MobGather",         Default = false, Key = "t" },
             --// Click through the title screen (AutoStartGame).
             { Name = "AutoStartGame",     Default = false, Key = "u" },
+            --// Block Whitelist players never make Auto Block hop (even when
+            --// blocked) or Leave On Danger Group leave. Owned by AutoBlock.
+            { Name = "WhitelistSkipsSafety", Default = true, Key = "v" },
             { Name = "DebugWaypoints",    Default = true },
             { Name = "DebugFarmZones",    Default = true },
             { Name = "DebugDeadzones",    Default = true },

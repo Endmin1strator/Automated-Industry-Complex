@@ -222,6 +222,14 @@
 > ทำแล้ว (v2.88): ปิด Pinned Items (×) แล้วไม่มีปุ่ม "◇ OPEN" ลอยค้างบนจอแล้ว เปิดกลับได้จาก toggle **Show Pinned Items** ในแท็บ Status
 > - จำไว้ว่าเปิดหรือปิดอยู่ (เก็บใน `PinnedItems.json` พร้อมรายการของ)
 
+### [x] Auto Block: ปุ่ม Whitelist Skips Safety
+- คนที่อยู่ใน whitelist แต่เราบล็อกไว้ ไม่ต้องวาร์ปหนี (เหมือนที่เพิ่มใน Iamrich)
+
+> ทำแล้ว (v2.89): toggle **Whitelist Skips Safety** ในส่วน Auto Block (บันทึกในโปรไฟล์ ค่าเริ่มต้นเปิด)
+> - เปิด: คนใน Block Whitelist ไม่ทำให้ Auto Block วาร์ปหนีแม้บล็อกไว้แล้ว และไม่ทำให้ Leave On Danger Group ออก (นอกจาก Danger Whitelist)
+> - ปิด: คนใน Block Whitelist ที่บล็อกไว้แล้วทำให้วาร์ปหนี (รอ Block Delay ก่อน) ส่วน Leave On Danger Group ใช้ Danger Whitelist อย่างเดียวเหมือนเดิม
+> - Auto Block ไม่เปิดหน้าต่างบล็อกให้คนใน whitelist เสมอ ไม่ว่าจะเปิดหรือปิด toggle นี้
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

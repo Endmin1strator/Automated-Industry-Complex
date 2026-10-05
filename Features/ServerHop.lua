@@ -3,7 +3,8 @@
 --   Rejoin, Server Hop (a random public server with a free slot) and joining
 --   a server by Job ID; reading the public server list for the browser;
 --   Leave On Danger Group, which leaves at once when a member of any group
---   in DANGER_GROUP_IDS who is not on the Danger Whitelist is in the server
+--   in DANGER_GROUP_IDS who is not on the Danger Whitelist (nor, with Whitelist
+--   Skips Safety on, the Auto Block whitelist) is in the server
 --   (toggle, groups and whitelist are global, not per profile); Join Alerts for players off the Auto
 --   Block whitelist; and the Player Log of who joined and left.
 -- ServerUI draws all of it on the Server tab.
@@ -341,11 +342,17 @@ return {
         --// Leave On Danger Group
         ------------------------------------------------------------------------
 
+        --// Whitelist Skips Safety also exempts the Auto Block whitelist.
+        local function IsSafetyExempt(OtherPlayer)
+            return AICFeature.IsSafetyExempt ~= nil and AICFeature.IsSafetyExempt(OtherPlayer.UserId) == true
+        end
+
         local function ShouldLeaveFor(OtherPlayer)
             return Feature.DangerGroupHop.Enabled
                 and OtherPlayer.Parent == Players
                 and ServerHop:IsDangerPlayer(OtherPlayer)
                 and not ServerHop:IsDangerWhitelisted(OtherPlayer.UserId)
+                and not IsSafetyExempt(OtherPlayer)
         end
 
         --// Any server will do, so this lets Roblox pick one: it does not

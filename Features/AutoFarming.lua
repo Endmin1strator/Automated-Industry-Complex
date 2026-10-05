@@ -566,27 +566,44 @@ return {
             end
 
             --// Player Check
-            --// Whitelisted players are ignored entirely, so a server holding only
-            --// them is left alone. Anyone else is blocked individually and then the
+            --// Whitelisted players are never blocked, and a server holding only
+            --// them is left alone unless Whitelist Skips Safety is off and one of
+            --// them is already blocked. Anyone else is blocked individually and then the
             --// server is abandoned; the whole lobby is no longer blocked one by one.
             --// With a party Leader set, Party System deals with intruders instead.
             local PartyHandles = AICFeature.PartyHandlesIntruders and AICFeature.PartyHandlesIntruders()
 
             if AICFeature.S.BlockEnabled and not PartyHandles then
                 local Intruder = nil
+                --// A whitelisted player we have blocked. Never prompted, but
+                --// with Whitelist Skips Safety off they make us hop all the same.
+                local BlockedWhitelisted = nil
 
                 --// Within the Block Delay an intruder is tolerated and the
                 --// farm carries on; block and hop only once it has run out.
                 --// Every intruder is asked about, so each one's delay starts
                 --// when they are first seen, not when the one before is dealt with.
                 for _, plr in Players:GetPlayers() do
-                    if plr ~= Player
-                        and not AICFeature.IsWhitelisted(plr.UserId)
-                        and AICFeature.IsBlockDelayOver(plr)
-                        and not Intruder
-                    then
-                        Intruder = plr
+                    if plr ~= Player then
+                        if not AICFeature.IsWhitelisted(plr.UserId) then
+                            if AICFeature.IsBlockDelayOver(plr) and not Intruder then
+                                Intruder = plr
+                            end
+                        elseif not BlockedWhitelisted
+                            and AICFeature.IsSafetyExempt
+                            and not AICFeature.IsSafetyExempt(plr.UserId)
+                            and AICFeature.IsBlockDelayOver(plr)
+                            and AICFeature.isBlocked(plr.UserId)
+                        then
+                            BlockedWhitelisted = plr
+                        end
                     end
+                end
+
+                if not Intruder and BlockedWhitelisted then
+                    SetFarmState("AUTO BLOCK  HOP FROM @" .. BlockedWhitelisted.Name)
+                    AICFeature.TeleportToPlace()
+                    return
                 end
 
                 if Intruder then

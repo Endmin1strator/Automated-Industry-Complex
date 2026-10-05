@@ -79,6 +79,14 @@ return {
             return false
         end
 
+        --// Whether the checks that leave the server (Auto Block's hop from a
+        --// blocked player, Leave On Danger Group) leave this player alone.
+        --// Prompting a block always skips whitelisted players; only leaving
+        --// follows Whitelist Skips Safety.
+        function AutoBlock:IsSafetyExempt(UserId)
+            return Feature.WhitelistSkipsSafety.Enabled == true and self:IsWhitelisted(UserId)
+        end
+
         function AutoBlock:IsBlocked(UserId)
             local Success, BlockedUserIds = pcall(function()
                 return StarterGui:GetCore("GetBlockedUserIds")
@@ -239,6 +247,9 @@ return {
                 BlockSection, "Block Delay (s)", "AUTO_BLOCK_DELAY", true
             )
 
+            AICUI.BindFeatureToggle("WhitelistSkipsSafety", "Whitelist Skips Safety", nil, BlockSection)
+            BlockSection:AddLabel("On: whitelisted players never make Auto Block or Leave On Danger Group leave, even if blocked")
+
             self.WhitelistComponent = BlockSection:AddPriority(
                 "Block Whitelist",
                 CONFIG.BLOCK_WHITELIST or {}
@@ -348,6 +359,9 @@ return {
             end
             AICFeature.IsWhitelisted = function(UserId)
                 return AutoBlock:IsWhitelisted(UserId)
+            end
+            AICFeature.IsSafetyExempt = function(UserId)
+                return AutoBlock:IsSafetyExempt(UserId)
             end
             AICFeature.isBlocked = function(UserId)
                 return AutoBlock:IsBlocked(UserId)
