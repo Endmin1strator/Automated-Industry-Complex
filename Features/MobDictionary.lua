@@ -355,7 +355,7 @@ return {
                 return
             end
 
-            local Remote = Replicated:FindFirstChild(REMOTE_NAME)
+            local Remote = Replicated:FindFirstChild(REMOTE_NAME, true)
 
             if not Remote or not Remote:IsA("RemoteFunction") then
                 Finish("Mob dictionary is not available in this place")
