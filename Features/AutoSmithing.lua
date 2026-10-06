@@ -17,11 +17,11 @@
 --
 -- With Auto Farm on, AutoFarming offers it the frame once the waypoint
 -- route is walked, ahead of Auto Mining. With Auto Farm off it runs alone.
--- The Crafting tab controls live in AutoSmithingUI.
+-- The Crafting tab is built here too, in BuildLateUI (end of the file).
 return {
     Name = "AutoSmithing",
     IsFeature = true,
-    Dependencies = {"Runtime", "SaveConfig", "CombatUtils", "Navigation", "Combat", "DebugVisualizer", "WalkController", "SmithingRecipes", "SmithingMinigame"},
+    Dependencies = {"Runtime", "SaveConfig", "ProfileManager", "Components", "CombatUtils", "Navigation", "Combat", "DebugVisualizer", "WalkController", "SmithingRecipes", "SmithingMinigame"},
 
     Start = function(Context)
         local Runtime = Context.Runtime
@@ -63,6 +63,11 @@ return {
         local STATUS_INTERVAL = 0.25
         local BILLBOARD_INTERVAL = 0.5
         local BILLBOARD_RANGE = 150
+        --// "Set Smithing Table" takes the nearest table within this.
+        local SET_TABLE_MAX_DISTANCE = 20
+        --// The skill, table and Recipe Status lines are redrawn this often.
+        local INFO_INTERVAL = 1
+        local NO_MATERIALS_OPTION = "No materials found"
 
         local Feature = {
             Name = "AutoSmithing",
@@ -99,6 +104,15 @@ return {
         }
 
         local S = Feature.S
+
+        --// The Crafting tab controls, built in BuildLateUI.
+        local CraftUI = {
+            MaterialPicker = {},
+            RecipeLabels = {},
+            LastInfo = 0,
+            --// Redraws the skill, table and Recipe Status lines.
+            RefreshInfo = nil,
+        }
 
         local function IsCommitted()
             return S.State == "Starting"
@@ -674,6 +688,11 @@ return {
                 S.LastBillboards = now
                 UpdateBillboards(now)
             end
+
+            if CraftUI.RefreshInfo and now - CraftUI.LastInfo >= INFO_INTERVAL then
+                CraftUI.LastInfo = now
+                CraftUI.RefreshInfo()
+            end
         end
 
         --// Starts a craft order of Count crafts of Name, replacing any
@@ -731,6 +750,236 @@ return {
             Context.Lifetime.Disconnect(S.EndedConnection)
             S.EndedConnection = nil
         end)
+
+        ------------------------------------------------------------------------
+        --// Crafting tab
+        ------------------------------------------------------------------------
+
+        --// The Crafting tab: the Auto Smithing toggle and status, the
+        --// smithing table choice, the Recipe Priority list with a Target per
+        --// recipe (filled from the Recipe Browser window), what each recipe
+        --// is waiting on, and the Material Reserve list. The lists are saved
+        --// as SMITH_RECIPES and SMITH_RESERVES; the table on the place config
+        --// (SMITH_TABLE).
+        --//
+        --// Built late, not in Start: the Recipe Browser (SmithingBrowser ->
+        --// SmithingDetail) depends on this module, so it only exists once
+        --// every module has started. Nothing else adds to the Crafting tab,
+        --// so the layout is the same.
+        local function BuildCraftSection(Section, Browser)
+            local AICConfig = Context.AICConfig
+            local AICProfile = Context.AICProfile
+            local AICUI = Context.AICUI
+            local MAX_STACK = Context.SaveConfig.ITEM_MAX_STACK
+
+            AICUI.BindFeatureToggle("AutoSmithing", "Auto Smithing", function(Enabled)
+                if not Enabled then
+                    Feature:Reset()
+                end
+            end, Section)
+
+            --// Update writes the status; RefreshInfo the other two.
+            UIRef.SmithStatusLabel = Section:AddLabel("STATUS  OFF")
+            UIRef.SmithSkillLabel = Section:AddLabel("SMITHING SKILL  0")
+            UIRef.SmithTableLabel = Section:AddLabel("TABLE  NEAREST")
+
+            local function SetTable(Position, Status)
+                if not AICProfile.S.ActiveProfileName then
+                    AICUI.SetProfileStatus("CREATE / LOAD PROFILE FIRST")
+                    return
+                end
+
+                Runtime:GetPlaceConfig().SMITH_TABLE = Position and AICConfig.RoundVector3(Position) or nil
+                AICProfile.SaveActiveProfile()
+                Feature:Reset()
+                NotifyAction("AUTO SMITHING", Status)
+            end
+
+            Section:AddButton("Set Smithing Table", function()
+                local Table, Distance = Feature:GetNearestTable()
+
+                if not Table or Distance > SET_TABLE_MAX_DISTANCE then
+                    NotifyAction("AUTO SMITHING", string.format("Stand within %d studs of a smithing table", SET_TABLE_MAX_DISTANCE))
+                    return
+                end
+
+                SetTable(Feature:GetTablePosition(Table), "Smithing table set")
+            end)
+
+            Section:AddButton("Use Nearest Table", function()
+                SetTable(nil, "Using the nearest smithing table")
+            end)
+
+            UIRef.RecipePriorityComponent = Section:AddPriority("Recipe Priority", {}, {
+                Values = true,
+                ValueLabel = "Target",
+                Default = MAX_STACK,
+                Min = 0,
+                Max = MAX_STACK,
+            })
+
+            local LoadRecipeList = AICUI.BindCountList(UIRef.RecipePriorityComponent, "SMITH_RECIPES", "Target", function()
+                Feature:Rescan()
+                Browser:SyncPriority()
+                CraftUI.LastInfo = 0
+            end)
+
+            LoadRecipeList()
+
+            --// The Recipe Browser's PRIORITY tab is the same list.
+            Browser.OnPriorityChanged = function()
+                LoadRecipeList()
+                Feature:Rescan()
+                CraftUI.LastInfo = 0
+            end
+
+            --// Recipes are found, added and crafted now in the Recipe Browser.
+            Section:AddButton("Open Recipe Browser", function()
+                Browser:Toggle()
+            end)
+
+            Section:AddButton("Refresh Recipes", function()
+                Browser:Refresh()
+                AICUI.RefreshMaterialPicker(true)
+            end)
+
+            return LoadRecipeList
+        end
+
+        local function DescribeRecipeState(Index, State)
+            local Head = string.format("#%d  %s  %d/%d", Index, State.Name, State.Have, State.Target)
+
+            if not State.Known then
+                return Head .. "  //  UNKNOWN RECIPE"
+            elseif State.Locked then
+                return string.format("%s  //  LOCKED  SKILL %s / %s", Head, tostring(State.Recipe.Skill), tostring(State.Skill))
+            elseif State.Remaining <= 0 then
+                return Head .. "  //  DONE"
+            elseif IsPaused(State.Name) then
+                return Head .. "  //  PAUSED AFTER FAILURES"
+            elseif State.Craftable < 1 and State.Short then
+                return string.format("%s  //  NEED %s %d/%d", Head, State.Short.Name, State.Short.Have, State.Short.Need)
+            end
+
+            return string.format("%s  //  READY  x%d", Head, math.min(State.Craftable, State.Remaining))
+        end
+
+        --// Recipe Status: one line per recipe in the list, from a pool of
+        --// labels; spare ones are hidden.
+        local function RefreshRecipeStatus(StatusSection)
+            local Lines = {}
+
+            for Index, State in ipairs(Recipes:GetPlan()) do
+                Lines[Index] = DescribeRecipeState(Index, State)
+            end
+
+            if #Lines == 0 then
+                Lines[1] = "NO RECIPES IN PRIORITY"
+            end
+
+            for Index, Text in ipairs(Lines) do
+                local Label = CraftUI.RecipeLabels[Index]
+
+                if not Label then
+                    Label = StatusSection:AddLabel(Text)
+                    CraftUI.RecipeLabels[Index] = Label
+                end
+
+                if Label.Text ~= Text then
+                    Label.Text = Text
+                end
+
+                Label.Visible = true
+            end
+
+            for Index = #Lines + 1, #CraftUI.RecipeLabels do
+                CraftUI.RecipeLabels[Index].Visible = false
+            end
+        end
+
+        --// Material Reserve: materials kept out of crafting.
+        local function BuildReserveSection(ReserveSection)
+            local AICUI = Context.AICUI
+
+            UIRef.MaterialReserveComponent = ReserveSection:AddPriority("Keep In Inventory", {}, {
+                Values = true,
+                ValueLabel = "Keep",
+                Default = 0,
+                Min = 0,
+                Max = Context.SaveConfig.ITEM_MAX_STACK,
+            })
+
+            local ReserveList = UIRef.MaterialReserveComponent
+
+            local LoadReserveList = AICUI.BindCountList(ReserveList, "SMITH_RESERVES", "Keep", function()
+                Feature:Rescan()
+                AICUI.RefreshMaterialPicker(true)
+                CraftUI.LastInfo = 0
+            end)
+
+            LoadReserveList()
+
+            local function AddReserve(Name)
+                if Name ~= NO_MATERIALS_OPTION and ReserveList:Add(Name, 0) then
+                    NotifyAction("AUTO SMITHING", "Reserve added for " .. Name .. "; set how many to keep")
+                end
+            end
+
+            --// Materials any recipe uses that have no reserve yet.
+            function AICUI.RefreshMaterialPicker(Force)
+                local Options = {}
+
+                for _, Name in ipairs(Recipes:GetMaterialNames()) do
+                    if not table.find(ReserveList.Priority, Name) then
+                        table.insert(Options, Name)
+                    end
+                end
+
+                if #Options == 0 then
+                    Options = { NO_MATERIALS_OPTION }
+                end
+
+                AICUI.RefreshDropdown(CraftUI.MaterialPicker, ReserveSection, "Add Material", Options, AddReserve, Force)
+            end
+
+            AICUI.RefreshMaterialPicker(true)
+            return LoadReserveList
+        end
+
+        function Feature:BuildLateUI()
+            local Section = UIRef.CraftSection
+            local Browser = Context.SmithingBrowser
+            local AICUI = Context.AICUI
+
+            if not Section or not Browser then
+                return
+            end
+
+            local LoadRecipeList = BuildCraftSection(Section, Browser)
+            local StatusSection = UIRef.CraftTab:AddSection("Recipe Status")
+            local LoadReserveList = BuildReserveSection(UIRef.CraftTab:AddSection("Material Reserve"))
+
+            function CraftUI.RefreshInfo()
+                UIRef.SmithSkillLabel.Text = "SMITHING SKILL  " .. tostring(Recipes:GetSkill())
+
+                local Saved = Runtime:GetPlaceConfig().SMITH_TABLE
+                UIRef.SmithTableLabel.Text = Saved
+                    and string.format("TABLE  SET  (%.0f, %.0f, %.0f)", Saved.X, Saved.Y, Saved.Z)
+                    or "TABLE  NEAREST"
+
+                RefreshRecipeStatus(StatusSection)
+            end
+
+            --// Called from updateFeatureButtons on every profile load.
+            function AICUI.RefreshSmithingUI()
+                LoadRecipeList()
+                LoadReserveList()
+                Browser:SyncPriority()
+                AICUI.RefreshMaterialPicker(true)
+                Feature:Reset(true)
+                CraftUI.LastInfo = 0
+            end
+        end
 
         return Feature
     end,

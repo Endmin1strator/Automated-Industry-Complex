@@ -302,6 +302,11 @@
 > - บรรทัด LUCK บอกค่า Luck ของเราและ % ที่บวกให้ทุกรอบ อัปเดตเองเมื่อ Luck เปลี่ยน · ไม่รวมไอเทมจาก event
 > - แยกส่วนรายละเอียดไปไฟล์ `Features/MobDetail.lua` · รายการซ้ายขึ้น LV และจำนวนดรอปที่รู้แล้ว
 
+### [x] Refactor: รวมไฟล์ UI ของ Mining / Smithing เข้ากับตัวฟีเจอร์
+> ทำแล้ว (v3.03): `AutoMiningUI.lua` รวมเข้า `AutoMining.lua` และ `AutoSmithingUI.lua` รวมเข้า `AutoSmithing.lua` (mining กับ smithing ยังแยกไฟล์กันเหมือนเดิม)
+> - หน้าตาและตำแหน่งปุ่มในแท็บ Mining / Crafting เหมือนเดิมทุกอย่าง
+> - แท็บ Crafting สร้างใน `BuildLateUI` ของ AutoSmithing เพราะ Recipe Browser (SmithingBrowser → SmithingDetail) ต้องพึ่ง AutoSmithing ก่อน ถ้าสร้างใน Start จะวนพึ่งกันเอง
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

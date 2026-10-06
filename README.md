@@ -4,12 +4,12 @@ This revision explicitly separates the feature modules requested:
 
 - AutoFarming.lua
 - AutoBlock.lua
-- AutoSmithing.lua (with AutoSmithingUI.lua, SmithingRecipes.lua and SmithingMinigame.lua)
+- AutoSmithing.lua (Crafting tab included; with SmithingRecipes.lua and SmithingMinigame.lua)
 - AutoPatrol.lua
 - ReturnToFarmZone.lua
 - IgnoreFarmZone.lua
 - AutoHeal.lua
-- AutoMining.lua (with AutoMiningUI.lua, Minezone.lua and WalkController.lua)
+- AutoMining.lua (Mining tab controls included; with Minezone.lua and WalkController.lua)
 - AutoRefill.lua (Refill Booster: resets when a boost runs out)
 - SafeBoosterReset.lua
 - AntiAFK.lua

@@ -18,11 +18,12 @@
 --   * Each ore shows its state on a billboard through the Debug Visualizer
 --     ("Debug Ore Status").
 --
--- The Mining tab controls live in AutoMiningUI; the walking in WalkController.
+-- The Auto Mining section of the Mining tab is built here too (end of the
+-- file); the walking is WalkController's.
 return {
     Name = "AutoMining",
     IsFeature = true,
-    Dependencies = {"Runtime", "SaveConfig", "ProfileManager", "Components", "CombatUtils", "Navigation", "Combat", "DebugVisualizer", "WalkController"},
+    Dependencies = {"Runtime", "SaveConfig", "ProfileManager", "Components", "CombatUtils", "Navigation", "Combat", "DebugVisualizer", "WalkController", "Minezone"},
 
     Start = function(Context)
         local SaveConfig = Context.SaveConfig
@@ -72,6 +73,7 @@ return {
         local BILLBOARD_INTERVAL = 0.3
         local BILLBOARD_RANGE = 150
         local ORE_PICKER_REFRESH_DELAY = 1
+        local NO_ORES_OPTION = "No ores found"
 
         local Feature = {
             Name = "AutoMining",
@@ -793,7 +795,7 @@ return {
         end)
 
         ------------------------------------------------------------------------
-        --// For AutoMiningUI
+        --// Control
         ------------------------------------------------------------------------
 
         --// Drops the current job. ClearUnreachable also forgets every node
@@ -821,6 +823,107 @@ return {
         Context.Lifetime.OnEnd(function()
             Context.Lifetime.Disconnect(S.MaterialConnections)
         end)
+
+        ------------------------------------------------------------------------
+        --// Mining tab
+        ------------------------------------------------------------------------
+
+        --// The Auto Mining section: the toggle, the status line, the Ore
+        --// Priority list with a Target per ore (saved as MINE_ORES), and the
+        --// ways to add an ore.
+        local function BuildMineSection(Section)
+            local OrePicker = {}
+
+            AICUI.BindFeatureToggle("AutoMining", "Auto Mining", function(Enabled)
+                if not Enabled then
+                    Feature:Reset()
+                elseif #(Runtime:GetPlaceConfig().MINE_ZONES or {}) == 0 then
+                    NotifyAction("AUTO MINING", "Add a mine zone first; ores outside one are never mined.", 5)
+                end
+            end, Section)
+
+            --// Update writes the text.
+            UIRef.MineStatusLabel = Section:AddLabel("STATUS  OFF")
+
+            UIRef.OrePriorityComponent = Section:AddPriority("Ore Priority", {}, {
+                Values = true,
+                ValueLabel = "Target",
+                Default = MAX_STACK,
+                Min = 0,
+                Max = MAX_STACK,
+            })
+
+            local OreList = UIRef.OrePriorityComponent
+
+            --// The list is the source of truth while editing; CONFIG follows it.
+            local LoadOreList = AICUI.BindCountList(OreList, "MINE_ORES", "Target", function()
+                Feature:Rescan()
+                AICUI.RefreshOrePicker(true)
+            end)
+
+            LoadOreList()
+
+            local function AddOre(Name)
+                Name = tostring(Name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+
+                if Name == "" or Name == NO_ORES_OPTION then
+                    return
+                end
+
+                if not OreList:Add(Name, MAX_STACK) then
+                    NotifyAction("AUTO MINING", Name .. " is already in the list")
+                    return
+                end
+
+                NotifyAction("AUTO MINING", "Added " .. Name)
+            end
+
+            --// Loaded ores not yet in the list. Rebuilt only when that set
+            --// changes, never while open (unless forced by the user), and in
+            --// its old slot, like the target pickers.
+            function AICUI.RefreshOrePicker(Force)
+                local Options = {}
+
+                for _, Name in ipairs(Feature:GetLoadedOreNames()) do
+                    if not table.find(OreList.Priority, Name) then
+                        table.insert(Options, Name)
+                    end
+                end
+
+                if #Options == 0 then
+                    Options = { NO_ORES_OPTION }
+                end
+
+                AICUI.RefreshDropdown(OrePicker, Section, "Add Ore", Options, AddOre, Force)
+            end
+
+            AICUI.RefreshOrePicker(true)
+
+            Section:AddButton("Refresh Ore List", function()
+                AICUI.RefreshOrePicker(true)
+            end)
+
+            --// For ores not loaded right now (streamed out with distance).
+            UIRef.OreNameBox = Section:AddTextbox("Ore Name", "", function() end)
+
+            Section:AddButton("Add Ore By Name", function()
+                AddOre(UIRef.OreNameBox:Get())
+                UIRef.OreNameBox:Set("")
+            end)
+
+            --// Called from updateFeatureButtons on every profile load.
+            function AICUI.RefreshMiningUI()
+                LoadOreList()
+                AICUI.RefreshOrePicker(true)
+                AICUI.RefreshMineZoneList()
+                AICUI.RefreshMineZonePicker()
+                Feature:Reset(true)
+            end
+        end
+
+        if UIRef.MineSection then
+            BuildMineSection(UIRef.MineSection)
+        end
 
         return Feature
     end,

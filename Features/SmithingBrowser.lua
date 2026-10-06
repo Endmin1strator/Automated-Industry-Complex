@@ -44,7 +44,7 @@ return {
         local Browser = {
             Name = "SmithingBrowser",
             IsFeature = true,
-            --// Set by AutoSmithingUI: the PRIORITY tab changed the list.
+            --// Set by AutoSmithing: the PRIORITY tab changed the list.
             OnPriorityChanged = nil,
             S = {
                 Built = false,

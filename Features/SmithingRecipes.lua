@@ -1,6 +1,6 @@
 -- SmithingRecipes reads the game's crafting recipes and answers what can be
--- crafted right now. Shared by AutoSmithing (which recipe to craft next) and
--- AutoSmithingUI (what each recipe in the list is waiting on).
+-- crafted right now. Shared by AutoSmithing (which recipe to craft next, and
+-- what each recipe in its Recipe Status list is waiting on).
 --
 -- A recipe is a child of ReplicatedStorage.CraftingRecipes holding
 --   CraftingSkill  the SmithingSkill a player needs to craft it
