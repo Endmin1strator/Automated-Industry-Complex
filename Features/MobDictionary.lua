@@ -48,6 +48,11 @@ return {
         local ROUNDING_EPSILON = 1e-9
         --// Guard against a broken roll count.
         local MAX_ROUNDS = 1000
+        --// A StatusEffect holding one of these means no effect.
+        local NO_STATUS = { none = true, ["nil"] = true, ["0"] = true }
+        --// Seconds before a server that never answers counts as failed, so
+        --// RELOAD can ask again.
+        local LOAD_TIMEOUT = 20
 
         local Dictionary = {
             Name = "MobDictionary",
@@ -69,6 +74,9 @@ return {
                 --// Entity name -> drops read from a live one (ReadDrops).
                 Drops = {},
                 LuckCap = nil,
+                LuckCapRequested = false,
+                --// Bumped by every load; a stale or timed-out answer is dropped.
+                LoadToken = 0,
             },
         }
 
@@ -140,7 +148,14 @@ return {
                 return nil
             end
 
-            local Status = { Name = tostring(Raw.Value or "Unknown"), Props = {} }
+            --// Most mobs carry an empty StatusEffect: they have none.
+            local Effect = Raw.Value
+
+            if Effect == nil or Effect == false or Effect == "" or NO_STATUS[string.lower(tostring(Effect))] then
+                return nil
+            end
+
+            local Status = { Name = tostring(Effect), Props = {} }
 
             for Name, Child in pairs(Raw) do
                 if Name ~= "Value" then
@@ -349,11 +364,23 @@ return {
 
             S.Loading = true
             S.Error = nil
+            S.LoadToken += 1
+
+            local Token = S.LoadToken
+
+            --// InvokeServer can wait forever; give up on it after a while.
+            task.delay(LOAD_TIMEOUT, function()
+                if Context.Lifetime.Alive and S.Loading and S.LoadToken == Token then
+                    S.LoadToken += 1
+                    Finish("The server did not answer. Press RELOAD to try again.")
+                end
+            end)
 
             task.spawn(function()
                 local Ok, Result = pcall(Remote.InvokeServer, Remote, REMOTE_ARGUMENT)
 
-                if not Context.Lifetime.Alive then
+                --// Stopped, timed out, or a newer load is running.
+                if not Context.Lifetime.Alive or S.LoadToken ~= Token then
                     return
                 end
 
@@ -436,11 +463,19 @@ return {
                 local Name = Entity.Value
                 Counts[Name] = (Counts[Name] or 0) + 1
 
-                --// No MaxDrops at all: it drops nothing.
-                if not S.Drops[Name] then
+                --// No MaxDrops: it drops nothing. An empty record is read
+                --// again from the next one, in case this one had not
+                --// finished replicating.
+                local Known = S.Drops[Name]
+
+                if not Known or #Known == 0 then
                     local MaxDrops = Config:FindFirstChild("MaxDrops")
-                    S.Drops[Name] = MaxDrops and ReadDrops(MaxDrops) or {}
-                    NewDrops = true
+                    local Drops = MaxDrops and ReadDrops(MaxDrops) or {}
+
+                    if not Known or #Drops > 0 then
+                        S.Drops[Name] = Drops
+                        NewDrops = true
+                    end
                 end
             end
 
@@ -457,22 +492,31 @@ return {
             return S.Drops[Name]
         end
 
-        --// Most luck that counts (CoreCommons.PHYSICAL_STAT_MAX).
+        --// Most luck that counts (CoreCommons.PHYSICAL_STAT_MAX). Required in
+        --// the background once, since a require can wait; DEFAULT_LUCK_CAP
+        --// until then or when it cannot be read.
         local function GetLuckCap()
             if S.LuckCap then
                 return S.LuckCap
             end
 
-            local Commons = Replicated:FindFirstChild("CoreCommons")
-            local Ok, Module = false, nil
+            if not S.LuckCapRequested then
+                S.LuckCapRequested = true
 
-            if Commons and Commons:IsA("ModuleScript") then
-                Ok, Module = pcall(require, Commons)
+                task.spawn(function()
+                    local Commons = Replicated:FindFirstChild("CoreCommons")
+                    local Ok, Module = false, nil
+
+                    if Commons and Commons:IsA("ModuleScript") then
+                        Ok, Module = pcall(require, Commons)
+                    end
+
+                    local Cap = Ok and type(Module) == "table" and tonumber(Module.PHYSICAL_STAT_MAX)
+                    S.LuckCap = Cap and Cap > 0 and Cap or DEFAULT_LUCK_CAP
+                end)
             end
 
-            local Cap = Ok and type(Module) == "table" and tonumber(Module.PHYSICAL_STAT_MAX)
-            S.LuckCap = Cap and Cap > 0 and Cap or DEFAULT_LUCK_CAP
-            return S.LuckCap
+            return S.LuckCap or DEFAULT_LUCK_CAP
         end
 
         --// The player's Luck stat, the cap, and the percent it adds to every
@@ -508,8 +552,6 @@ return {
 
             return 1 - Missed, Expected
         end
-
-        return Dictionary
 
         return Dictionary
     end,

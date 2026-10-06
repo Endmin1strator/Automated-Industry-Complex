@@ -366,6 +366,13 @@ return {
                 return
             end
 
+            --// Rows draw their threat once; rebuild them for the new ranks.
+            for _, Row in pairs(S.Rows) do
+                Row.Button:Destroy()
+            end
+
+            table.clear(S.Rows)
+
             local Selected = Detail:GetSelected()
 
             if not Selected or not Dictionary:Get(Selected) then
