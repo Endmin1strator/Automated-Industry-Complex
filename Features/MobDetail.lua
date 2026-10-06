@@ -12,7 +12,7 @@
 --   * ADD TO ENEMY PRIORITY and COPY NAME.
 return {
     Name = "MobDetail",
-    Dependencies = {"Runtime", "Components", "Floating", "MobDictionary"},
+    Dependencies = {"Runtime", "Components", "Floating", "DetailKit", "MobDictionary"},
 
     Start = function(Context)
         local UI = Context.UI
@@ -20,19 +20,20 @@ return {
         local AICCombat = Context.AICCombat
         local AICProfile = Context.AICProfile
         local Floating = Context.Floating
+        local Kit = Context.DetailKit
         local Dictionary = Context.MobDictionary
 
-        local New, Stroke = Floating.New, Floating.Stroke
-        local Label, Button, ClearChildren = Floating.Label, Floating.Button, Floating.ClearChildren
+        local New, Label, Button, ClearChildren = Floating.New, Floating.Label, Floating.Button, Floating.ClearChildren
+        local FormatNumber, FormatPercent, TrimDecimals = Kit.FormatNumber, Kit.FormatPercent, Kit.TrimDecimals
+        local Card, Heading, Note, Badge, Strip, Track, BarRow = Kit.Card, Kit.Heading, Kit.Note, Kit.Badge, Kit.Strip, Kit.Track, Kit.BarRow
 
-        local TILE_HEIGHT = 54
         local STAT_BAR_HEIGHT = 30
         local DROP_ROW_HEIGHT = 42
         local THREAT_SEGMENTS = 5
         --// The game announces a drop of 1 in this many or rarer as rare.
         local RARE_RARITY = 10
 
-        local HEALTH_COLOR = Color3.fromRGB(96, 196, 120)
+        local HEALTH_COLOR = Kit.GOOD_COLOR
         local EXTREME_COLOR = Color3.fromRGB(255, 60, 60)
 
         local Detail = {
@@ -54,51 +55,8 @@ return {
         local Theme, Scroll
 
         ------------------------------------------------------------------------
-        --// Formatting
+        --// Describing
         ------------------------------------------------------------------------
-
-        local function TrimDecimals(Text)
-            return (string.gsub(string.gsub(Text, "0+$", ""), "%.$", ""))
-        end
-
-        function Detail.FormatNumber(Value)
-            if Value == math.floor(Value) and math.abs(Value) < 1e15 then
-                local Text = tostring(math.floor(math.abs(Value)))
-                local Grouped = string.reverse((string.gsub(string.reverse(Text), "(%d%d%d)", "%1,")))
-                Grouped = string.gsub(Grouped, "^,", "")
-                return (Value < 0 and "-" or "") .. Grouped
-            end
-
-            return TrimDecimals(string.format("%.2f", Value))
-        end
-
-        local FormatNumber = Detail.FormatNumber
-
-        local function FormatValue(Value)
-            local Type = typeof(Value)
-
-            if Type == "number" then
-                return FormatNumber(Value)
-            elseif Type == "boolean" then
-                return Value and "YES" or "NO"
-            elseif Type == "Instance" then
-                return Value.Name
-            elseif Value == nil or Value == "" then
-                return "-"
-            end
-
-            return tostring(Value)
-        end
-
-        local function FormatPercent(Fraction)
-            local Percent = Fraction * 100
-
-            if Percent > 0 and Percent < 1 then
-                return string.format("%.2f%%", Percent)
-            end
-
-            return TrimDecimals(string.format("%.1f", Percent)) .. "%"
-        end
 
         --// Average kills for one drop.
         local function FormatKills(Chance)
@@ -163,150 +121,6 @@ return {
         end
 
         ------------------------------------------------------------------------
-        --// Small pieces
-        ------------------------------------------------------------------------
-
-        local function Strip(Parent, Height, Order, Wraps)
-            local Frame = New("Frame", {
-                Parent = Parent,
-                BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, Height),
-                AutomaticSize = Wraps and Enum.AutomaticSize.Y or Enum.AutomaticSize.None,
-                LayoutOrder = Order,
-            })
-
-            local Layout = New("UIListLayout", {
-                Parent = Frame,
-                FillDirection = Enum.FillDirection.Horizontal,
-                SortOrder = Enum.SortOrder.LayoutOrder,
-                VerticalAlignment = Enum.VerticalAlignment.Center,
-                Padding = UDim.new(0, 4),
-            })
-
-            --// Wraps is missing on older clients; tags then run on in one line.
-            if Wraps then
-                pcall(function()
-                    Layout.Wraps = true
-                end)
-            end
-
-            return Frame
-        end
-
-        local function Card(Order)
-            local Frame = New("Frame", {
-                Parent = Scroll,
-                BackgroundColor3 = Theme.Element,
-                BackgroundTransparency = 0.1,
-                BorderSizePixel = 0,
-                Size = UDim2.new(1, -6, 0, 0),
-                AutomaticSize = Enum.AutomaticSize.Y,
-                LayoutOrder = Order,
-            })
-
-            Stroke(Frame, Theme.BorderDim, 0.2)
-            Floating.Padding(Frame, 10, 8)
-            Floating.List(Frame, 6)
-            return Frame
-        end
-
-        local function Heading(Parent, Text, Order)
-            return Label(Parent, Text, 9, {
-                TextColor3 = Theme.TextMuted,
-                Font = Floating.Fonts.Bold,
-                LayoutOrder = Order,
-            })
-        end
-
-        local function Note(Parent, Text, Order, Color)
-            return Label(Parent, Text, 9, {
-                TextColor3 = Color or Theme.TextMuted,
-                TextWrapped = true,
-                TextTruncate = Enum.TextTruncate.None,
-                AutomaticSize = Enum.AutomaticSize.Y,
-                LayoutOrder = Order,
-            })
-        end
-
-        local function Badge(Parent, Text, Color, Order)
-            local Object = Label(Parent, Text, 9, {
-                Size = UDim2.fromOffset(0, 18),
-                AutomaticSize = Enum.AutomaticSize.X,
-                BackgroundColor3 = Color,
-                BackgroundTransparency = 0.82,
-                TextColor3 = Color,
-                Font = Floating.Fonts.Bold,
-                TextXAlignment = Enum.TextXAlignment.Center,
-                TextTruncate = Enum.TextTruncate.None,
-                LayoutOrder = Order,
-            })
-
-            Stroke(Object, Color, 0.5)
-            New("UIPadding", { Parent = Object, PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7) })
-            return Object
-        end
-
-        local function SetBadge(Object, Text, Color)
-            Object.Text = Text
-            Object.TextColor3 = Color
-            Object.BackgroundColor3 = Color
-
-            local BadgeStroke = Object:FindFirstChildOfClass("UIStroke")
-
-            if BadgeStroke then
-                BadgeStroke.Color = Color
-            end
-        end
-
-        --// A thin track with bars from 0 laid over it, first one at the back.
-        local function Track(Parent, Y, Bars)
-            local Back = New("Frame", {
-                Parent = Parent,
-                Position = UDim2.fromOffset(0, Y),
-                Size = UDim2.new(1, 0, 0, 6),
-                BackgroundColor3 = Theme.Background,
-                BorderSizePixel = 0,
-            })
-
-            for _, Bar in ipairs(Bars) do
-                if Bar.Fraction > 0 then
-                    New("Frame", {
-                        Parent = Back,
-                        Size = UDim2.new(math.max(Bar.Fraction, 0.01), 0, 1, 0),
-                        BackgroundColor3 = Bar.Color,
-                        BorderSizePixel = 0,
-                    })
-                end
-            end
-        end
-
-        --// A name on the left and a value on the right, over a track.
-        local function BarRow(Parent, Height, Order, Name, Value, ValueColor)
-            local Holder = New("Frame", {
-                Parent = Parent,
-                BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, Height),
-                LayoutOrder = Order,
-            })
-
-            Label(Holder, Name, 9, {
-                Size = UDim2.new(0.55, 0, 0, 14),
-                TextColor3 = Theme.TextSecondary,
-            })
-
-            Label(Holder, Value, 9, {
-                AnchorPoint = Vector2.new(1, 0),
-                Position = UDim2.fromScale(1, 0),
-                Size = UDim2.new(0.45, 0, 0, 14),
-                TextColor3 = ValueColor or Theme.Text,
-                Font = Floating.Fonts.Bold,
-                TextXAlignment = Enum.TextXAlignment.Right,
-            })
-
-            return Holder
-        end
-
-        ------------------------------------------------------------------------
         --// Sections
         ------------------------------------------------------------------------
 
@@ -340,7 +154,7 @@ return {
         end
 
         local function BuildHero(Entry, Order)
-            local Hero = Card(Order)
+            local Hero = Card(Scroll, Order)
 
             Label(Hero, string.upper(Entry.Name), 16, {
                 Font = Floating.Fonts.Bold,
@@ -368,7 +182,7 @@ return {
         end
 
         --// Health, speed and the first combat number in big type.
-        local function PickTileStats(Entry)
+        local function BuildTiles(Entry, Order)
             local Picked = {}
 
             for _, Key in ipairs({ "Humanoid.MaxHealth", "Humanoid.WalkSpeed" }) do
@@ -386,56 +200,23 @@ return {
                 end
             end
 
-            return Picked
-        end
+            local Tiles = {}
 
-        local function BuildTiles(Entry, Order)
-            local Picked = PickTileStats(Entry)
-
-            if #Picked == 0 then
-                return
-            end
-
-            local Row = Strip(Scroll, TILE_HEIGHT, Order)
-            Row.Size = UDim2.new(1, -6, 0, TILE_HEIGHT)
-
-            for Index, Stat in ipairs(Picked) do
-                local Color = GetStatColor(Stat)
+            for _, Stat in ipairs(Picked) do
                 local _, Rank, Total = Dictionary.GetScale(Stat, Entry.Kind)
-                local Tile = New("Frame", {
-                    Parent = Row,
-                    BackgroundColor3 = Theme.Element,
-                    BackgroundTransparency = 0.1,
-                    BorderSizePixel = 0,
-                    Size = UDim2.new(1 / #Picked, -4, 1, 0),
-                    LayoutOrder = Index,
-                })
 
-                Stroke(Tile, Theme.BorderDim, 0.2)
-
-                New("Frame", {
-                    Parent = Tile,
-                    BackgroundColor3 = Color,
-                    BorderSizePixel = 0,
-                    Size = UDim2.new(1, 0, 0, 2),
-                })
-
-                Label(Tile, FormatNumber(Stat.Value), 18, {
-                    Position = UDim2.fromOffset(10, 7),
-                    Size = UDim2.new(1, -20, 0, 22),
-                    Font = Floating.Fonts.Bold,
-                    TextColor3 = Color,
-                })
-
-                Label(Tile, Stat.Label .. (Rank and string.format("  ·  #%d OF %d", Rank, Total) or ""), 8, {
-                    Position = UDim2.fromOffset(10, 33),
-                    Size = UDim2.new(1, -20, 0, 12),
-                    TextColor3 = Theme.TextMuted,
+                table.insert(Tiles, {
+                    Value = FormatNumber(Stat.Value),
+                    Label = Stat.Label,
+                    Note = Rank and string.format("#%d OF %d", Rank, Total) or nil,
+                    Color = GetStatColor(Stat),
                 })
             end
+
+            Kit.Tiles(Scroll, Order, Tiles)
         end
 
-        --// One item: the chance per kill with Luck (yellow) over the chance
+        --// One item: the chance per kill with Luck (bright) over the chance
         --// without it (grey), and how it is rolled.
         local function BuildDropRow(Parent, Drop, LuckPercent, Order)
             local Chance, Expected = Dictionary.GetDropOdds(Drop, LuckPercent)
@@ -477,7 +258,7 @@ return {
         end
 
         local function BuildDrops(Entry, Order)
-            local DropCard = Card(Order)
+            local DropCard = Card(Scroll, Order)
             local Luck, Cap, LuckPercent = Dictionary.GetLuck()
 
             Heading(DropCard, "DROPS PER KILL", 0)
@@ -526,7 +307,7 @@ return {
 
                 if #Stats > 0 then
                     if not BarsCard then
-                        BarsCard = Card(Order)
+                        BarsCard = Card(Scroll, Order)
                         Heading(BarsCard, "COMPARED TO THE STRONGEST " .. string.upper(Entry.Kind), 0)
                     end
 
@@ -543,14 +324,6 @@ return {
             end
         end
 
-        local function AddTags(Parent, List, Color, Order)
-            local Flow = Strip(Parent, 0, Order, true)
-
-            for Index, Item in ipairs(List) do
-                Badge(Flow, Item.Label .. "  " .. FormatValue(Item.Value), Color, Index)
-            end
-        end
-
         --// Values that are not numbers, and the status effect.
         local function BuildTraits(Entry, Order)
             local Traits = {}
@@ -562,13 +335,13 @@ return {
             end
 
             if #Traits > 0 then
-                local TraitsCard = Card(Order)
+                local TraitsCard = Card(Scroll, Order)
                 Heading(TraitsCard, "TRAITS", 0)
-                AddTags(TraitsCard, Traits, Theme.TextSecondary, 1)
+                Kit.Tags(TraitsCard, Traits, Theme.TextSecondary, 1)
             end
 
             if Entry.Status then
-                local StatusCard = Card(Order + 1)
+                local StatusCard = Card(Scroll, Order + 1)
                 Heading(StatusCard, "STATUS EFFECT", 0)
 
                 Label(StatusCard, "☠  " .. string.upper(Entry.Status.Name), 13, {
@@ -578,7 +351,7 @@ return {
                 })
 
                 if #Entry.Status.Props > 0 then
-                    AddTags(StatusCard, Entry.Status.Props, Theme.Warning, 2)
+                    Kit.Tags(StatusCard, Entry.Status.Props, Theme.Warning, 2)
                 end
             end
         end
@@ -705,7 +478,7 @@ return {
             end
 
             if S.LiveBadge and S.Selected then
-                SetBadge(S.LiveBadge, DescribeLive(S.Selected))
+                Kit.SetBadge(S.LiveBadge, DescribeLive(S.Selected))
             end
 
             UpdatePriorityButton()

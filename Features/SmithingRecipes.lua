@@ -73,6 +73,12 @@ return {
             return S.Assets
         end
 
+        --// The game's assets (item name -> asset), or nil while they cannot
+        --// be read. Shared with the Asset Explorer.
+        function Recipes:GetAssets()
+            return GetAssets()
+        end
+
         --// An asset is an Instance with value children; a plain table of the
         --// same shape is read the same way.
         local function GetChild(Asset, ChildName)

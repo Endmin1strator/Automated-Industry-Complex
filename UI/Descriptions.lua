@@ -100,6 +100,7 @@ return {
             ["Use Nearest Table"] = "Uses whichever table is nearest",
             ["Recipe Priority"] = "Recipes crafted first to last, each until its Target",
             ["Open Recipe Browser"] = "Find recipes, craft now and edit the priority",
+            ["Open Asset Explorer"] = "Every item: stats, price, recipe, drops and uses",
             ["Refresh Recipes"] = "Reloads the recipes and materials",
             ["Keep In Inventory"] = "Materials Auto Smithing never uses below this count",
             ["Add Material"] = "Adds a material to keep a reserve of",

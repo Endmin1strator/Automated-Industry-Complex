@@ -307,6 +307,16 @@
 > - หน้าตาและตำแหน่งปุ่มในแท็บ Mining / Crafting เหมือนเดิมทุกอย่าง
 > - แท็บ Crafting สร้างใน `BuildLateUI` ของ AutoSmithing เพราะ Recipe Browser (SmithingBrowser → SmithingDetail) ต้องพึ่ง AutoSmithing ก่อน ถ้าสร้างใน Start จะวนพึ่งกันเอง
 
+### [x] Asset Explorer: เปิดดูข้อมูลไอเทมทุกชิ้น
+> ทำแล้ว (v3.06): ปุ่ม **Open Asset Explorer** ในแท็บ Crafting (ใต้ Refresh Recipes) เปิดหน้าต่างแบบ Mob Dictionary
+> - ข้อมูลจาก assets ของเกม (`CoreCommons.getAssets` ตัวเดียวกับที่ Recipe Browser ใช้) ไม่ยิง remote · กด **RELOAD** อ่านใหม่
+> - ซ้าย: ไอเทมทั้งหมดเรียงตามประเภท แล้วตามเลเวล · ค้นหาชื่อ / ประเภท / ค่าที่เป็นข้อความ · ชิป ALL / OWNED / แยกตามประเภท · แถบใต้ชื่อ = DMG/DEF/DEX ที่ดีที่สุดเทียบกับประเภทเดียวกัน
+> - ขวา: ประเภท, LV, BOUND/TRADEABLE, UNOBTAINABLE, ต้องมี pass/badge/group, ซื้อด้วย event currency, จำนวนที่มี · ตัวเลขใหญ่ DMG/DEF/DEX พร้อมอันดับ
+> - **VALUE**: ราคาซื้อ (`Worth`) และราคาขาย 35% (45% ถ้ามี Agility pass) ตามโค้ด server · ไอเทมที่ต้องใช้ pass/badge/group/event currency ขายไม่ได้
+> - **HOW TO GET**: สูตรที่ทำได้ (วัตถุดิบเทียบของในกระเป๋า) + มอนที่ดรอป พร้อม % ต่อการฆ่า (มอนที่เคยเจอในเซิร์ฟรอบนี้ จาก Mob Dictionary) · **USED IN**: สูตรที่ใช้ไอเทมนี้
+> - ทุกค่าตัวเลขเป็นแถบเทียบกับตัวที่ดีที่สุดในประเภท, ค่าอื่นเป็นป้าย, status effect · ปุ่ม **COPY NAME** / **OPEN RECIPE** (เปิด Recipe Browser ที่สูตรนั้น)
+> - แยกชิ้นส่วนที่ใช้ร่วมกับ Mob Dictionary เป็น `UI/DetailKit.lua` (การ์ด ป้าย แถบ ตัวเลข) และ `UI/BrowserShell.lua` (หน้าต่าง ค้นหา ชิป รายการ) · Mob Dictionary เปลี่ยนไปใช้สองไฟล์นี้ หน้าตาเหมือนเดิม
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair
