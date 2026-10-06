@@ -349,11 +349,11 @@ return {
             local OtherPlayer = Players:GetPlayerByUserId(tonumber(Entry.UserId) or 0)
 
             if Context.AICFeature.IsWhitelisted and Context.AICFeature.IsWhitelisted(Entry.UserId) then
-                Tags ..= "  [WL]"
+                Tags ..= "  [WHITELIST]"
             end
 
             if ServerHop:IsDangerWhitelisted(Entry.UserId) then
-                Tags ..= "  [DANGER WL]"
+                Tags ..= "  [DANGER WHITELIST]"
             end
 
             if OtherPlayer and ServerHop:IsDangerPlayer(OtherPlayer) then
