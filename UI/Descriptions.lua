@@ -49,6 +49,7 @@ return {
             ["Close Combat Range"] = "How far from the target it fights with Safe Combat off",
             ["Target Type"] = "Tie break between targets of equal priority",
             ["Refresh Detected Targets"] = "Reloads the player and mob lists below",
+            ["Open Mob Dictionary"] = "Every mob and boss: health, speed, threat and more",
             ["Enemy Priority"] = "Targets fought first to last",
             ["Min Mobs"] = "Fewest mobs that make a pack worth gathering",
             ["Max Mobs"] = "Most mobs pulled into one pack",
