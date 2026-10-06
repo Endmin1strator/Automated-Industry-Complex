@@ -36,7 +36,7 @@ return {
         local IDLE_SLOW_AFTER = 60
         local IDLE_SCAN_INTERVAL = 2
         --// Failed rounds before a minimized window waits to be restored.
-        local MAX_FAILED_ROUNDS = 3
+        local MAX_FAILED_ROUNDS = 10
         --// Seconds per failed round, so retries slow down, up to the cap. It
         --// keeps retrying until the screen passes.
         local RETRY_DELAY = 2
