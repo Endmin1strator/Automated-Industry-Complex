@@ -4068,8 +4068,10 @@ function Library.SectionMethods:AddDropdown(
         self.Library:_PositionDropdown(button, popup)
     end)
 
+    --// A click outside closes it. Clicks the UI took count too: the floating
+    --// windows and panels are buttons, so a click on them is always taken.
     self.Library:_Connect(UserInputService.InputBegan, function(input, processed)
-        if processed then
+        if processed and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
             return
         end
 

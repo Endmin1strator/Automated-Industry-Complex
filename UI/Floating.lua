@@ -127,7 +127,12 @@ return {
             local Base = Object.BackgroundColor3
 
             UI:_Connect(Object.MouseEnter, function()
-                Base = Object.BackgroundColor3
+                --// A MouseLeave Roblox missed must not make the hover colour
+                --// the one it goes back to.
+                if Object.BackgroundColor3 ~= Theme.ElementHover then
+                    Base = Object.BackgroundColor3
+                end
+
                 Object.BackgroundColor3 = Theme.ElementHover
             end)
 

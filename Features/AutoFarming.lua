@@ -428,7 +428,8 @@ return {
             local RetreatHealthRatio = RetreatHealthPercent / 100
             local AutoHealHealthRatio = AutoHealHealthPercent / 100
             local RecoverHealthPercent = math.min(95, math.max(70, RetreatHealthPercent + 10))
-            local EmergencyHealth = Humanoid.Health <= Humanoid.MaxHealth * RetreatHealthRatio
+            --// 0 = never, not even on the frame health reaches 0.
+            local EmergencyHealth = RetreatHealthRatio > 0 and Humanoid.Health <= Humanoid.MaxHealth * RetreatHealthRatio
             local ShouldHeal      = Humanoid.Health <= Humanoid.MaxHealth * AutoHealHealthRatio
 
             --// Watches every nearby mob rather than only the current target, and
@@ -1002,6 +1003,29 @@ return {
         Context.Lifetime.OnEnd(function()
             Context.Lifetime.Disconnect(AICFeature.S.StaminaConnection)
             AICFeature.S.StaminaConnection = nil
+        end)
+
+        --// The facing constraint sits in the character, which outlives this
+        --// run: left enabled, it would hold the character turned towards the
+        --// last target, and the next run makes its own.
+        Context.Lifetime.OnEnd(function()
+            local FaceOrientation = Runtime:GetFaceOrientation()
+
+            if FaceOrientation then
+                FaceOrientation:Destroy()
+                Runtime:SetFaceOrientation(nil)
+            end
+
+            if AICFeature.S.FaceAttachment then
+                AICFeature.S.FaceAttachment:Destroy()
+                AICFeature.S.FaceAttachment = nil
+            end
+
+            local _, Humanoid = Runtime:GetCharacter()
+
+            if Humanoid and Humanoid.Parent then
+                Humanoid.AutoRotate = true
+            end
         end)
 
         return Feature

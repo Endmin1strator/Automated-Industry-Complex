@@ -420,7 +420,9 @@ return {
                 local Blocked = BlockBeforeLeaving(OtherPlayer)
 
                 --// They left while we waited: nothing to leave for any more.
+                --// Not a failed hop, so it does not use up an attempt.
                 if OtherPlayer.Parent ~= Players then
+                    S.DangerHopAttempts = math.max(S.DangerHopAttempts - 1, 0)
                     S.DangerHopStarted = false
                     S.Teleporting = false
                     SetStatus("IDLE")

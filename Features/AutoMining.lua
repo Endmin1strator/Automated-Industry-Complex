@@ -819,9 +819,11 @@ return {
             return GetLoadedOreNames()
         end
 
-        --// The ore folder outlives this run.
+        --// The ore folder outlives this run, and so does the character:
+        --// give its WalkSpeed back if it was held at 0 for mining.
         Context.Lifetime.OnEnd(function()
             Context.Lifetime.Disconnect(S.MaterialConnections)
+            ReleaseWalkSpeed()
         end)
 
         ------------------------------------------------------------------------
