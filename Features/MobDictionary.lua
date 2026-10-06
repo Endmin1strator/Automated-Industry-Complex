@@ -13,6 +13,10 @@
 -- Numeric stats are also ranked against the other mobs of the same kind
 -- (GetScale), so the window can show each one as a share of the strongest's,
 -- and GetThreat rates a mob by where its health and damage rank among all.
+--
+-- Drops are not in the dictionary: they are read from the first live one of
+-- each mob (Config.MaxDrops), and GetDropOdds works out the chance per kill
+-- the way the server's AwardPlayer rolls it, with the player's Luck.
 return {
     Name = "MobDictionary",
     Dependencies = {"Runtime"},
@@ -24,8 +28,10 @@ return {
         local REMOTE_ARGUMENT = "MobDict"
         --// The server's folder names, and what each is shown as.
         local KIND_BY_FOLDER = { Mobs = "Mob", Bosses = "Boss" }
-        --// Values already shown elsewhere (the mob's name).
-        local HIDDEN_KEYS = { Entity = true }
+        --// Values already shown elsewhere (the mob's name, its drops).
+        local HIDDEN_KEYS = { Entity = true, MaxDrops = true }
+        --// Groups for names the words below would miss or misplace.
+        local EXACT_GROUPS = { Col = "Rewards", LVL = "Core" }
         --// A stat whose name holds one of these words is grouped under it.
         --// Checked in order; the first match wins.
         local GROUP_WORDS = {
@@ -34,6 +40,14 @@ return {
         }
         --// Stats that make a mob dangerous, for the threat meter.
         local THREAT_WORDS = { "damage", "dmg", "attack", "atk", "power", "strength" }
+        --// Luck adds Luck / LUCK_DIVISOR percent to every drop roll, Luck
+        --// capped at CoreCommons.PHYSICAL_STAT_MAX (this when unreadable).
+        local LUCK_DIVISOR = 100
+        local DEFAULT_LUCK_CAP = 500
+        --// Odds like 100 / 3 * 3 land a hair under the integer.
+        local ROUNDING_EPSILON = 1e-9
+        --// Guard against a broken roll count.
+        local MAX_ROUNDS = 1000
 
         local Dictionary = {
             Name = "MobDictionary",
@@ -50,6 +64,11 @@ return {
                 Error = nil,
                 --// Called after every load, whether it worked or not.
                 OnLoaded = nil,
+                --// Entity name -> mobs alive in workspace.Mobs.
+                Live = {},
+                --// Entity name -> drops read from a live one (ReadDrops).
+                Drops = {},
+                LuckCap = nil,
             },
         }
 
@@ -68,6 +87,10 @@ return {
         end
 
         local function GetGroup(Name)
+            if EXACT_GROUPS[Name] then
+                return EXACT_GROUPS[Name]
+            end
+
             for _, Rule in ipairs(GROUP_WORDS) do
                 if HasWord(Name, Rule.Words) then
                     return Rule.Group
@@ -358,34 +381,135 @@ return {
             return S.ByName[Name]
         end
 
-        --// Mobs alive in workspace.Mobs, counted by model name and by their
-        --// Config.Entity, plus the Entity each name is targeted by.
-        function Dictionary:CountLive()
-            local Counts, Entities = {}, {}
-            local Folder = workspace:FindFirstChild("Mobs")
+        ------------------------------------------------------------------------
+        --// Drops and luck
+        ------------------------------------------------------------------------
 
-            for _, Mob in (Folder and Folder:GetChildren() or {}) do
-                if not Mob:IsA("Model") then
-                    continue
-                end
+        --// A spawned mob is a full clone of its ServerStorage model, so its
+        --// Config.MaxDrops can be read here (the dictionary leaves it out).
+        --// Each child is one item: Value = how many times it is rolled,
+        --// Rarity = 1 in N.
+        local function ReadDrops(MaxDrops)
+            local Drops = {}
 
-                local Config = Mob:FindFirstChild("Config")
-                local Entity = Config and Config:FindFirstChild("Entity")
-                local EntityName = Entity and Entity:IsA("StringValue") and Entity.Value ~= "" and Entity.Value or nil
+            for _, Item in ipairs(MaxDrops:GetChildren()) do
+                local Rarity = Item:FindFirstChild("Rarity")
+                local Value = Rarity and Rarity:IsA("ValueBase") and tonumber(Rarity.Value)
 
-                Counts[Mob.Name] = (Counts[Mob.Name] or 0) + 1
-
-                if EntityName then
-                    Entities[Mob.Name] = EntityName
-
-                    if EntityName ~= Mob.Name then
-                        Counts[EntityName] = (Counts[EntityName] or 0) + 1
-                    end
+                if Value and Value > 0 and Item.Name ~= "" then
+                    table.insert(Drops, {
+                        Name = Item.Name,
+                        Rarity = Value,
+                        Rounds = Item:IsA("ValueBase") and tonumber(Item.Value) or 0,
+                    })
                 end
             end
 
-            return Counts, Entities
+            table.sort(Drops, function(A, B)
+                if A.Rarity ~= B.Rarity then
+                    return A.Rarity < B.Rarity
+                end
+
+                return A.Name < B.Name
+            end)
+
+            return Drops
         end
+
+        --// Mobs alive in workspace.Mobs by Config.Entity (the dictionary
+        --// name; the model itself is renamed "Mob<tick>"). The first one of
+        --// each kind seen also records its drops in S.Drops for the session.
+        --// True when a mob's drops were recorded for the first time.
+        function Dictionary:ScanLive()
+            local Counts = {}
+            local NewDrops = false
+            local Folder = workspace:FindFirstChild("Mobs")
+
+            for _, Mob in (Folder and Folder:GetChildren() or {}) do
+                local Config = Mob:IsA("Model") and Mob:FindFirstChild("Config")
+                local Entity = Config and Config:FindFirstChild("Entity")
+
+                if not Entity or not Entity:IsA("StringValue") or Entity.Value == "" then
+                    continue
+                end
+
+                local Name = Entity.Value
+                Counts[Name] = (Counts[Name] or 0) + 1
+
+                --// No MaxDrops at all: it drops nothing.
+                if not S.Drops[Name] then
+                    local MaxDrops = Config:FindFirstChild("MaxDrops")
+                    S.Drops[Name] = MaxDrops and ReadDrops(MaxDrops) or {}
+                    NewDrops = true
+                end
+            end
+
+            S.Live = Counts
+            return NewDrops
+        end
+
+        function Dictionary:GetLive(Name)
+            return S.Live[Name] or 0
+        end
+
+        --// nil until a live one has been seen in this session.
+        function Dictionary:GetDrops(Name)
+            return S.Drops[Name]
+        end
+
+        --// Most luck that counts (CoreCommons.PHYSICAL_STAT_MAX).
+        local function GetLuckCap()
+            if S.LuckCap then
+                return S.LuckCap
+            end
+
+            local Commons = Replicated:FindFirstChild("CoreCommons")
+            local Ok, Module = false, nil
+
+            if Commons and Commons:IsA("ModuleScript") then
+                Ok, Module = pcall(require, Commons)
+            end
+
+            local Cap = Ok and type(Module) == "table" and tonumber(Module.PHYSICAL_STAT_MAX)
+            S.LuckCap = Cap and Cap > 0 and Cap or DEFAULT_LUCK_CAP
+            return S.LuckCap
+        end
+
+        --// The player's Luck stat, the cap, and the percent it adds to every
+        --// drop roll (Luck / 100, Luck capped).
+        function Dictionary.GetLuck()
+            local Stats = Context.Player:FindFirstChild("PlayerStats")
+            local Luck = Stats and Stats:FindFirstChild("Luck")
+            local Value = Luck and Luck:IsA("ValueBase") and tonumber(Luck.Value) or 0
+            local Cap = GetLuckCap()
+            return Value, Cap, math.clamp(Value, 0, Cap) / LUCK_DIVISOR
+        end
+
+        --// The server rolls 1..100 and drops when the roll <= Odds + Luck.
+        local function RollChance(Odds)
+            return math.clamp(math.floor(Odds + ROUNDING_EPSILON), 0, 100) / 100
+        end
+
+        --// Odds of one item from one kill, as the server rolls it: Rounds
+        --// rolls of 100 / Rarity (+ Luck%); until the item has dropped, roll
+        --// N's odds are multiplied by N. Returns the chance of at least one
+        --// (0..1) and the expected count.
+        function Dictionary.GetDropOdds(Drop, LuckPercent)
+            local Odds = 100 / Drop.Rarity
+            local Rounds = math.min(Drop.Rounds, MAX_ROUNDS)
+            local Missed, Expected = 1, 0
+            local Again = RollChance(Odds + LuckPercent)
+
+            for Round = 1, Rounds do
+                local First = RollChance(Odds * Round + LuckPercent)
+                Expected += Missed * First + (1 - Missed) * Again
+                Missed *= 1 - First
+            end
+
+            return 1 - Missed, Expected
+        end
+
+        return Dictionary
 
         return Dictionary
     end,
