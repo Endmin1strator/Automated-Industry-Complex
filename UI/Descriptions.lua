@@ -23,6 +23,7 @@ return {
             ["Refill Booster"] = "Resets the character when an EXP or drop boost runs out to refill it",
             ["Safe Booster Reset"] = "Refill Booster waits until no mob is hitting you",
             ["Auto Start Game"] = "Clicks through the title screen into the game",
+            ["FPS Boost"] = "Turns off shadows, effects, particles and lights for more FPS",
             ["Party System"] = "Follows the Leader to their server with the tp friend command",
             ["Waypoint Loop"] = "Farms only the zones paired with waypoints, walking between them",
             ["Debug Visualizer"] = "Draws zones, waypoints and targets in the world",

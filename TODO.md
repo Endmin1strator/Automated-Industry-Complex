@@ -637,3 +637,12 @@
 
 ### [x] Asset Explorer: type ใต้ชื่อ item ฝั่งซ้ายติดข้อความด้านบน ไม่ auto layout
 > แก้แล้ว (v3.08): ชื่อกับบรรทัดล่าง (type) เดิมวางตำแหน่ง pixel ตายตัว (Y=5 / Y=20) พอขยายตัวอักษรเลยชนกัน · ตอนนี้วางด้วย `UIListLayout` (ห่างกัน `ROW_TEXT_GAP`) อยู่กึ่งกลางแถว และแถวสูงขึ้นเองเมื่อ Text Scale ทำให้ตัวอักษรใหญ่ขึ้น · ใช้กับ Mob Dictionary ด้วย (ใช้ BrowserShell เดียวกัน)
+
+### [x] Feature: FPS Boost (ลดสิ่งไม่จำเป็น เช่น แสง เงา)
+> ทำแล้ว (v3.09): toggle ใหม่ **FPS Boost** (`Features/FpsBoost.lua`) เปิดแล้ว:
+> - Lighting: ปิดเงา (`GlobalShadows`), หมอกไกลสุด, ปิด environment lighting · ปิด post effect ทั้งหมด (Bloom, Blur, SunRays, ColorCorrection, DepthOfField) · Atmosphere ความหนาแน่น 0 · ปิดเมฆ
+> - ใน workspace: ปิด particle, trail, beam, smoke, fire, sparkles, ไฟ (Point/Spot/SurfaceLight), ระเบิด · decal/texture โปร่งใส · part ทุกชิ้นไม่ทอดเงา
+> - Terrain: ปิดคลื่นน้ำ/สะท้อน และหญ้า (Decoration) · ลด render quality เป็นต่ำสุด
+> - ของที่เกิดทีหลัง (มอน, เอฟเฟกต์สกิล) ก็ถูกปิดด้วย · ตั้งค่า Lighting ซ้ำทุก 5 วินาที (`REAPPLY_INTERVAL`) กันเกมเปลี่ยนกลับ · สแกนครั้งแรกทีละ 2000 ชิ้นต่อเฟรม (`SCAN_BATCH`) ไม่ให้ค้าง
+> - ปิด toggle หรือปิดสคริปต์ → คืนค่าเดิมทุกอย่าง · ไม่แตะของ Debug Visualizer
+> - เซฟแบบ global (ใช้ทุกโปรไฟล์)

@@ -51,6 +51,9 @@ return {
             --// Block Whitelist players never make Auto Block hop (even when
             --// blocked) or Leave On Danger Group leave. Owned by AutoBlock.
             { Name = "WhitelistSkipsSafety", Default = true, Key = "v" },
+            --// Turns off shadows, effects and particles for frames (FpsBoost).
+            --// Shared by every profile: it is about the machine, not the farm.
+            { Name = "FpsBoost",          Default = false, Key = "w", Global = true },
             { Name = "DebugWaypoints",    Default = true },
             { Name = "DebugFarmZones",    Default = true },
             { Name = "DebugDeadzones",    Default = true },
