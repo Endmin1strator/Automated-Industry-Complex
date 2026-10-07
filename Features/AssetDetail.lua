@@ -221,11 +221,11 @@ return {
 
             if not Recipe and #Sources == 0 then
                 Note(SourceCard, Entry.Flags.Unobtainable
-                    and "No recipe makes it and no mob seen this session drops it."
-                    or "No recipe makes it and no mob seen this session drops it. It may be sold in a shop.", 1)
+                    and "No recipe makes it and no known mob drops it."
+                    or "No recipe makes it and no known mob drops it. It may be sold in a shop.", 1)
             end
 
-            Note(SourceCard, "Drops are known for mobs that have been in the server this session (Mob Dictionary).", 999)
+            Note(SourceCard, "Drops are known for mobs that have been in the server, now or in an earlier run (Mob Dictionary).", 999)
         end
 
         local function BuildUses(Entry, Order)

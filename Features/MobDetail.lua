@@ -275,7 +275,7 @@ return {
             local Drops = Dictionary:GetDrops(Entry.Name)
 
             if not Drops then
-                Note(DropCard, "Drops are read from a live one: they show once this mob has been in the server.", 2)
+                Note(DropCard, "Drops are read from a live one: they show once this mob has been in the server, and are saved for later runs.", 2)
                 return
             elseif #Drops == 0 then
                 Note(DropCard, "Drops nothing.", 2)

@@ -54,6 +54,12 @@ local WINDOW_SIZE      = Vector2.new(760, 480)
 local MIN_WINDOW_SIZE  = Vector2.new(560, 360)
 local MAX_WINDOW_SIZE  = Vector2.new(1100, 760)
 local TEXT_SCALE       = 1
+local TEXT_SCALE_MIN   = 0.8
+local TEXT_SCALE_MAX   = 2.2
+local TEXT_SIZE_MIN    = 6
+--// Attribute holding a text's unscaled TextSize, so scaling is always
+--// base * scale and never drifts from repeated rounding.
+local BASE_TEXT_SIZE_ATTRIBUTE = "AICBaseTextSize"
 
 --// The one font the whole UI uses: the regular weight for text, the bold
 --// weight of the same font for names and headings. Text created without a
@@ -741,7 +747,7 @@ function Library:_CreateSettingsPanel()
     self._MinHeightInput=makeNumberRow(#THEME_KEYS+4,"MIN HEIGHT",self.MinWindowSize.Y,"MinHeight",240,1400,0)
     self._MaxWidthInput=makeNumberRow(#THEME_KEYS+5,"MAX WIDTH",self.MaxWindowSize.X,"MaxWidth",400,3000,0)
     self._MaxHeightInput=makeNumberRow(#THEME_KEYS+6,"MAX HEIGHT",self.MaxWindowSize.Y,"MaxHeight",300,2200,0)
-    self._TextScaleInput=makeNumberRow(#THEME_KEYS+7,"TEXT SCALE",self.TextScale,"TextScale",0.8,2.2,2)
+    self._TextScaleInput=makeNumberRow(#THEME_KEYS+7,"TEXT SCALE",self.TextScale,"TextScale",TEXT_SCALE_MIN,TEXT_SCALE_MAX,2)
 
     --// FONT: every Roblox font; picking one applies it to the whole UI at
     --// once. Built with the section dropdown on a stand-in section.
@@ -964,6 +970,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
     self.FontFamily = nil
     self._FontRoots = {}
     self:AddFontRoot(screenGui)
+    self:_WatchTextScale()
 
     --==========================================================
     -- Scale
@@ -6029,21 +6036,60 @@ function Library:SetFont(font: any): boolean
     return true
 end
 
-function Library:SetTextScale(scale: number)
-    scale = math.clamp(tonumber(scale) or self.TextScale or TEXT_SCALE, 0.8, 2.2)
-    local oldScale = self.TextScale or TEXT_SCALE
-    local ratio = scale / oldScale
+--// Sizes one text from its unscaled size. The first call records the
+--// current TextSize as that base. TextScaled text sizes itself.
+local function ApplyTextScale(object: Instance, scale: number)
+    if not TEXT_CLASSES[object.ClassName] or (object :: any).TextScaled then
+        return
+    end
+
+    local base = object:GetAttribute(BASE_TEXT_SIZE_ATTRIBUTE)
+
+    if type(base) ~= "number" then
+        base = (object :: any).TextSize
+        object:SetAttribute(BASE_TEXT_SIZE_ATTRIBUTE, base)
+    end
+
+    (object :: any).TextSize = math.max(TEXT_SIZE_MIN, math.round(base * scale))
+end
+
+--// Text added under the ScreenGui later (dropdown items, notifications,
+--// floating windows, rebuilt rows) takes the current scale too.
+function Library:_WatchTextScale()
+    self:_Connect(self.ScreenGui.DescendantAdded, function(object)
+        if not TEXT_CLASSES[object.ClassName] then
+            return
+        end
+
+        --// Deferred: whoever created it sets its TextSize right after.
+        task.defer(function()
+            if object.Parent and self.TextScale ~= TEXT_SCALE then
+                ApplyTextScale(object, self.TextScale)
+            end
+        end)
+    end)
+end
+
+--// Scales every text in the UI (window, popups and floating windows).
+--// Returns the scale actually applied.
+function Library:SetTextScale(scale: number): number
+    scale = math.clamp(tonumber(scale) or self.TextScale or TEXT_SCALE, TEXT_SCALE_MIN, TEXT_SCALE_MAX)
+    scale = math.round(scale * 100) / 100
     self.TextScale = scale
 
-    for _, object in ipairs(self.Window:GetDescendants()) do
-        if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
-            object.TextSize = math.max(6, math.round(object.TextSize * ratio))
-        end
+    for _, object in ipairs(self.ScreenGui:GetDescendants()) do
+        ApplyTextScale(object, scale)
     end
 
     if self._TextScaleInput then
-        self._TextScaleInput.Text = tostring(math.round(scale * 100) / 100)
+        self._TextScaleInput.Text = tostring(scale)
     end
+
+    if self.OnTextScaleChanged then
+        task.spawn(self.OnTextScaleChanged, scale)
+    end
+
+    return scale
 end
 
 function Library:SetWindowSizeLimits(kind: string, value: number)

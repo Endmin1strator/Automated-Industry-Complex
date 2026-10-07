@@ -16,13 +16,18 @@
 --
 -- Drops are not in the dictionary: they are read from the first live one of
 -- each mob (Config.MaxDrops), and GetDropOdds works out the chance per kill
--- the way the server's AwardPlayer rolls it, with the player's Luck.
+-- the way the server's AwardPlayer rolls it, with the player's Luck. Drops
+-- read are saved to DROPS_FILE, so they are known in later runs before the
+-- mob is seen again; the file is written only when a mob is not saved yet
+-- or its live drops differ from the saved ones.
 return {
     Name = "MobDictionary",
-    Dependencies = {"Runtime"},
+    Dependencies = {"Runtime", "ProfileManager"},
 
     Start = function(Context)
         local Replicated = Context.Services.Replicated
+        local HttpService = Context.Services.HttpService
+        local AICProfile = Context.AICProfile
 
         local REMOTE_NAME = "BuildAssets"
         local REMOTE_ARGUMENT = "MobDict"
@@ -53,6 +58,13 @@ return {
         --// Seconds before a server that never answers counts as failed, so
         --// RELOAD can ask again.
         local LOAD_TIMEOUT = 20
+        --// Saved drops, shared by every profile and PlaceId.
+        local DROPS_FILE = Context.PROFILE_FOLDER .. "/MobDrops.json"
+        local DROPS_FILE_VERSION = 1
+        --// Name:Rarity:Rounds, numbers to 10 significant digits.
+        local DROPS_SIGNATURE_FORMAT = "%s:%.10g:%.10g"
+        --// Seconds between background scans of workspace.Mobs for drops.
+        local LIVE_SCAN_INTERVAL = 5
 
         local Dictionary = {
             Name = "MobDictionary",
@@ -71,8 +83,17 @@ return {
                 OnLoaded = nil,
                 --// Entity name -> mobs alive in workspace.Mobs.
                 Live = {},
-                --// Entity name -> drops read from a live one (ReadDrops).
+                --// Entity name -> drops read from a live one (ReadDrops) or
+                --// loaded from DROPS_FILE.
                 Drops = {},
+                --// Entity name -> DropsSignature of what DROPS_FILE holds.
+                SavedSignatures = {},
+                --// Entity names whose live drops were read this run; each is
+                --// read once (to catch a game update), then trusted.
+                CheckedLive = {},
+                --// A recorded change is not in DROPS_FILE yet (the write
+                --// failed); tried again on every scan.
+                SavePending = false,
                 LuckCap = nil,
                 LuckCapRequested = false,
                 --// Bumped by every load; a stale or timed-out answer is dropped.
@@ -443,10 +464,151 @@ return {
             return Drops
         end
 
+        --// One string per drop list, to tell whether two lists are the same.
+        --// Numbers are cut by DROPS_SIGNATURE_FORMAT so a value that lost a
+        --// last digit going through JSON still matches the live one.
+        local function DropsSignature(Drops)
+            local Parts = {}
+
+            for _, Drop in ipairs(Drops) do
+                table.insert(Parts, string.format(DROPS_SIGNATURE_FORMAT, Drop.Name, Drop.Rarity, Drop.Rounds))
+            end
+
+            return table.concat(Parts, "|")
+        end
+
+        --// A saved drop list, or nil when it is not one.
+        local function NormalizeSavedDrops(Raw)
+            if type(Raw) ~= "table" then
+                return nil
+            end
+
+            local Drops = {}
+
+            for _, Drop in ipairs(Raw) do
+                local Rarity = type(Drop) == "table" and tonumber(Drop.Rarity)
+
+                if Rarity and Rarity > 0 and type(Drop.Name) == "string" and Drop.Name ~= "" then
+                    table.insert(Drops, {
+                        Name = Drop.Name,
+                        Rarity = Rarity,
+                        Rounds = tonumber(Drop.Rounds) or 0,
+                    })
+                end
+            end
+
+            return Drops
+        end
+
+        --// Fills S.Drops from DROPS_FILE before any mob is seen.
+        local function LoadSavedDrops()
+            if not AICProfile.CanUseFileStorage() then
+                return
+            end
+
+            local CheckSuccess, Exists = pcall(isfile, DROPS_FILE)
+
+            if not CheckSuccess or not Exists then
+                return
+            end
+
+            local Success, Decoded = pcall(function()
+                return HttpService:JSONDecode(readfile(DROPS_FILE))
+            end)
+
+            if not Success or type(Decoded) ~= "table" or type(Decoded.Mobs) ~= "table" then
+                warn("AutoFarm mob drops read failed:", Decoded)
+                return
+            end
+
+            for Name, Raw in pairs(Decoded.Mobs) do
+                local Drops = type(Name) == "string" and NormalizeSavedDrops(Raw)
+
+                if Drops then
+                    S.Drops[Name] = Drops
+                    S.SavedSignatures[Name] = DropsSignature(Drops)
+                end
+            end
+        end
+
+        --// Writes every non-empty drop list (an empty one may just be a mob
+        --// that had not replicated, so it is not kept between runs).
+        local function WriteSavedDrops()
+            if not AICProfile.CanUseFileStorage() then
+                return false
+            end
+
+            AICProfile.EnsureProfileFolder()
+
+            local Mobs = {}
+
+            for Name, Drops in pairs(S.Drops) do
+                if #Drops > 0 then
+                    Mobs[Name] = Drops
+                end
+            end
+
+            local Success, Raw = pcall(function()
+                return HttpService:JSONEncode({ Version = DROPS_FILE_VERSION, Mobs = Mobs })
+            end)
+
+            if not Success then
+                warn("AutoFarm mob drops encode failed:", Raw)
+                return false
+            end
+
+            local WriteSuccess, WriteError = pcall(writefile, DROPS_FILE, Raw)
+
+            if not WriteSuccess then
+                warn("AutoFarm mob drops save failed:", WriteError)
+                return false
+            end
+
+            for Name, Drops in pairs(Mobs) do
+                S.SavedSignatures[Name] = DropsSignature(Drops)
+            end
+
+            return true
+        end
+
+        --// Reads a live mob's drops (once per run once they are non-empty)
+        --// into S.Drops. Returns whether S.Drops changed, and whether that
+        --// change needs saving: not saved yet, or different from the save.
+        local function RecordLiveDrops(Name, Config)
+            if S.CheckedLive[Name] then
+                return false, false
+            end
+
+            local MaxDrops = Config:FindFirstChild("MaxDrops")
+            local Drops = MaxDrops and ReadDrops(MaxDrops) or {}
+
+            --// No MaxDrops: it drops nothing. An empty read is read again
+            --// from the next one, in case this one had not finished
+            --// replicating, and never replaces a known list.
+            if #Drops == 0 then
+                if S.Drops[Name] then
+                    return false, false
+                end
+
+                S.Drops[Name] = Drops
+                return true, false
+            end
+
+            S.CheckedLive[Name] = true
+
+            if S.SavedSignatures[Name] == DropsSignature(Drops) then
+                return false, false
+            end
+
+            S.Drops[Name] = Drops
+            return true, true
+        end
+
         --// Mobs alive in workspace.Mobs by Config.Entity (the dictionary
         --// name; the model itself is renamed "Mob<tick>"). The first one of
-        --// each kind seen also records its drops in S.Drops for the session.
-        --// True when a mob's drops were recorded for the first time.
+        --// each kind seen records its drops in S.Drops, and DROPS_FILE is
+        --// rewritten only when that added or changed a saved mob.
+        --// True when S.Drops changed.
         function Dictionary:ScanLive()
             local Counts = {}
             local NewDrops = false
@@ -463,23 +625,17 @@ return {
                 local Name = Entity.Value
                 Counts[Name] = (Counts[Name] or 0) + 1
 
-                --// No MaxDrops: it drops nothing. An empty record is read
-                --// again from the next one, in case this one had not
-                --// finished replicating.
-                local Known = S.Drops[Name]
-
-                if not Known or #Known == 0 then
-                    local MaxDrops = Config:FindFirstChild("MaxDrops")
-                    local Drops = MaxDrops and ReadDrops(MaxDrops) or {}
-
-                    if not Known or #Drops > 0 then
-                        S.Drops[Name] = Drops
-                        NewDrops = true
-                    end
-                end
+                local Changed, NeedsSave = RecordLiveDrops(Name, Config)
+                NewDrops = NewDrops or Changed
+                S.SavePending = S.SavePending or NeedsSave
             end
 
             S.Live = Counts
+
+            if S.SavePending and WriteSavedDrops() then
+                S.SavePending = false
+            end
+
             return NewDrops
         end
 
@@ -487,7 +643,7 @@ return {
             return S.Live[Name] or 0
         end
 
-        --// nil until a live one has been seen in this session.
+        --// nil until a live one has been seen (this run or an earlier one).
         function Dictionary:GetDrops(Name)
             return S.Drops[Name]
         end
@@ -552,6 +708,21 @@ return {
 
             return 1 - Missed, Expected
         end
+
+        LoadSavedDrops()
+
+        --// Mobs that come and go while the window is closed are recorded too.
+        task.spawn(function()
+            while Context.Lifetime.Alive do
+                local Ok, ScanError = pcall(Dictionary.ScanLive, Dictionary)
+
+                if not Ok then
+                    warn("AutoFarm mob drops scan failed:", ScanError)
+                end
+
+                task.wait(LIVE_SCAN_INTERVAL)
+            end
+        end)
 
         return Dictionary
     end,

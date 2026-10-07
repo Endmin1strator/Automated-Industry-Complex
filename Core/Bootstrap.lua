@@ -264,6 +264,22 @@ return {
             end
         end
 
+        --// UI text scale, also kept in the global file.
+        if UI.SetTextScale then
+            if CONFIG.UI_TEXT_SCALE ~= 1 then
+                CONFIG.UI_TEXT_SCALE = UI:SetTextScale(CONFIG.UI_TEXT_SCALE)
+            end
+
+            UI.OnTextScaleChanged = function(Scale)
+                if CONFIG.UI_TEXT_SCALE == Scale then
+                    return
+                end
+
+                CONFIG.UI_TEXT_SCALE = Scale
+                AICProfile.WriteGlobalStore()
+            end
+        end
+
         --// Pinned items
         --// Lives outside the tabs so the panel can be dragged or popped out.
         UIRef.PinPanel = UI:AddPin("Pinned Items")

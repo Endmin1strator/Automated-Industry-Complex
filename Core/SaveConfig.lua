@@ -216,6 +216,11 @@ return {
                 return type(Value) == "string" and Value or ""
             end },
 
+            --// UI text scale, picked in Configuration (Utils clamps it).
+            { Key = "UI_TEXT_SCALE", Default = 1, Normalize = function(Value)
+                return type(Value) == "number" and Value == Value and Value or 1
+            end },
+
             --// Group IDs Leave On Danger Group leaves for.
             { Key = "DANGER_GROUP_IDS", Default = { "5928691" }, Normalize = NormalizeIdList },
 

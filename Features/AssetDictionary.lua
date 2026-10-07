@@ -339,7 +339,7 @@ return {
             return Uses
         end
 
-        --// Mobs seen this session that drop Name, best chance first:
+        --// Mobs seen (this run or saved) that drop Name, best chance first:
         --// { { Mob, Chance (with Luck), Drop } ... }.
         function Dictionary:GetDroppedBy(Name)
             local _, _, LuckPercent = Mobs.GetLuck()
