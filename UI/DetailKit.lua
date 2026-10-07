@@ -17,6 +17,10 @@ return {
         local TRACK_HEIGHT = 6
         --// A bar for a value above 0 is never drawn thinner than this share.
         local MIN_BAR_SHARE = 0.01
+        --// A badge is at least this tall; longer text wraps and grows it.
+        local BADGE_HEIGHT = 18
+        local BADGE_PAD_X = 7
+        local BADGE_PAD_Y = 2
 
         local Kit = {
             Name = "DetailKit",
@@ -149,22 +153,68 @@ return {
             })
         end
 
-        --// A small tinted label sized to its text.
+        --// Product of the UIScales above Object: AbsoluteSize is measured
+        --// after them, sizes and constraints before.
+        local function GetUIScale(Object)
+            local Scale = 1
+            local Current = Object
+
+            while Current do
+                local Found = Current:FindFirstChildOfClass("UIScale")
+
+                if Found and Found.Scale > 0 then
+                    Scale *= Found.Scale
+                end
+
+                Current = Current.Parent
+            end
+
+            return Scale
+        end
+
+        --// A small tinted label sized to its text. Never wider than Parent:
+        --// text longer than that wraps onto more lines.
         function Kit.Badge(Parent, Text, Color, Order)
             local Object = Label(Parent, Text, 9, {
-                Size = UDim2.fromOffset(0, 18),
-                AutomaticSize = Enum.AutomaticSize.X,
+                Size = UDim2.fromOffset(0, BADGE_HEIGHT),
+                AutomaticSize = Enum.AutomaticSize.XY,
                 BackgroundColor3 = Color,
                 BackgroundTransparency = 0.82,
                 TextColor3 = Color,
                 Font = Floating.Fonts.Bold,
                 TextXAlignment = Enum.TextXAlignment.Center,
+                TextWrapped = true,
                 TextTruncate = Enum.TextTruncate.None,
                 LayoutOrder = Order,
             })
 
             Stroke(Object, Color, 0.5)
-            New("UIPadding", { Parent = Object, PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7) })
+            New("UIPadding", {
+                Parent = Object,
+                PaddingLeft = UDim.new(0, BADGE_PAD_X),
+                PaddingRight = UDim.new(0, BADGE_PAD_X),
+                PaddingTop = UDim.new(0, BADGE_PAD_Y),
+                PaddingBottom = UDim.new(0, BADGE_PAD_Y),
+            })
+
+            local Limit = New("UISizeConstraint", { Parent = Object })
+
+            --// Follows the parent as the window is resized.
+            local function FitWidth()
+                local Width = Parent.AbsoluteSize.X / GetUIScale(Parent)
+
+                if Width > BADGE_PAD_X * 2 then
+                    Limit.MaxSize = Vector2.new(Width, math.huge)
+                end
+            end
+
+            local Resize = Parent:GetPropertyChangedSignal("AbsoluteSize"):Connect(FitWidth)
+
+            Object.Destroying:Connect(function()
+                Resize:Disconnect()
+            end)
+
+            FitWidth()
             return Object
         end
 

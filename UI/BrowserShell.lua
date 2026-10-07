@@ -37,6 +37,13 @@ return {
         local BAR_HEIGHT = 36
         local CHIP_HEIGHT = 30
         local RELOAD_WIDTH = 112
+        --// Row text: name over info, stacked by a layout and centred; the
+        --// row grows past ROW_HEIGHT when the text does (Text Scale).
+        local ROW_TEXT_X = 12
+        local ROW_TEXT_GAP = 4
+        local ROW_TEXT_PAD_Y = 10
+        local ROW_NAME_SIZE = 12
+        local ROW_INFO_SIZE = 10
 
         local Shell = { Name = "BrowserShell" }
 
@@ -131,17 +138,44 @@ return {
                     BorderSizePixel = 0,
                 })
 
-                local NameLabel = Label(Row, string.upper(Name), 12, {
-                    Position = UDim2.fromOffset(10, 5),
-                    Size = UDim2.new(1, -18, 0, 15),
-                    Font = Floating.Fonts.Bold,
+                local TextStack = New("Frame", {
+                    Parent = Row,
+                    BackgroundTransparency = 1,
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    Position = UDim2.new(0, ROW_TEXT_X, 0.5, 0),
+                    Size = UDim2.new(1, -(ROW_TEXT_X + 8), 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
                 })
 
-                local InfoLabel = Label(Row, "", 10, {
-                    Position = UDim2.fromOffset(10, 20),
-                    Size = UDim2.new(1, -18, 0, 12),
-                    TextColor3 = Theme.TextMuted,
+                New("UIListLayout", {
+                    Parent = TextStack,
+                    SortOrder = Enum.SortOrder.LayoutOrder,
+                    Padding = UDim.new(0, ROW_TEXT_GAP),
                 })
+
+                local NameLabel = Label(TextStack, string.upper(Name), ROW_NAME_SIZE, {
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    Font = Floating.Fonts.Bold,
+                    LayoutOrder = 1,
+                })
+
+                local InfoLabel = Label(TextStack, "", ROW_INFO_SIZE, {
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    TextColor3 = Theme.TextMuted,
+                    LayoutOrder = 2,
+                })
+
+                --// Taller when Text Scale makes the text bigger.
+                local function FitRow()
+                    local Needed = NameLabel.TextSize + InfoLabel.TextSize + ROW_TEXT_GAP + ROW_TEXT_PAD_Y * 2
+                    Row.Size = UDim2.new(1, -6, 0, math.max(ROW_HEIGHT, Needed))
+                end
+
+                NameLabel:GetPropertyChangedSignal("TextSize"):Connect(FitRow)
+                InfoLabel:GetPropertyChangedSignal("TextSize"):Connect(FitRow)
+                FitRow()
 
                 --// A thin bar along the bottom (threat, power...).
                 local Bar = New("Frame", {
