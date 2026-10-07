@@ -28,15 +28,15 @@ return {
         local IsInPriority, DescribeStatus, DescribeItem = Detail.IsInPriority, Detail.DescribeStatus, Detail.DescribeItem
 
         local MAX_STACK = Context.SaveConfig.ITEM_MAX_STACK
-        local WINDOW_WIDTH = 720
-        local WINDOW_HEIGHT = 480
-        local MIN_WIDTH = 560
-        local MIN_HEIGHT = 360
+        local WINDOW_WIDTH = 820
+        local WINDOW_HEIGHT = 540
+        local MIN_WIDTH = 640
+        local MIN_HEIGHT = 420
         --// Share of the window the recipe list takes; the tabs get the rest.
-        local LIST_WIDTH_SCALE = 0.42
-        local ROW_HEIGHT = 34
-        local BAR_HEIGHT = 26
-        local CHIP_HEIGHT = 22
+        local LIST_WIDTH_SCALE = 0.44
+        local ROW_HEIGHT = 54
+        local BAR_HEIGHT = 36
+        local CHIP_HEIGHT = 32
         local ALL_TYPES = "ALL"
         --// Inventory and skill are read again this often while open.
         local REFRESH_INTERVAL = 1
@@ -209,7 +209,7 @@ return {
                         LayoutOrder = Index,
                     })
 
-                    New("UIPadding", { Parent = Chip, PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
+                    New("UIPadding", { Parent = Chip, PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) })
 
                     UI:_Connect(Chip.Activated, function()
                         S.TypeFilter = Type
@@ -232,7 +232,7 @@ return {
                 Parent = ListScroll,
                 Size = UDim2.new(1, -6, 0, ROW_HEIGHT),
                 BackgroundColor3 = Theme.Element,
-                BackgroundTransparency = 0.1,
+                BackgroundTransparency = 0,
                 BorderSizePixel = 0,
                 Text = "",
                 AutoButtonColor = false,
@@ -243,16 +243,16 @@ return {
             local Bar = New("Frame", {
                 Parent = Row,
                 Position = UDim2.fromOffset(0, 6),
-                Size = UDim2.new(0, 2, 1, -12),
+                Size = UDim2.new(0, 3, 1, -12),
                 BorderSizePixel = 0,
             })
 
-            local NameLabel = Label(Row, string.upper(Name), 10, {
-                Position = UDim2.fromOffset(10, 5),
-                Size = UDim2.new(1, -18, 0, 15),
+            local NameLabel = Label(Row, string.upper(Name), 13, {
+                Position = UDim2.fromOffset(14, 6),
+                Size = UDim2.new(1, -22, 0, 20),
                 Font = Floating.Fonts.Bold,
             })
-            local InfoLabel = Label(Row, "", 8, { Position = UDim2.fromOffset(10, 21), Size = UDim2.new(1, -18, 0, 12) })
+            local InfoLabel = Label(Row, "", 10, { Position = UDim2.fromOffset(14, 29), Size = UDim2.new(1, -22, 0, 17) })
 
             UI:_Connect(Row.Activated, function()
                 Browser:Select(Name)
@@ -323,7 +323,7 @@ return {
         local function BuildFilterBar(Body)
             SearchBox = New("TextBox", {
                 Parent = Body,
-                Size = UDim2.new(1, -112, 0, BAR_HEIGHT),
+                Size = UDim2.new(1, -144, 0, BAR_HEIGHT),
                 BackgroundColor3 = Theme.Element,
                 BorderSizePixel = 0,
                 Text = "",
@@ -337,12 +337,12 @@ return {
             })
 
             Floating.Hover(SearchBox, Stroke(SearchBox, Theme.BorderDim, 0.15))
-            New("UIPadding", { Parent = SearchBox, PaddingLeft = UDim.new(0, 9), PaddingRight = UDim.new(0, 9) })
+            New("UIPadding", { Parent = SearchBox, PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) })
 
             ReadyButton = Button(Body, "◇  READY ONLY", Theme.TextMuted, {
                 AnchorPoint = Vector2.new(1, 0),
                 Position = UDim2.new(1, 0, 0, 0),
-                Size = UDim2.fromOffset(104, BAR_HEIGHT),
+                Size = UDim2.fromOffset(136, BAR_HEIGHT),
             })
 
             ChipScroll = New("ScrollingFrame", {
@@ -362,7 +362,7 @@ return {
                 Parent = ChipScroll,
                 FillDirection = Enum.FillDirection.Horizontal,
                 SortOrder = Enum.SortOrder.LayoutOrder,
-                Padding = UDim.new(0, 4),
+                Padding = UDim.new(0, 6),
             })
 
             UI:_Connect(SearchBox:GetPropertyChangedSignal("Text"), function()
@@ -429,7 +429,7 @@ return {
 
             BuildFilterBar(Window.Body)
 
-            local Top = BAR_HEIGHT + CHIP_HEIGHT + 18
+            local Top = BAR_HEIGHT + CHIP_HEIGHT + 24
             local Lists = New("Frame", {
                 Parent = Window.Body,
                 BackgroundTransparency = 1,
