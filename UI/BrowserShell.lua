@@ -32,11 +32,11 @@ return {
         local Label, Button, ClearChildren = Floating.Label, Floating.Button, Floating.ClearChildren
 
         --// Share of the window the list takes; the detail gets the rest.
-        local LIST_WIDTH_SCALE = 0.4
-        local ROW_HEIGHT = 38
-        local BAR_HEIGHT = 26
-        local CHIP_HEIGHT = 22
-        local RELOAD_WIDTH = 86
+        local LIST_WIDTH_SCALE = 0.42
+        local ROW_HEIGHT = 52
+        local BAR_HEIGHT = 36
+        local CHIP_HEIGHT = 30
+        local RELOAD_WIDTH = 112
 
         local Shell = { Name = "BrowserShell" }
 
@@ -62,6 +62,7 @@ return {
             local function StyleChip(Chip, Active)
                 Chip.TextColor3 = Active and Theme.Cyan or Theme.TextMuted
                 Chip.BackgroundColor3 = Active and Theme.PanelHover or Theme.Element
+                Chip.AutoButtonColor = false
             end
 
             --// Rebuilt only when the chips themselves change.
@@ -89,11 +90,11 @@ return {
                         local Object = Button(ChipScroll, Chip.Text, Theme.TextMuted, {
                             Size = UDim2.fromOffset(0, CHIP_HEIGHT),
                             AutomaticSize = Enum.AutomaticSize.X,
-                            TextSize = 9,
+                            TextSize = 12,
                             LayoutOrder = Index,
                         })
 
-                        New("UIPadding", { Parent = Object, PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
+                        New("UIPadding", { Parent = Object, PaddingLeft = UDim.new(0, 13), PaddingRight = UDim.new(0, 13) })
 
                         UI:_Connect(Object.Activated, function()
                             Browser.ChipKey = Chip.Key
@@ -115,7 +116,7 @@ return {
                     Parent = ListScroll,
                     Size = UDim2.new(1, -6, 0, ROW_HEIGHT),
                     BackgroundColor3 = Theme.Element,
-                    BackgroundTransparency = 0.1,
+                    BackgroundTransparency = 0,
                     BorderSizePixel = 0,
                     Text = "",
                     AutoButtonColor = false,
@@ -126,17 +127,17 @@ return {
                 local Accent = New("Frame", {
                     Parent = Row,
                     Position = UDim2.fromOffset(0, 6),
-                    Size = UDim2.new(0, 2, 1, -12),
+                    Size = UDim2.new(0, 3, 1, -12),
                     BorderSizePixel = 0,
                 })
 
-                local NameLabel = Label(Row, string.upper(Name), 10, {
+                local NameLabel = Label(Row, string.upper(Name), 12, {
                     Position = UDim2.fromOffset(10, 5),
                     Size = UDim2.new(1, -18, 0, 15),
                     Font = Floating.Fonts.Bold,
                 })
 
-                local InfoLabel = Label(Row, "", 8, {
+                local InfoLabel = Label(Row, "", 10, {
                     Position = UDim2.fromOffset(10, 20),
                     Size = UDim2.new(1, -18, 0, 12),
                     TextColor3 = Theme.TextMuted,
@@ -166,7 +167,7 @@ return {
                 Row.InfoLabel.TextColor3 = Look.InfoColor or Theme.TextMuted
                 Row.Accent.BackgroundColor3 = Look.Accent or Theme.BorderDim
                 Row.Bar.Visible = Share > 0
-                Row.Bar.Size = UDim2.new(Share, -20 * Share, 0, 2)
+                Row.Bar.Size = UDim2.new(Share, -28 * Share, 0, 3)
                 Row.Bar.BackgroundColor3 = Look.BarColor or Theme.Cyan
                 Row.NameLabel.TextColor3 = Selected and Theme.Cyan or Theme.Text
                 Row.Button.BackgroundColor3 = Selected and Theme.PanelHover or Theme.Element
@@ -245,7 +246,7 @@ return {
                 })
 
                 Floating.Hover(SearchBox, Stroke(SearchBox, Theme.BorderDim, 0.15))
-                New("UIPadding", { Parent = SearchBox, PaddingLeft = UDim.new(0, 9), PaddingRight = UDim.new(0, 9) })
+                New("UIPadding", { Parent = SearchBox, PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) })
 
                 UI:_Connect(SearchBox:GetPropertyChangedSignal("Text"), function()
                     Browser:RefreshList()
@@ -281,7 +282,7 @@ return {
                     Parent = ChipScroll,
                     FillDirection = Enum.FillDirection.Horizontal,
                     SortOrder = Enum.SortOrder.LayoutOrder,
-                    Padding = UDim.new(0, 4),
+                    Padding = UDim.new(0, 6),
                 })
             end
 
@@ -306,7 +307,7 @@ return {
 
                 BuildFilterBar(Window.Body)
 
-                local Top = BAR_HEIGHT + CHIP_HEIGHT + 18
+                local Top = BAR_HEIGHT + CHIP_HEIGHT + 24
                 local Lists = New("Frame", {
                     Parent = Window.Body,
                     BackgroundTransparency = 1,
@@ -314,18 +315,26 @@ return {
                     Size = UDim2.new(1, 0, 1, -Top),
                 })
 
-                ListScroll = Floating.Scroller(Lists, UDim2.new(), UDim2.new(LIST_WIDTH_SCALE, -4, 1, 0), 4, 4)
+                ListScroll = Floating.Scroller(Lists, UDim2.new(), UDim2.new(LIST_WIDTH_SCALE, -6, 1, 0), 6, 6)
                 EmptyLabel = Label(ListScroll, "", 10, {
                     TextColor3 = Theme.TextMuted,
                     Visible = false,
                     LayoutOrder = -1,
                 })
 
+                local Divider = New("Frame", {
+                    Parent = Lists,
+                    Position = UDim2.new(LIST_WIDTH_SCALE, 0, 0, 0),
+                    Size = UDim2.new(0, 1, 1, 0),
+                    BackgroundColor3 = Theme.BorderDim,
+                    BorderSizePixel = 0,
+                })
+
                 Browser.DetailScroll = Floating.Scroller(
                     Lists,
                     UDim2.new(LIST_WIDTH_SCALE, 4, 0, 0),
                     UDim2.new(1 - LIST_WIDTH_SCALE, -4, 1, 0),
-                    8, 8, 8
+                    10, 10, 10
                 )
 
                 Browser.Built = true
