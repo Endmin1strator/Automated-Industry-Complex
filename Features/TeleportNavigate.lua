@@ -73,7 +73,15 @@ return {
         --// Puts a fresh dropdown where the old one was, keeping its choice
         --// when that is still an option. The library's dropdowns have a
         --// fixed option list, so a new list means a new dropdown.
+        --// The same list keeps the old dropdown: the folders change all the
+        --// time as parts stream in and out, and rebuilding on each change
+        --// swapped the button out between press and release, so clicks on
+        --// it were lost.
         local function RebuildDropdown(Section, Old, Name, Options)
+            if Old and Old.Options and table.concat(Old.Options, "\n") == table.concat(Options, "\n") then
+                return Old
+            end
+
             local LayoutOrder = Old and Old.Frame and Old.Frame.LayoutOrder
             local Previous = Old and Old:Get()
 

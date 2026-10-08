@@ -88,6 +88,14 @@ return {
             ["Refresh Waypoints"] = "Reloads the waypoints from the Waypoints folder",
             ["Waypoint Number"] = "Any waypoint number, even one not loaded in yet",
             ["Teleport To Number"] = "Teleports straight to the waypoint number typed above",
+
+            --// Quest
+            ["Quest ID"] = "The ID of the quest to take, as the game names it",
+            ["Assign Quest"] = "Asks the game to give you the quest typed above",
+            ["Quest ESP"] = "Highlights the quest targets below and shows how far each one is",
+            ["Quest Targets"] = "Names of the items or places to find, comma separated (any case)",
+            ["Rescan Quest Targets"] = "Looks through the loaded map for the quest targets again",
+            ["Copy Quest Info"] = "Copies what the game shows of your quest, to set targets automatically later",
             ["Clear Log"] = "Empties the Player Log",
 
             --// Party

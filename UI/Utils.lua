@@ -6143,6 +6143,9 @@ function Library:SetTheme(theme: {[string]: any})
     if self._RefreshSettingsInputs then
         self._RefreshSettingsInputs()
     end
+    if self.OnThemeChanged then
+        task.spawn(self.OnThemeChanged, table.clone(self.Theme))
+    end
 end
 
 --// One Enum.Font per font family. Items such as GothamBold, GothamBlack or

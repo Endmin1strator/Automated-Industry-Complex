@@ -235,6 +235,22 @@ return {
                 return type(Value) == "number" and Value == Value and Value or 1
             end },
 
+            --// Theme colours changed in Configuration, as Theme key -> hex
+            --// ("RRGGBB"); keys left out keep the built-in colour.
+            { Key = "UI_THEME", Default = {}, Normalize = function(Value)
+                local Theme = {}
+
+                if type(Value) == "table" then
+                    for Key, Hex in pairs(Value) do
+                        if type(Key) == "string" and type(Hex) == "string" and string.match(Hex, "^#?%x%x%x%x%x%x$") then
+                            Theme[Key] = Hex
+                        end
+                    end
+                end
+
+                return Theme
+            end },
+
             --// Group IDs Leave On Danger Group leaves for.
             { Key = "DANGER_GROUP_IDS", Default = { "5928691" }, Normalize = NormalizeIdList },
 

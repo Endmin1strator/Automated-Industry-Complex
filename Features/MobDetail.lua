@@ -407,11 +407,13 @@ return {
             UpdatePriorityButton()
         end
 
-        --// Changes when the Luck bonus changes or the drops become known.
+        --// Changes when the Luck bonus changes or the drops or AwardParam
+        --// become known.
         local function GetSignature()
             local _, _, LuckPercent = Dictionary.GetLuck()
             local Drops = S.Selected and Dictionary:GetDrops(S.Selected)
-            return tostring(LuckPercent) .. "|" .. (Drops and #Drops or "?")
+            local AwardParam = S.Selected and Dictionary:GetAwardParam(S.Selected)
+            return tostring(LuckPercent) .. "|" .. (Drops and #Drops or "?") .. "|" .. tostring(AwardParam)
         end
 
         ------------------------------------------------------------------------

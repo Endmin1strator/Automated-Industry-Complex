@@ -20,6 +20,11 @@
 -- read are saved to DROPS_FILE, so they are known in later runs before the
 -- mob is seen again; the file is written only when a mob is not saved yet
 -- or its live drops differ from the saved ones.
+--
+-- A mob whose Config.AwardType is "HealthPercent" only rewards a player who
+-- dealt at least AwardParam percent of its health (an attribute on AwardType,
+-- which the dictionary leaves out). It is read from a live one too, saved in
+-- DROPS_FILE beside the drops, and shown as the AWARD_PARAM_KEY stat.
 return {
     Name = "MobDictionary",
     Dependencies = {"Runtime", "ProfileManager"},
@@ -65,6 +70,13 @@ return {
         local DROPS_SIGNATURE_FORMAT = "%s:%.10g:%.10g"
         --// Seconds between background scans of workspace.Mobs for drops.
         local LIVE_SCAN_INTERVAL = 5
+        --// Config.AwardType value whose AwardParam attribute is the share of
+        --// the mob's health (percent) a player must deal to be rewarded.
+        local AWARD_TYPE_HEALTH_PERCENT = "HealthPercent"
+        local AWARD_PARAM_ATTRIBUTE = "AwardParam"
+        local AWARD_PARAM_KEY = "Config.AwardParam"
+        --// No THREAT_WORDS in it, so it does not count toward the threat meter.
+        local AWARD_PARAM_LABEL = "AWARD MIN HEALTH %"
 
         local Dictionary = {
             Name = "MobDictionary",
@@ -86,6 +98,9 @@ return {
                 --// Entity name -> drops read from a live one (ReadDrops) or
                 --// loaded from DROPS_FILE.
                 Drops = {},
+                --// Entity name -> AwardParam (percent of health to deal to
+                --// be rewarded), read from a live one or DROPS_FILE.
+                AwardParams = {},
                 --// Entity name -> DropsSignature of what DROPS_FILE holds.
                 SavedSignatures = {},
                 --// Entity names whose live drops were read this run; each is
@@ -333,12 +348,44 @@ return {
             return Count > 0 and Total / Count or 0
         end
 
+        --// Adds (or updates) the AwardParam stat of a HealthPercent mob
+        --// once its AwardParam is known. True when the entry changed.
+        local function ApplyAwardParam(Entry)
+            local Param = S.AwardParams[Entry.Name]
+
+            if type(Param) ~= "number" or Dictionary.GetStat(Entry, "Config.AwardType") ~= AWARD_TYPE_HEALTH_PERCENT then
+                return false
+            end
+
+            for _, Stat in ipairs(Entry.Stats) do
+                if Stat.Key == AWARD_PARAM_KEY then
+                    if Stat.Value == Param then
+                        return false
+                    end
+
+                    Stat.Value = Param
+                    return true
+                end
+            end
+
+            table.insert(Entry.Stats, {
+                Key = AWARD_PARAM_KEY,
+                Label = AWARD_PARAM_LABEL,
+                Value = Param,
+                Group = "Rewards",
+                Numeric = true,
+            })
+
+            return true
+        end
+
         local function Apply(Raw)
             local Entries, ByName = {}, {}
 
             for Name, Data in pairs(Raw) do
                 if type(Name) == "string" and type(Data) == "table" then
                     local Entry = ReadEntry(Name, Data)
+                    ApplyAwardParam(Entry)
                     table.insert(Entries, Entry)
                     ByName[Name] = Entry
                 end
@@ -529,6 +576,14 @@ return {
                     S.SavedSignatures[Name] = DropsSignature(Drops)
                 end
             end
+
+            if type(Decoded.AwardParams) == "table" then
+                for Name, Param in pairs(Decoded.AwardParams) do
+                    if type(Name) == "string" and tonumber(Param) then
+                        S.AwardParams[Name] = tonumber(Param)
+                    end
+                end
+            end
         end
 
         --// Writes every non-empty drop list (an empty one may just be a mob
@@ -549,7 +604,7 @@ return {
             end
 
             local Success, Raw = pcall(function()
-                return HttpService:JSONEncode({ Version = DROPS_FILE_VERSION, Mobs = Mobs })
+                return HttpService:JSONEncode({ Version = DROPS_FILE_VERSION, Mobs = Mobs, AwardParams = S.AwardParams })
             end)
 
             if not Success then
@@ -604,6 +659,32 @@ return {
             return true, true
         end
 
+        --// A live HealthPercent mob's AwardParam into S.AwardParams and its
+        --// entry. Returns whether it changed, and so needs saving.
+        local function RecordLiveAwardParam(Name, Config)
+            local AwardType = Config:FindFirstChild("AwardType")
+
+            if not AwardType or not AwardType:IsA("StringValue") or AwardType.Value ~= AWARD_TYPE_HEALTH_PERCENT then
+                return false
+            end
+
+            local Param = tonumber(AwardType:GetAttribute(AWARD_PARAM_ATTRIBUTE))
+
+            if not Param or S.AwardParams[Name] == Param then
+                return false
+            end
+
+            S.AwardParams[Name] = Param
+
+            local Entry = S.ByName[Name]
+
+            if Entry and ApplyAwardParam(Entry) then
+                BuildScales()
+            end
+
+            return true
+        end
+
         --// Mobs alive in workspace.Mobs by Config.Entity (the dictionary
         --// name; the model itself is renamed "Mob<tick>"). The first one of
         --// each kind seen records its drops in S.Drops, and DROPS_FILE is
@@ -626,8 +707,9 @@ return {
                 Counts[Name] = (Counts[Name] or 0) + 1
 
                 local Changed, NeedsSave = RecordLiveDrops(Name, Config)
-                NewDrops = NewDrops or Changed
-                S.SavePending = S.SavePending or NeedsSave
+                local NewAwardParam = RecordLiveAwardParam(Name, Config)
+                NewDrops = NewDrops or Changed or NewAwardParam
+                S.SavePending = S.SavePending or NeedsSave or NewAwardParam
             end
 
             S.Live = Counts
@@ -646,6 +728,12 @@ return {
         --// nil until a live one has been seen (this run or an earlier one).
         function Dictionary:GetDrops(Name)
             return S.Drops[Name]
+        end
+
+        --// Percent of health to deal for a reward, for a HealthPercent mob
+        --// once a live one has been seen; nil otherwise.
+        function Dictionary:GetAwardParam(Name)
+            return S.AwardParams[Name]
         end
 
         --// Most luck that counts (CoreCommons.PHYSICAL_STAT_MAX). Required in

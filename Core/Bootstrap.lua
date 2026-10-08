@@ -264,6 +264,39 @@ return {
             end
         end
 
+        --// Theme colours, also kept in the global file: only the keys that
+        --// differ from the built-in theme are saved.
+        if UI.SetTheme and UI._DefaultTheme then
+            local Saved = {}
+
+            for Key, Hex in pairs(CONFIG.UI_THEME) do
+                local Ok, Color = pcall(Color3.fromHex, Hex)
+
+                if Ok and UI.Theme[Key] ~= nil then
+                    Saved[Key] = Color
+                end
+            end
+
+            if next(Saved) then
+                UI:SetTheme(Saved)
+            end
+
+            UI.OnThemeChanged = function(Theme)
+                local Changed = {}
+
+                for Key, Color in pairs(Theme) do
+                    local Default = UI._DefaultTheme[Key]
+
+                    if typeof(Color) == "Color3" and (typeof(Default) ~= "Color3" or Color:ToHex() ~= Default:ToHex()) then
+                        Changed[Key] = Color:ToHex()
+                    end
+                end
+
+                CONFIG.UI_THEME = Changed
+                AICProfile.WriteGlobalStore()
+            end
+        end
+
         --// UI text scale, also kept in the global file.
         if UI.SetTextScale then
             if CONFIG.UI_TEXT_SCALE ~= 1 then

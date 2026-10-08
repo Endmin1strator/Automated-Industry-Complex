@@ -487,6 +487,9 @@ return {
         --// UI: waypoint pairing (Waypoints section) and zone targets (Farmzone)
         ------------------------------------------------------------------------
         local SelectedPairWaypoint = 1
+        --// Options the pair pickers were built with (joined), so an
+        --// unchanged list keeps its dropdown.
+        local PairPickerSignatures = { Waypoint = nil, Zone = nil }
 
         local function ZoneOptionLabel(ZoneIndex)
             return ZoneIndex > 0 and ("Farm Zone #" .. ZoneIndex) or "None"
@@ -517,17 +520,39 @@ return {
 
             SelectedPairWaypoint = math.clamp(SelectedPairWaypoint, 1, math.max(1, #PlaceConfig.WAYPOINTS))
 
-            UIRef.PairWaypointPicker = AICUI.ReplaceDropdown(UIRef.PairWaypointPicker, Section, "Pair Waypoint", WaypointOptions, function(Value)
-                local Index = table.find(WaypointOptions, Value)
+            --// The same options keep the dropdowns: they are rebuilt only when
+            --// the lists change, never from inside their own pick handler
+            --// for nothing (which could swallow the next click).
+            local WaypointSignature = table.concat(WaypointOptions, "\n")
+            local ZoneSignature = table.concat(ZoneOptions, "\n")
 
-                if Index and PlaceConfig.WAYPOINTS[Index] then
-                    SelectedPairWaypoint = Index
+            if not UIRef.PairWaypointPicker or PairPickerSignatures.Waypoint ~= WaypointSignature then
+                PairPickerSignatures.Waypoint = WaypointSignature
 
-                    if UIRef.PairZonePicker then
-                        UIRef.PairZonePicker:Set(ZoneOptionLabel(PlaceConfig.WAYPOINT_ZONES[Index] or 0), false)
+                UIRef.PairWaypointPicker = AICUI.ReplaceDropdown(UIRef.PairWaypointPicker, Section, "Pair Waypoint", WaypointOptions, function(Value)
+                    local Current = Runtime:GetPlaceConfig()
+                    local Index = table.find(WaypointOptions, Value)
+
+                    if Index and Current.WAYPOINTS[Index] then
+                        SelectedPairWaypoint = Index
+
+                        if UIRef.PairZonePicker then
+                            UIRef.PairZonePicker:Set(ZoneOptionLabel(Current.WAYPOINT_ZONES[Index] or 0), false)
+                        end
                     end
+                end)
+            end
+
+            if UIRef.PairZonePicker and PairPickerSignatures.Zone == ZoneSignature then
+                if PlaceConfig.WAYPOINTS[SelectedPairWaypoint] then
+                    UIRef.PairWaypointPicker:Set(WaypointOptions[SelectedPairWaypoint], false)
+                    UIRef.PairZonePicker:Set(ZoneOptionLabel(PlaceConfig.WAYPOINT_ZONES[SelectedPairWaypoint] or 0), false)
                 end
-            end)
+
+                return
+            end
+
+            PairPickerSignatures.Zone = ZoneSignature
 
             UIRef.PairZonePicker = AICUI.ReplaceDropdown(UIRef.PairZonePicker, Section, "Paired Farm Zone", ZoneOptions, function(Value)
                 local Current = Runtime:GetPlaceConfig()

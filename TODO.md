@@ -324,6 +324,25 @@
 > - ช่อง **Waypoint Number** พิมพ์เลขแล้วกด **Teleport To Number** วาร์ปไป WP นั้นทันที ไม่ต้องรอให้โหลดเข้า folder
 > - รายการประตู / waypoint อัปเดตเองเมื่อ folder มีของเพิ่มหรือหายไป หรือกด **Refresh Doors** / **Refresh Waypoints**
 
+### [x] Quest: ปุ่ม Assign Quest + ช่องใส่ Quest ID
+> ทำแล้ว (v3.17): แท็บใหม่ **Quest** (ต่อจาก Teleport) ไฟล์ `Features/QuestAssign.lua`
+> - พิมพ์ ID ในช่อง **Quest ID** แล้วกด **Assign Quest** → ส่ง `QuestEvent:FireServer("AssignQuest", ID)` (หา `QuestEvent` ใน ReplicatedStorage แบบ recursive)
+> - ช่องว่างหรือหา remote ไม่เจอจะแจ้งเตือน ไม่ส่งอะไรออกไป
+
+### [x] Quest Helper: ESP บอกตำแหน่งของ/จุดที่เควสให้หา
+> ทำแล้ว (v3.17): ส่วน **Quest Helper** ในแท็บ Quest ไฟล์ `Features/QuestHelper.lua`
+> - พิมพ์ชื่อของ/จุดในช่อง **Quest Targets** (หลายอันคั่นด้วย `,` ตัวพิมพ์เล็กใหญ่ไม่สำคัญ) แล้วเปิด **Quest ESP**
+> - หา Model / Part ใน workspace ที่ชื่อตรง หรือ part ที่มี ProximityPrompt ขึ้นชื่อนั้น (ObjectText / ActionText)
+> - ทุกอันได้ป้ายชื่อ + ระยะ (studs) มองทะลุกำแพง · ใกล้สุด 20 อันได้ Highlight · อันที่ใกล้ที่สุดเป็นสีเขียว อื่นๆ สีเหลือง
+> - ของที่โหลดเข้ามาทีหลัง (streaming) ติดป้ายเอง · กด **Rescan Quest Targets** เพื่อหาใหม่ทั้งแผนที่
+> - ยังไม่ดึงเป้าจากเควสอัตโนมัติ: ไม่รู้ว่าเกมเก็บข้อมูลเควสฝั่ง client ไว้ตรงไหน → กด **Copy Quest Info** ตอนรับเควสอยู่ (copy + บันทึก `AutoFarmProfiles/QuestDump.txt`) แล้วส่งมาให้ดู จะทำให้ใส่เป้าเองได้
+
+### [x] Mob Dictionary: โชว์ AwardParam ของมอนที่ AwardType = HealthPercent
+> ทำแล้ว (v3.17): มอนที่ `Config.AwardType` เป็น `"HealthPercent"` จะได้รางวัลก็ต่อเมื่อตีไปอย่างน้อย `AwardParam`% ของเลือดมอน (attribute บน AwardType)
+> - dictionary จากเซิร์ฟไม่ส่ง attribute มา เลยอ่านจากตัวมอนที่เกิดอยู่ใน `workspace.Mobs` (เหมือน Drops) ต้องเป็นตัวเลขเท่านั้น
+> - โชว์เป็น stat **AWARD MIN HEALTH %** ในกลุ่ม REWARDS ของหน้ารายละเอียด (เทียบกับมอนตัวอื่นเป็นแถบ) ขึ้นเองเมื่อเจอตัวจริง
+> - บันทึกใน `AutoFarmProfiles/MobDrops.json` (ช่อง `AwardParams`) รอบต่อไปโชว์ได้เลยไม่ต้องรอเจอมอนอีก
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair
@@ -702,3 +721,13 @@
 ### [x] Auto Start Game: บันทึกแบบ global
 > ทำแล้ว (v3.16): **Auto Start Game** ย้ายไปเก็บใน `AutoFarmProfiles/Global.json` เหมือน FPS Boost / Leave On Danger Group ใช้ค่าเดียวกันทุกโปรไฟล์และทุก PlaceId โปรไฟล์ไม่บันทึก/โหลด/export ค่านี้แล้ว
 > - ค่าเดิมที่เคยบันทึกไว้ในโปรไฟล์ไม่ถูกย้ายมา ต้องเปิด toggle ใหม่ครั้งเดียว
+
+### [x] UI: Theme ไม่ save
+> แก้แล้ว (v3.17): สีที่ตั้งใน Configuration (กด **APPLY**) ไม่เคยถูกบันทึกเลย เปิดใหม่ก็กลับเป็นสีเดิม
+> - ตอนนี้เก็บใน `AutoFarmProfiles/Global.json` (`UI_THEME`) เหมือน Font / Text Scale ใช้ร่วมทุกโปรไฟล์และทุก PlaceId และโหลดกลับตอนเปิดสคริปต์
+> - เก็บเฉพาะสีที่ต่างจากค่าเริ่มต้น · กด **RESET DEFAULT** จะล้างค่าที่บันทึกไว้ด้วย
+
+### [x] Waypoint: dropdown กดไม่ได้
+> แก้แล้ว (v3.17): dropdown ถูกลบแล้วสร้างใหม่ทั้งที่รายการเหมือนเดิม ถ้าสร้างใหม่ระหว่างกดเมาส์ลงกับปล่อย คลิกนั้นจะหายไป
+> - Teleport **Waypoint** / **Door**: folder `Waypoints` / `Interactions` มีของเข้าออกตลอด (โหลดตามระยะ) เดิมสร้าง dropdown ใหม่ทุก 0.5 วินาที → ตอนนี้สร้างใหม่เฉพาะเมื่อรายการเปลี่ยนจริง
+> - Profile Settings **Pair Waypoint** / **Paired Farm Zone**: เดิมสร้างใหม่ 2 รอบทุกครั้งที่แก้ waypoint / zone (รวมถึงตอนเลือกใน dropdown เอง) → ตอนนี้สร้างใหม่เฉพาะเมื่อจำนวน waypoint / zone เปลี่ยน ที่เหลือแค่อัปเดตค่าที่เลือก
