@@ -317,6 +317,13 @@
 > - ทุกค่าตัวเลขเป็นแถบเทียบกับตัวที่ดีที่สุดในประเภท, ค่าอื่นเป็นป้าย, status effect · ปุ่ม **COPY NAME** / **OPEN RECIPE** (เปิด Recipe Browser ที่สูตรนั้น)
 > - แยกชิ้นส่วนที่ใช้ร่วมกับ Mob Dictionary เป็น `UI/DetailKit.lua` (การ์ด ป้าย แถบ ตัวเลข) และ `UI/BrowserShell.lua` (หน้าต่าง ค้นหา ชิป รายการ) · Mob Dictionary เปลี่ยนไปใช้สองไฟล์นี้ หน้าตาเหมือนเดิม
 
+### [x] Teleport Navigate: วาร์ปตามประตู และวาร์ปไป Waypoint ของเกม
+> ทำแล้ว (v3.11): แท็บใหม่ **Teleport** (ต่อจาก Server) ไฟล์ `Features/TeleportNavigate.lua` ใช้ remote `TeleportEvent` ของเกมเหมือน TeleportSystem ของ Iambatman
+> - **Door Teleport**: เลือกจุด T1 / T2 ของประตูทุกบานใน `workspace.Interactions` จาก dropdown แล้วกด **Teleport To Door**
+> - **Waypoint Teleport**: เลือก waypoint จาก `workspace.Waypoints` (มี #0 Default เสมอ) แล้วกด **Teleport To Waypoint**
+> - ช่อง **Waypoint Number** พิมพ์เลขแล้วกด **Teleport To Number** วาร์ปไป WP นั้นทันที ไม่ต้องรอให้โหลดเข้า folder
+> - รายการประตู / waypoint อัปเดตเองเมื่อ folder มีของเพิ่มหรือหายไป หรือกด **Refresh Doors** / **Refresh Waypoints**
+
 ## To Fix
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair

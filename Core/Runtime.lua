@@ -82,6 +82,7 @@ return {
         UIRef.CraftTab = UI:AddTab("Crafting")
         UIRef.PartyTab = UI:AddTab("Party")
         UIRef.ServerTab = UI:AddTab("Server")
+        UIRef.TeleportTab = UI:AddTab("Teleport")
         UIRef.DebugTab = UI:AddTab("Debug")
         UIRef.FeatureSection = UIRef.FarmTab:AddSection("Features")
         UIRef.TargetSection = UIRef.FarmTab:AddSection("Targeting")
@@ -95,6 +96,8 @@ return {
         UIRef.ServerSection = UIRef.ServerTab:AddSection("Current Server")
         UIRef.ServerSafetySection = UIRef.ServerTab:AddSection("Server Safety")
         UIRef.ServerLogSection = UIRef.ServerTab:AddSection("Player Log")
+        UIRef.DoorTeleportSection = UIRef.TeleportTab:AddSection("Door Teleport")
+        UIRef.WaypointTeleportSection = UIRef.TeleportTab:AddSection("Waypoint Teleport")
         
         local function NotifyAction(Action, Message, Duration)
             if UI and type(UI.Notify) == "function" then

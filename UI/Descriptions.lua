@@ -78,6 +78,16 @@ return {
             ["Add Group ID"] = "Adds the group ID typed above",
             ["Danger Whitelist"] = "Players Leave On Danger Group stays for",
             ["Clear Danger Whitelist"] = "Removes everyone from the Danger Whitelist",
+
+            --// Teleport
+            ["Door"] = "A door's T1 or T2 point to teleport to",
+            ["Teleport To Door"] = "Teleports to the door point picked above",
+            ["Refresh Doors"] = "Reloads the doors from the Interactions folder",
+            ["Waypoint"] = "One of the game's waypoints that has loaded in",
+            ["Teleport To Waypoint"] = "Teleports to the waypoint picked above",
+            ["Refresh Waypoints"] = "Reloads the waypoints from the Waypoints folder",
+            ["Waypoint Number"] = "Any waypoint number, even one not loaded in yet",
+            ["Teleport To Number"] = "Teleports straight to the waypoint number typed above",
             ["Clear Log"] = "Empties the Player Log",
 
             --// Party
