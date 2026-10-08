@@ -1,11 +1,13 @@
 -- QuestHelper tags what a "find an item / reach a place" quest asks for.
--- The names typed in Quest Targets (comma separated, any case) are looked
--- for in workspace: a Model or BasePart with that name, or a part whose
--- ProximityPrompt shows it (ObjectText / ActionText). Each one found gets a
+-- The names typed in Quest Targets (comma separated) are looked for in the
+-- QuestItems folder of workspace: a Model or BasePart with that name, or a
+-- part whose ProximityPrompt shows it (ObjectText / ActionText). Names are
+-- compared by NormalizeName (letters and digits only, lower case) on both
+-- sides, so "old key" finds "Old_Key" or "OldKey". Each one found gets a
 -- Highlight (the nearest MAX_HIGHLIGHTS of them; Roblox draws about 31 at
 -- once) and a label with its name and distance, seen through walls.
 --
--- New parts are tagged as they stream in (workspace.DescendantAdded) and
+-- New items are tagged as they stream in (workspace.DescendantAdded) and
 -- tags whose part went away are dropped on the next update. Copy Quest Info
 -- puts what the client can see of the active quest on the clipboard (and in
 -- QUEST_DUMP_FILE), so the quest format can be read for automatic targets.
@@ -34,6 +36,8 @@ return {
         local ESP_COLOR = Color3.fromRGB(255, 196, 0)
         local NEAREST_COLOR = Color3.fromRGB(0, 255, 140)
         local ESP_FOLDER_NAME = "AICQuestESP"
+        --// The game's folder of quest items to find; only it is searched.
+        local QUEST_ITEMS_FOLDER = "QuestItems"
         local QUEST_DUMP_FILE = Context.PROFILE_FOLDER .. "/QuestDump.txt"
         --// Most lines a dump section lists, so a huge folder cannot flood it.
         local DUMP_SECTION_LIMIT = 150
@@ -51,6 +55,8 @@ return {
                 Folder = nil,
                 Elapsed = 0,
                 StatusLabel = nil,
+                --// workspace's QuestItems folder (GetQuestItemsFolder).
+                QuestItems = nil,
             },
         }
 
@@ -70,18 +76,39 @@ return {
             return S.Folder
         end
 
+        --// Letters and digits only, lower case: "Old Key #2" -> "oldkey2".
+        --// Typed targets and item names both go through this, so spacing,
+        --// case and symbols never stop a match.
+        local function NormalizeName(Text)
+            local Stripped = string.gsub(tostring(Text or ""), "[^%w]", "")
+            return string.lower(Stripped)
+        end
+
         local function ParseTargets(Text)
             local Targets = {}
 
             for Name in string.gmatch(tostring(Text or ""), "[^,]+") do
-                local Trimmed = string.lower(string.match(Name, "^%s*(.-)%s*$"))
+                local Key = NormalizeName(Name)
 
-                if Trimmed ~= "" then
-                    Targets[Trimmed] = true
+                if Key ~= "" then
+                    Targets[Key] = true
                 end
             end
 
             return Targets
+        end
+
+        --// workspace.QuestItems (or one deeper in workspace), cached while
+        --// it stays in the game; nil when it has not loaded in.
+        local function GetQuestItemsFolder()
+            if S.QuestItems and S.QuestItems:IsDescendantOf(workspace) then
+                return S.QuestItems
+            end
+
+            S.QuestItems = workspace:FindFirstChild(QUEST_ITEMS_FOLDER)
+                or workspace:FindFirstChild(QUEST_ITEMS_FOLDER, true)
+
+            return S.QuestItems
         end
 
         --// A part to hang the label on, or nil.
@@ -122,12 +149,12 @@ return {
         --// The instance to tag for this one, and the name to show, or nil.
         local function MatchTarget(Instance_)
             if Instance_:IsA("Model") or Instance_:IsA("BasePart") then
-                if S.Targets[string.lower(Instance_.Name)] then
+                if S.Targets[NormalizeName(Instance_.Name)] then
                     return Instance_, Instance_.Name
                 end
             elseif Instance_:IsA("ProximityPrompt") then
                 for _, Text in ipairs({ Instance_.ObjectText, Instance_.ActionText }) do
-                    if Text ~= "" and S.Targets[string.lower(Text)] then
+                    if Text ~= "" and S.Targets[NormalizeName(Text)] then
                         local Holder = Instance_.Parent
 
                         if Holder and Holder:IsA("Attachment") then
@@ -230,7 +257,9 @@ return {
                 return
             end
 
-            for _, Descendant in ipairs(workspace:GetDescendants()) do
+            local Folder = GetQuestItemsFolder()
+
+            for _, Descendant in ipairs(Folder and Folder:GetDescendants() or {}) do
                 TryTag(Descendant)
             end
         end
@@ -294,7 +323,9 @@ return {
             elseif Sorted[1] then
                 SetStatus(string.format("FOUND %d  ·  NEAREST %s  %d STUDS", #Sorted, Sorted[1].Name, math.floor(Sorted[1].Distance + 0.5)))
             else
-                SetStatus("NOTHING FOUND NEARBY (MAY NOT HAVE LOADED IN)")
+                SetStatus((S.QuestItems and S.QuestItems.Parent)
+                    and "NOTHING FOUND IN QUESTITEMS (MAY NOT HAVE LOADED IN)"
+                    or "NO QUESTITEMS FOLDER LOADED")
             end
         end
 
@@ -433,7 +464,22 @@ return {
         Section:AddButton("Copy Quest Info", CopyQuestInfo)
 
         Context.Connect(workspace.DescendantAdded, function(Descendant)
-            if S.Enabled and next(S.Targets) then
+            if not S.Enabled or not next(S.Targets) then
+                return
+            end
+
+            --// The folder itself streamed in: tag what it holds.
+            if Descendant.Name == QUEST_ITEMS_FOLDER and not (S.QuestItems and S.QuestItems.Parent) then
+                S.QuestItems = Descendant
+
+                for _, Item in ipairs(Descendant:GetDescendants()) do
+                    TryTag(Item)
+                end
+
+                return
+            end
+
+            if S.QuestItems and Descendant:IsDescendantOf(S.QuestItems) then
                 TryTag(Descendant)
             end
         end)

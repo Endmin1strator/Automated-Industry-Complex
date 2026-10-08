@@ -335,6 +335,7 @@
 > - หา Model / Part ใน workspace ที่ชื่อตรง หรือ part ที่มี ProximityPrompt ขึ้นชื่อนั้น (ObjectText / ActionText)
 > - ทุกอันได้ป้ายชื่อ + ระยะ (studs) มองทะลุกำแพง · ใกล้สุด 20 อันได้ Highlight · อันที่ใกล้ที่สุดเป็นสีเขียว อื่นๆ สีเหลือง
 > - ของที่โหลดเข้ามาทีหลัง (streaming) ติดป้ายเอง · กด **Rescan Quest Targets** เพื่อหาใหม่ทั้งแผนที่
+> - แก้ (v3.18): หาเฉพาะใน folder `QuestItems` ของ workspace · ชื่อของและชื่อที่พิมพ์ถูกตัดเหลือแค่ตัวอักษรกับตัวเลขแล้วทำเป็นตัวพิมพ์เล็กทั้งคู่ก่อนเทียบ เช่นพิมพ์ `old key` เจอ `Old_Key` / `OldKey`
 > - ยังไม่ดึงเป้าจากเควสอัตโนมัติ: ไม่รู้ว่าเกมเก็บข้อมูลเควสฝั่ง client ไว้ตรงไหน → กด **Copy Quest Info** ตอนรับเควสอยู่ (copy + บันทึก `AutoFarmProfiles/QuestDump.txt`) แล้วส่งมาให้ดู จะทำให้ใส่เป้าเองได้
 
 ### [x] Mob Dictionary: โชว์ AwardParam ของมอนที่ AwardType = HealthPercent
