@@ -370,30 +370,47 @@ return {
             return AICFeature.isBlocked ~= nil and AICFeature.isBlocked(OtherPlayer.UserId) == true
         end
 
-        --// Blocks the player through Auto Block's prompt (Auto Confirm Block
-        --// presses it when on) and waits, at most DANGER_BLOCK_WAIT, for the
-        --// block to take. Roblox does not put us in a server with someone we
-        --// blocked, so without this a hop can land straight back here.
-        --// True when they are blocked. Yields.
-        local function BlockBeforeLeaving(OtherPlayer)
-            if IsBlocked(OtherPlayer) or not AICFeature.promptBlockPlayer then
-                return IsBlocked(OtherPlayer)
+        --// Auto Block's check that the block has gone through, not just
+        --// shown up on the list.
+        local function IsBlockSettled(OtherPlayer)
+            if AICFeature.IsBlockSettled then
+                return AICFeature.IsBlockSettled(OtherPlayer) == true
             end
 
-            SetStatus("BLOCKING @" .. OtherPlayer.Name .. " (DANGER GROUP)")
-            AICFeature.promptBlockPlayer(OtherPlayer)
+            return IsBlocked(OtherPlayer)
+        end
+
+        --// Blocks the player through Auto Block's prompt (Auto Confirm Block
+        --// presses it when on) and waits, at most DANGER_BLOCK_WAIT, for the
+        --// block to go through. Roblox does not put us in a server with
+        --// someone we blocked, so without this a hop can land straight back
+        --// here. True when they are blocked. Yields.
+        local function BlockBeforeLeaving(OtherPlayer)
+            if not IsBlocked(OtherPlayer) then
+                if not AICFeature.promptBlockPlayer then
+                    return false
+                end
+
+                SetStatus("BLOCKING @" .. OtherPlayer.Name .. " (DANGER GROUP)")
+                AICFeature.promptBlockPlayer(OtherPlayer)
+            end
 
             local Deadline = os.clock() + DANGER_BLOCK_WAIT
 
             while os.clock() < Deadline and OtherPlayer.Parent == Players do
-                if IsBlocked(OtherPlayer) then
+                if IsBlockSettled(OtherPlayer) then
                     return true
+                end
+
+                --// Taken off the list again (the block failed): ask again.
+                if not IsBlocked(OtherPlayer) and AICFeature.promptBlockPlayer then
+                    AICFeature.promptBlockPlayer(OtherPlayer)
                 end
 
                 task.wait(DANGER_BLOCK_POLL)
             end
 
-            return IsBlocked(OtherPlayer)
+            return IsBlockSettled(OtherPlayer)
         end
 
         --// Blocks the danger player first, then joins another public server

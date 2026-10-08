@@ -21,6 +21,9 @@ return {
         --// Wait after each click method before checking the block list.
         local VERIFY_SECONDS = 0.7
         local FINAL_VERIFY_SECONDS = 2
+        --// A confirm still running after this is taken as stuck, so it
+        --// never holds Auto Block's hop back for good.
+        local CONFIRM_MAX_SECONDS = 20
         --// Exact match: "Block and report" must never be pressed.
         local CONFIRM_TEXT = "Block"
         --// The dialog title reads "Block <name>?".
@@ -44,6 +47,7 @@ return {
                 ArmToken = 0,
                 ArmedPlayer = nil,
                 ArmedUntil = 0,
+                ArmedAt = 0,
                 --// The click method that worked last, tried first next time.
                 LastMethod = nil,
             },
@@ -269,7 +273,8 @@ return {
 
             S.ArmToken += 1
             S.ArmedPlayer = OtherPlayer
-            S.ArmedUntil = os.clock() + ARM_SECONDS
+            S.ArmedAt = os.clock()
+            S.ArmedUntil = S.ArmedAt + ARM_SECONDS
             task.spawn(Run, S.ArmToken, OtherPlayer)
         end
 
@@ -278,12 +283,25 @@ return {
             S.ArmedPlayer = nil
         end
 
+        --// Whether a confirm for this player is still looking for, pressing
+        --// or verifying their dialog.
+        function Feature:IsConfirming(OtherPlayer)
+            return OtherPlayer ~= nil
+                and S.ArmedPlayer == OtherPlayer
+                and os.clock() - S.ArmedAt < CONFIRM_MAX_SECONDS
+        end
+
         function Feature:Update()
         end
 
         --// AutoBlock calls this right after it opens the dialog.
         AICFeature.ConfirmBlockPrompt = function(OtherPlayer)
             return Feature:Arm(OtherPlayer)
+        end
+
+        --// AutoBlock waits on this before prompting again or hopping.
+        AICFeature.IsConfirmingBlock = function(OtherPlayer)
+            return Feature:IsConfirming(OtherPlayer)
         end
 
         AICUI.BindFeatureToggle("AutoBlockConfirm", "Auto Confirm Block", function(Enabled)

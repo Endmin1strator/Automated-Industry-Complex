@@ -626,6 +626,14 @@ return {
                         return
                     end
 
+                    --// Hop only once the block has gone through, or the hop
+                    --// can cut the block request short and land us back
+                    --// with them.
+                    if not AICFeature.IsBlockSettled(Intruder) then
+                        SetFarmState("AUTO BLOCK  CHECKING @" .. Intruder.Name)
+                        return
+                    end
+
                     AICFeature.S.BlockCache[Intruder.UserId] = nil
                     AICFeature.TeleportToPlace()
                     return

@@ -18,6 +18,12 @@ return {
         local UIRef = Context.UIRef
         local NotifyAction = Context.NotifyAction
 
+        --// Roblox adds a player to the block list as soon as Block is
+        --// pressed, before its block request has gone through, and takes
+        --// them off again if it fails. A hop waits until they have stayed
+        --// blocked this long, so leaving cannot cut the request short.
+        local BLOCK_SETTLE_SECONDS = 1.5
+
         local AutoBlock = {
             Name = "AutoBlock",
             IsFeature = true,
@@ -31,6 +37,8 @@ return {
         AICFeature.S.BlockCache = AICFeature.S.BlockCache or {}
         --// UserId -> os.clock() when Auto Block first saw that intruder.
         AICFeature.S.IntruderSeenAt = {}
+        --// UserId -> os.clock() when that player was first seen blocked.
+        AICFeature.S.BlockedSince = {}
         AICFeature.S.BlockEnabled = Runtime:GetPlaceConfig().AUTOBLOCK == true
         AutoBlock.Enabled = AICFeature.S.BlockEnabled
         Feature.AutoBlock.Enabled = AutoBlock.Enabled
@@ -105,6 +113,33 @@ return {
             return false
         end
 
+        --// Whether the block on this player is done: on the block list,
+        --// unbroken, for BLOCK_SETTLE_SECONDS, with Auto Confirm Block no
+        --// longer working on their dialog. Ask every frame or poll; the
+        --// clock starts the first time they are seen blocked.
+        function AutoBlock:IsBlockSettled(OtherPlayer)
+            local UserId = OtherPlayer.UserId
+
+            if not self:IsBlocked(UserId) then
+                AICFeature.S.BlockedSince[UserId] = nil
+                return false
+            end
+
+            local now = os.clock()
+            local Since = AICFeature.S.BlockedSince[UserId]
+
+            if not Since then
+                Since = now
+                AICFeature.S.BlockedSince[UserId] = now
+            end
+
+            if AICFeature.IsConfirmingBlock and AICFeature.IsConfirmingBlock(OtherPlayer) then
+                return false
+            end
+
+            return now - Since >= BLOCK_SETTLE_SECONDS
+        end
+
         --// Block Delay: an intruder is acted on only once they have been
         --// seen for AUTO_BLOCK_DELAY seconds. The clock starts the first
         --// time this is asked about them and stops when they leave.
@@ -125,6 +160,12 @@ return {
             local UserId = OtherPlayer.UserId
 
             if AICFeature.S.BlockCache[UserId] or self:IsBlocked(UserId) then
+                return
+            end
+
+            --// Auto Confirm Block is still pressing the dialog already open
+            --// for them; opening it again would pull it out from under it.
+            if AICFeature.IsConfirmingBlock and AICFeature.IsConfirmingBlock(OtherPlayer) then
                 return
             end
 
@@ -345,6 +386,7 @@ return {
             Context.Connect(Players.PlayerRemoving, function(OtherPlayer)
                 --// Leaving and coming back starts the delay over.
                 AICFeature.S.IntruderSeenAt[OtherPlayer.UserId] = nil
+                AICFeature.S.BlockedSince[OtherPlayer.UserId] = nil
 
                 task.defer(function()
                     self:RefreshWhitelistPlayerDropdown()
@@ -366,6 +408,9 @@ return {
             end
             AICFeature.isBlocked = function(UserId)
                 return AutoBlock:IsBlocked(UserId)
+            end
+            AICFeature.IsBlockSettled = function(OtherPlayer)
+                return AutoBlock:IsBlockSettled(OtherPlayer)
             end
             AICFeature.promptBlockPlayer = function(OtherPlayer)
                 return AutoBlock:PromptBlockPlayer(OtherPlayer)
