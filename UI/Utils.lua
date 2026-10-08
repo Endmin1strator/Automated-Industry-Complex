@@ -4031,9 +4031,9 @@ function Library.SectionMethods:AddDropdown(
         self.Library:_PositionDropdown(button, popup)
 
         -- Remember every ScrollingFrame between the button and the UI root.
-        -- The nearest one is the page/root scroll and is allowed to move.
-        -- If another nested ScrollingFrame moves, close the dropdown because
-        -- its content has changed independently from the dropdown anchor.
+        -- The nearest one is the page and is allowed to move (the popup
+        -- follows). If one further out moves, close the dropdown
+        -- because its content has changed independently from the anchor.
         component.RootScrollingFrame = nil
         component.ScrollingParents = {}
 
@@ -4099,67 +4099,81 @@ function Library.SectionMethods:AddDropdown(
                 return
             end
 
-            local positionChanged = scrollingFrame.AbsolutePosition ~= state.Position
-            local sizeChanged     = scrollingFrame.AbsoluteSize ~= state.Size
-            local canvasChanged   = scrollingFrame.CanvasPosition ~= state.CanvasPosition
+            if scrollingFrame == component.RootScrollingFrame then
+                --// The page may move: touch momentum and elastic bounce
+                --// keep scrolling it after a swipe, and a page whose
+                --// content shrinks clamps its CanvasPosition. Closing on
+                --// that shut a dropdown the frame after it opened on long
+                --// pages. The popup follows the button instead, and closes
+                --// only once the button has left the page's visible area.
+                local pageTop = scrollingFrame.AbsolutePosition.Y
+                local pageBottom = pageTop + scrollingFrame.AbsoluteSize.Y
+                local buttonTop = button.AbsolutePosition.Y
 
-            -- This includes the root ScrollingFrame. If the user scrolls the
-            -- page/root while a dropdown is open, close it immediately.
-            if positionChanged or sizeChanged or canvasChanged then
-                component:Close()
-                return
+                if buttonTop + button.AbsoluteSize.Y < pageTop or buttonTop > pageBottom then
+                    component:Close()
+                    return
+                end
+            else
+                local positionChanged = scrollingFrame.AbsolutePosition ~= state.Position
+                local sizeChanged     = scrollingFrame.AbsoluteSize ~= state.Size
+                local canvasChanged   = scrollingFrame.CanvasPosition ~= state.CanvasPosition
+
+                --// A scroll further out moved: the button's place in it
+                --// changed, so close rather than follow.
+                if positionChanged or sizeChanged or canvasChanged then
+                    component:Close()
+                    return
+                end
             end
         end
 
         self.Library:_PositionDropdown(button, popup)
     end)
 
-    --// A click outside closes it. Clicks the UI took count too: the floating
-    --// windows and panels are buttons, so a click on them is always taken.
-    --// A tap does the same; before, only a mouse click closed it, so on a
-    --// touch screen a dropdown stayed open until picked from.
-    Connect(UserInputService.InputBegan, function(input, processed)
-        if not component.IsOpen then
+    --// A click or tap outside closes it. Whether a press was inside is told
+    --// by the GUI's own InputBegan on the button, the list and every option
+    --// (Roblox's hit test), not by comparing the pointer position with
+    --// AbsolutePosition: that comparison is off by the top bar inset or the
+    --// ScreenInsets on some clients, so a press on an option counted as
+    --// outside, closed the list on mouse-down, and the option's click never
+    --// fired. The outside check waits a frame so every InputBegan of the
+    --// same press has run first.
+    local pressedInside = false
+
+    local function IsPress(input)
+        return input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch
+    end
+
+    --// Only while open, so the press that opens it leaves nothing behind.
+    local function MarkPressInside(input)
+        if component.IsOpen and IsPress(input) then
+            pressedInside = true
+        end
+    end
+
+    Connect(button.InputBegan, MarkPressInside)
+    Connect(popup.InputBegan, MarkPressInside)
+    Connect(list.InputBegan, MarkPressInside)
+
+    for _, row in pairs(optionRows) do
+        Connect(row.Button.InputBegan, MarkPressInside)
+    end
+
+    Connect(UserInputService.InputBegan, function(input)
+        if not component.IsOpen or not IsPress(input) then
             return
         end
 
-        local isClick = input.UserInputType == Enum.UserInputType.MouseButton1
-        local isTap = input.UserInputType == Enum.UserInputType.Touch
+        task.delay(0, function()
+            local wasInside = pressedInside
+            pressedInside = false
 
-        if processed and not isClick and not isTap then
-            return
-        end
-
-        if isClick or isTap then
-            --// GetMouseLocation and the ScreenGui (IgnoreGuiInset) count
-            --// from the top of the screen; a touch position starts below
-            --// the top bar.
-            local mousePosition = isClick
-                and UserInputService:GetMouseLocation()
-                or Vector2.new(input.Position.X, input.Position.Y) + game:GetService("GuiService"):GetGuiInset()
-
-            local position = button.AbsolutePosition
-            local size = button.AbsoluteSize
-
-            local inside =
-                mousePosition.X >= position.X
-                and mousePosition.X <= position.X + size.X
-                and mousePosition.Y >= position.Y
-                and mousePosition.Y <= position.Y + size.Y
-
-            local popupPosition = popup.AbsolutePosition
-            local popupSize = popup.AbsoluteSize
-
-            local insidePopup =
-                mousePosition.X >= popupPosition.X
-                and mousePosition.X <= popupPosition.X + popupSize.X
-                and mousePosition.Y >= popupPosition.Y
-                and mousePosition.Y <= popupPosition.Y + popupSize.Y
-
-            if not inside and not insidePopup then
+            if not wasInside and component.IsOpen then
                 component:Close()
             end
-        end
+        end)
     end)
 
     RefreshSelection()
@@ -4447,7 +4461,7 @@ function Library.SectionMethods:AddPriority(
         name:upper(),
         10,
         UDim2.fromOffset(0, 0),
-        UDim2.new(1, -100, 0, 20)
+        UDim2.new(1, 0, 0, 20)
     )
 
     title.Font = FONT_BOLD
@@ -4474,33 +4488,11 @@ function Library.SectionMethods:AddPriority(
         subtitleText,
         7,
         UDim2.fromOffset(0, 18),
-        UDim2.new(1, -100, 0, 15)
+        UDim2.new(1, 0, 0, 15)
     )
 
     subtitle.TextColor3 = self.Library.Theme.TextMuted
     subtitle.TextTruncate = Enum.TextTruncate.AtEnd
-
-    local addButton = New("TextButton", {
-        Parent = header,
-
-        BackgroundTransparency = 1,
-
-        Position = UDim2.new(1, -80, 0, 0),
-
-        Size = UDim2.fromOffset(80, 30),
-
-        Text = "+ ADD",
-
-        TextColor3 = self.Library.Theme.Cyan,
-
-        TextSize = 10,
-
-        Font = FONT_BOLD,
-
-        AutoButtonColor = false,
-
-        ZIndex = 17,
-    })
 
     -- List
     local list = New("Frame", {
@@ -5051,12 +5043,6 @@ function Library.SectionMethods:AddPriority(
 
         Refresh()
     end
-
-    self.Library:_Connect(addButton.MouseButton1Click, function()
-        -- Add your own target selection here.
-        -- Example:
-        -- component:Add("Skeleton")
-    end)
 
     table.insert(self.Components, component)
 
