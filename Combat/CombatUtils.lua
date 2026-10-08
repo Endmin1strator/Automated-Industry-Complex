@@ -807,16 +807,23 @@ return {
         --// Only while actually walking, not standing at a waypoint.
         local ROUTE_HOLE_MIN_MOVE = 0.1
 
+        --// The part's facing on the ground plane, unit length, or zero.
+        function AICCombatUtils.GetFlatLook(Part)
+            local Look = Part.CFrame.LookVector
+            local Flat = Vector3.new(Look.X, 0, Look.Z)
+
+            return Flat.Magnitude > 0.01 and Flat.Unit or Vector3.zero
+        end
+
         function AICCombatUtils.IsRouteHoleAhead()
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             if not RootPart or not Humanoid or Humanoid.MoveDirection.Magnitude < ROUTE_HOLE_MIN_MOVE then
                 return false
             end
 
-            local Look = RootPart.CFrame.LookVector
-            local Flat = Vector3.new(Look.X, 0, Look.Z)
+            local Direction = AICCombatUtils.GetFlatLook(RootPart)
 
-            if Flat.Magnitude <= 0.01 then
+            if Direction == Vector3.zero then
                 return false
             end
 
@@ -843,7 +850,6 @@ return {
                 return false
             end
 
-            local Direction = Flat.Unit
             local ProbeDistance = tonumber(CONFIG.ROUTE_HOLE_PROBE_DISTANCE) or 2
             local SampleStep = math.max(tonumber(CONFIG.ROUTE_HOLE_SAMPLE_STEP) or 0.5, 0.1)
             local MinDepth = tonumber(CONFIG.ROUTE_HOLE_MIN_DEPTH) or 1

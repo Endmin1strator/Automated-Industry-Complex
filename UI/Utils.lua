@@ -4253,6 +4253,8 @@ end
 --//   ValueLabel   short caption shown in the header, e.g. "WAIT (S)"
 --//   Default      value for rows added without one (default 0)
 --//   Min, Max     clamp for typed values (default 0 .. math.huge)
+--//   Checks       true to give every row a checkbox (e.g. "jump here")
+--//   CheckLabel   short caption for the checkbox, shown in the header
 --//   Draggable    false to turn off drag-to-reorder (default on)
 --//
 --// Rows are reordered by dragging the name. The drop is applied as a run of
@@ -4270,8 +4272,10 @@ function Library.SectionMethods:AddPriority(
 
     component.Priority = {}
     component.Values = {}
+    component.Checks = {}
 
     local hasValues = options.Values == true
+    local hasChecks = options.Checks == true
     local draggable = options.Draggable ~= false
     local defaultValue = tonumber(options.Default) or 0
     local minValue = tonumber(options.Min) or 0
@@ -4293,6 +4297,15 @@ function Library.SectionMethods:AddPriority(
 
         for index = #component.Values, #component.Priority + 1, -1 do
             component.Values[index] = nil
+        end
+
+        --// Checks the same, as true/false.
+        for index = 1, #component.Priority do
+            component.Checks[index] = component.Checks[index] == true
+        end
+
+        for index = #component.Checks, #component.Priority + 1, -1 do
+            component.Checks[index] = nil
         end
     end
 
@@ -4365,6 +4378,10 @@ function Library.SectionMethods:AddPriority(
 
     if hasValues and options.ValueLabel then
         subtitleText = subtitleText .. "  ·  " .. tostring(options.ValueLabel):upper()
+    end
+
+    if hasChecks and options.CheckLabel then
+        subtitleText = subtitleText .. "  ·  ☐ " .. tostring(options.CheckLabel):upper()
     end
 
     local subtitle = AddText(
@@ -4449,8 +4466,12 @@ function Library.SectionMethods:AddPriority(
     --// would land, StartY the pointer height when the drag began.
     local dragState = nil
 
-    --// Space kept clear on the right of each row for its buttons.
-    local rightReserve = hasValues and 190 or 130
+    --// Space kept clear on the right of each row for its buttons. The
+    --// checkbox, when there is one, sits left of the value box.
+    local CHECK_SIZE = 22
+    local valueReserve = hasValues and 190 or 130
+    local checkX = -(valueReserve + CHECK_SIZE - 2)
+    local rightReserve = hasChecks and valueReserve + CHECK_SIZE + 4 or valueReserve
 
     local function TargetIndexFor(pointerY)
         local offset = pointerY - dragState.StartY
@@ -4614,6 +4635,43 @@ function Library.SectionMethods:AddPriority(
                 end)
             end
 
+            if hasChecks then
+                local checked = component.Checks[index] == true
+
+                local checkBox = New("TextButton", {
+                    Parent = row,
+
+                    BackgroundColor3 = checked and self.Library.Theme.CyanDim or self.Library.Theme.Element,
+
+                    BackgroundTransparency = checked and 0.2 or 0.1,
+
+                    BorderSizePixel = 0,
+
+                    Position = UDim2.new(1, checkX, 0.5, -CHECK_SIZE / 2),
+
+                    Size = UDim2.fromOffset(CHECK_SIZE, CHECK_SIZE),
+
+                    Text = checked and "✓" or "",
+
+                    TextColor3 = self.Library.Theme.Cyan,
+
+                    TextSize = 12,
+
+                    Font = FONT_BOLD,
+
+                    AutoButtonColor = false,
+
+                    ZIndex = 18,
+                })
+
+                AddCorner(checkBox, 4)
+                AddHoverHighlight(self.Library, checkBox, AddStroke(checkBox, self.Library.Theme.BorderDim, 0.15, 1))
+
+                self.Library:_Connect(checkBox.MouseButton1Click, function()
+                    component:SetCheck(index, not component.Checks[index])
+                end)
+            end
+
             -- Up
             local up = New("TextButton", {
                 Parent = row,
@@ -4772,9 +4830,9 @@ function Library.SectionMethods:AddPriority(
         Refresh()
     end
 
-    --// newValues is optional. Without it the current values are kept, trimmed
-    --// or padded with the default to fit the new list.
-    function component:SetPriority(newPriority: {string}, newValues: {number}?)
+    --// newValues and newChecks are optional. Without them the current ones
+    --// are kept, trimmed or padded with the default to fit the new list.
+    function component:SetPriority(newPriority: {string}, newValues: {number}?, newChecks: {boolean}?)
         table.clear(self.Priority)
 
         for _, value in ipairs(newPriority) do
@@ -4789,7 +4847,34 @@ function Library.SectionMethods:AddPriority(
             end
         end
 
+        if newChecks then
+            table.clear(self.Checks)
+
+            for index = 1, #self.Priority do
+                self.Checks[index] = newChecks[index] == true
+            end
+        end
+
         Refresh()
+    end
+
+    function component:GetChecks()
+        FitValues()
+        return table.clone(self.Checks)
+    end
+
+    --// Callers hook OnCheckChanged(index, checked, label) to persist edits.
+    function component:SetCheck(index: number, checked: boolean)
+        if not self.Priority[index] then
+            return
+        end
+
+        self.Checks[index] = checked == true
+        Refresh()
+
+        if self.OnCheckChanged then
+            self.OnCheckChanged(index, self.Checks[index], self.Priority[index])
+        end
     end
 
     function component:GetPriority()
@@ -4825,6 +4910,7 @@ function Library.SectionMethods:AddPriority(
 
         table.insert(self.Priority, value)
         self.Values[#self.Priority] = ClampValue(initialValue)
+        self.Checks[#self.Priority] = false
 
         Refresh()
 
@@ -4840,6 +4926,7 @@ function Library.SectionMethods:AddPriority(
 
         table.remove(self.Priority, index)
         table.remove(self.Values, index)
+        table.remove(self.Checks, index)
 
         Refresh()
 
@@ -4857,6 +4944,8 @@ function Library.SectionMethods:AddPriority(
             self.Priority[index - 1], self.Priority[index]
         self.Values[index], self.Values[index - 1] =
             self.Values[index - 1], self.Values[index]
+        self.Checks[index], self.Checks[index - 1] =
+            self.Checks[index - 1], self.Checks[index]
 
         Refresh()
     end
@@ -4872,6 +4961,8 @@ function Library.SectionMethods:AddPriority(
             self.Priority[index + 1], self.Priority[index]
         self.Values[index], self.Values[index + 1] =
             self.Values[index + 1], self.Values[index]
+        self.Checks[index], self.Checks[index + 1] =
+            self.Checks[index + 1], self.Checks[index]
 
         Refresh()
     end

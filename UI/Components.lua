@@ -537,10 +537,12 @@ return {
             local PlaceConfig = Runtime:GetPlaceConfig()
             PlaceConfig.WAYPOINT_WAITS = AICConfig.NormalizeWaitList(PlaceConfig.WAYPOINT_WAITS, #PlaceConfig.WAYPOINTS)
             PlaceConfig.WAYPOINT_ZONES = AICConfig.NormalizeZonePairs(PlaceConfig.WAYPOINT_ZONES, #PlaceConfig.WAYPOINTS, #PlaceConfig.FARM_ZONES)
+            PlaceConfig.WAYPOINT_JUMPS = AICConfig.NormalizeJumpList(PlaceConfig.WAYPOINT_JUMPS, #PlaceConfig.WAYPOINTS)
 
             UIRef.WaypointListComponent:SetPriority(
                 AICUI.BuildWaypointLabels(),
-                table.clone(PlaceConfig.WAYPOINT_WAITS)
+                table.clone(PlaceConfig.WAYPOINT_WAITS),
+                table.clone(PlaceConfig.WAYPOINT_JUMPS)
             )
 
             if AICUI.RefreshWaypointPairPickers then

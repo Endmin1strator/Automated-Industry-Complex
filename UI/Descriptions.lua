@@ -131,7 +131,7 @@ return {
             ["Import Save"] = "Creates a profile from the text above",
 
             --// Waypoints and zones
-            ["All Waypoints"] = "The route walked in order before farming",
+            ["All Waypoints"] = "The route walked in order before farming; tick Jump to jump at that waypoint",
             ["Add Waypoint Here"] = "Adds a waypoint where you stand",
             ["Waypoint Reach Distance"] = "How close counts as reaching a waypoint",
             ["Hole Check Distance"] = "How far ahead the route looks for a gap to jump (studs)",

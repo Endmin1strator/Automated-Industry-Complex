@@ -703,11 +703,32 @@ return {
                     ).Magnitude
                     local WaypointVerticalDistance = math.abs(WaypointOffset.Y)
                     local ReachDistance = tonumber(PlaceConfig.REACH_DISTANCE) or 5
+                    --// A Jump waypoint sits at a gap's edge: reached only
+                    --// right on it, and only on the ground, so the jump
+                    --// below always goes off.
+                    local IsJumpWaypoint, JumpReached = AICConfig.CheckJumpWaypoint(
+                        PlaceConfig, WaypointIndex, WaypointHorizontalDistance
+                    )
+                    local Reached
 
-                    if WaypointHorizontalDistance <= ReachDistance
-                        and WaypointVerticalDistance <= math.max(ReachDistance, CONFIG.JUMP_HEIGHT + 2)
-                    then
+                    if IsJumpWaypoint then
+                        Reached = JumpReached
+                            and Humanoid.FloorMaterial ~= Enum.Material.Air
+                            and WaypointVerticalDistance <= math.max(ReachDistance, CONFIG.JUMP_HEIGHT + 2)
+                    else
+                        Reached = WaypointHorizontalDistance <= ReachDistance
+                            and WaypointVerticalDistance <= math.max(ReachDistance, CONFIG.JUMP_HEIGHT + 2)
+                    end
+
+                    if Reached then
                         CONFIG.CURRENT_WAYPOINT_TARGET = WaypointIndex + 1
+
+                        if IsJumpWaypoint then
+                            AICCombatUtils.DoJump()
+                            --// Keep running forward; the next waypoint's
+                            --// MoveTo below takes over when there is one.
+                            Humanoid:Move(AICCombatUtils.GetFlatLook(RootPart))
+                        end
 
                         --// Waypoint Loop takes over from the first paired
                         --// waypoint, so the route ends there.

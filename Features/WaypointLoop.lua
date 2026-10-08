@@ -322,7 +322,21 @@ return {
             local Horizontal = Vector3.new(Offset.X, 0, Offset.Z).Magnitude
             local Reach = tonumber(PlaceConfig.REACH_DISTANCE) or 5
 
-            if Horizontal <= Reach and math.abs(Offset.Y) <= math.max(Reach, CONFIG.JUMP_HEIGHT + 2) then
+            local VerticalOk = math.abs(Offset.Y) <= math.max(Reach, CONFIG.JUMP_HEIGHT + 2)
+            local IsJumpWaypoint, JumpReached = AICConfig.CheckJumpWaypoint(PlaceConfig, NextIndex, Horizontal)
+
+            --// A Jump waypoint: jump at it and head straight on to the
+            --// next one, without stopping (see AutoFarming's route).
+            if IsJumpWaypoint then
+                if JumpReached and VerticalOk and Humanoid.FloorMaterial ~= Enum.Material.Air then
+                    Loop.Index = NextIndex
+                    AICCombatUtils.DoJump()
+                    --// Keep the run-up going; walking back to this waypoint
+                    --// would kill the jump. The next frame heads on.
+                    Humanoid:Move(AICCombatUtils.GetFlatLook(RootPart))
+                    return false
+                end
+            elseif Horizontal <= Reach and VerticalOk then
                 Loop.Index = NextIndex
 
                 local Wait = tonumber(PlaceConfig.WAYPOINT_WAITS and PlaceConfig.WAYPOINT_WAITS[NextIndex]) or 0

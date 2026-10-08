@@ -762,6 +762,9 @@ return {
             --// Seconds to stand at each waypoint before moving on, one entry per
             --// waypoint. Padded with 0 and trimmed so it always lines up.
             Config.WAYPOINT_WAITS = AICConfig.NormalizeWaitList(Config.WAYPOINT_WAITS, #Waypoints)
+            --// Whether to jump on reaching each waypoint, one entry per
+            --// waypoint, padded with false.
+            Config.WAYPOINT_JUMPS = AICConfig.NormalizeJumpList(Config.WAYPOINT_JUMPS, #Waypoints)
             Config.FARM_ZONES = FarmZones
             --// Farm zone paired with each waypoint for the waypoint loop, one
             --// entry per waypoint. 0 means the waypoint has no zone.
@@ -803,6 +806,32 @@ return {
             end
 
             return Result
+        end
+
+        function AICConfig.NormalizeJumpList(List, Count)
+            local Result = {}
+
+            for Index = 1, Count do
+                Result[Index] = type(List) == "table" and List[Index] == true
+            end
+
+            return Result
+        end
+
+        --// A Jump waypoint is reached only this close (studs, flat), so the
+        --// jump goes off at the edge it was placed on rather than Reach
+        --// Distance short of it.
+        AICConfig.JUMP_WAYPOINT_REACH = 1.5
+
+        --// Whether the character should jump now that it is at waypoint
+        --// Index: it is a Jump waypoint and close enough. Returns IsJump,
+        --// Reached. A non-jump waypoint returns false, nil (use Reach).
+        function AICConfig.CheckJumpWaypoint(Config, Index, HorizontalDistance)
+            if not (Config.WAYPOINT_JUMPS and Config.WAYPOINT_JUMPS[Index]) then
+                return false, nil
+            end
+
+            return true, HorizontalDistance <= AICConfig.JUMP_WAYPOINT_REACH
         end
 
         function AICConfig.NormalizeZonePairs(List, Count, ZoneCount)
