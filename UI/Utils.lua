@@ -3705,6 +3705,18 @@ function Library.SectionMethods:AddDropdown(
     component.Callback = callback
     component.IsOpen = false
 
+    --// Every connection this dropdown makes, so Destroy can cut them.
+    --// Dropdowns rebuilt for new options (player lists, zone pickers...)
+    --// used to leave a RenderStepped and an InputBegan listener behind
+    --// each time, piling up for as long as the script ran.
+    local connections = {}
+
+    local function Connect(signal, handler)
+        local connection = self.Library:_Connect(signal, handler)
+        table.insert(connections, connection)
+        return connection
+    end
+
     local descriptionText = self.Library:_GetDescription(name, description)
     local height = descriptionText and 48 + DESCRIPTION_EXTRA or 48
 
@@ -3907,7 +3919,7 @@ function Library.SectionMethods:AddDropdown(
             Check = check,
         }
 
-        self.Library:_Connect(optionButton.MouseEnter, function()
+        Connect(optionButton.MouseEnter, function()
             Tween(optionButton, TWEEN_FAST, {
                 BackgroundColor3 = self.Library.Theme.CyanDim,
                 BackgroundTransparency = 0.35,
@@ -3918,7 +3930,7 @@ function Library.SectionMethods:AddDropdown(
             })
         end)
 
-        self.Library:_Connect(optionButton.MouseLeave, function()
+        Connect(optionButton.MouseLeave, function()
             if component.Value == option then
                 return
             end
@@ -3932,7 +3944,7 @@ function Library.SectionMethods:AddDropdown(
             })
         end)
 
-        self.Library:_Connect(optionButton.MouseButton1Click, function()
+        Connect(optionButton.MouseButton1Click, function()
             component:Set(option)
             component:Close()
         end)
@@ -3987,14 +3999,29 @@ function Library.SectionMethods:AddDropdown(
         self.IsOpen = true
         popup.Visible = true
 
-        -- Scroll to the currently selected option so it's visible on open.
+        --// Scroll to the selected option so it is visible on open. The list
+        --// layout never sets Position, so its place is counted from the
+        --// shown rows above it (hidden rows, such as fonts that failed to
+        --// load, take no space).
         local row = optionRows[self.Value]
 
         if row then
-            local target = math.max(
-                0,
-                row.Button.Position.Y.Offset - (popupHeight / 2) + (OPTION_HEIGHT / 2)
-            )
+            local shownBefore = 0
+
+            for _, option in ipairs(options) do
+                if option == self.Value then
+                    break
+                end
+
+                local other = optionRows[option]
+
+                if other and other.Button.Visible then
+                    shownBefore += 1
+                end
+            end
+
+            local rowTop = 4 + shownBefore * (OPTION_HEIGHT + OPTION_PADDING)
+            local target = math.max(0, rowTop - (popupHeight / 2) + (OPTION_HEIGHT / 2))
 
             list.CanvasPosition = Vector2.new(0, target)
         end
@@ -4044,7 +4071,7 @@ function Library.SectionMethods:AddDropdown(
         arrow.Rotation = 0
     end
 
-    self.Library:_Connect(button.MouseButton1Click, function()
+    Connect(button.MouseButton1Click, function()
         if component.IsOpen then
             component:Close()
         else
@@ -4054,7 +4081,7 @@ function Library.SectionMethods:AddDropdown(
 
     -- The popup lives outside the ScrollingFrame, so Roblox will not move it
     -- automatically when the page scrolls. Keep it locked to the button.
-    self.Library:_Connect(RunService.RenderStepped, function()
+    Connect(RunService.RenderStepped, function()
         if not component.IsOpen or not popup.Visible then
             return
         end
@@ -4089,13 +4116,27 @@ function Library.SectionMethods:AddDropdown(
 
     --// A click outside closes it. Clicks the UI took count too: the floating
     --// windows and panels are buttons, so a click on them is always taken.
-    self.Library:_Connect(UserInputService.InputBegan, function(input, processed)
-        if processed and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+    --// A tap does the same; before, only a mouse click closed it, so on a
+    --// touch screen a dropdown stayed open until picked from.
+    Connect(UserInputService.InputBegan, function(input, processed)
+        if not component.IsOpen then
             return
         end
 
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local mousePosition = UserInputService:GetMouseLocation()
+        local isClick = input.UserInputType == Enum.UserInputType.MouseButton1
+        local isTap = input.UserInputType == Enum.UserInputType.Touch
+
+        if processed and not isClick and not isTap then
+            return
+        end
+
+        if isClick or isTap then
+            --// GetMouseLocation and the ScreenGui (IgnoreGuiInset) count
+            --// from the top of the screen; a touch position starts below
+            --// the top bar.
+            local mousePosition = isClick
+                and UserInputService:GetMouseLocation()
+                or Vector2.new(input.Position.X, input.Position.Y) + game:GetService("GuiService"):GetGuiInset()
 
             local position = button.AbsolutePosition
             local size = button.AbsoluteSize
@@ -4122,6 +4163,50 @@ function Library.SectionMethods:AddDropdown(
     end)
 
     RefreshSelection()
+
+    local destroyed = false
+
+    --// Disconnects everything, removes the popup and drops the dropdown
+    --// from the library. Runs once, from Destroy or when the frame is
+    --// destroyed (what callers that rebuild a dropdown do).
+    local function Cleanup()
+        if destroyed then
+            return
+        end
+
+        destroyed = true
+        component.IsOpen = false
+
+        local library = component.Library
+        local libraryConnections = library._connections
+
+        for _, connection in ipairs(connections) do
+            connection:Disconnect()
+
+            local index = table.find(libraryConnections, connection)
+
+            if index then
+                table.remove(libraryConnections, index)
+            end
+        end
+
+        table.clear(connections)
+
+        local index = table.find(library._dropdowns, component)
+
+        if index then
+            table.remove(library._dropdowns, index)
+        end
+
+        popup:Destroy()
+    end
+
+    function component:Destroy()
+        Cleanup()
+        frame:Destroy()
+    end
+
+    frame.Destroying:Connect(Cleanup)
 
     table.insert(self.Library._dropdowns, component)
     table.insert(self.Components, component)
@@ -5005,8 +5090,11 @@ function Library:_PositionDropdown(button: GuiObject, popup: GuiObject)
         return
     end
 
+    --// Sizes are popup offsets (inside the UIScale); positions and spaces
+    --// are screen pixels. Mixing them shrank or grew the popup whenever
+    --// the scale was not 1.
     local overlayPosition = overlay.AbsolutePosition
-    local popupWidth      = popup.AbsoluteSize.X
+    local popupWidth      = popup.Size.X.Offset
 
     -- Keep a small margin from the screen edges.
     local edgePadding = 10
@@ -5035,10 +5123,12 @@ function Library:_PositionDropdown(button: GuiObject, popup: GuiObject)
     local placeAbove = false
     local availableSpace = spaceBelow
 
-    if spaceBelow >= popupHeight then
+    local neededSpace = popupHeight * uiScale
+
+    if spaceBelow >= neededSpace then
         placeAbove = false
         availableSpace = spaceBelow
-    elseif spaceAbove >= popupHeight then
+    elseif spaceAbove >= neededSpace then
         placeAbove = true
         availableSpace = spaceAbove
     elseif spaceAbove > spaceBelow then
@@ -5051,25 +5141,27 @@ function Library:_PositionDropdown(button: GuiObject, popup: GuiObject)
 
     -- If there is not enough room for five rows, use all available space.
     -- Keep at least one row visible on very small screens.
-    local maxAvailableHeight = math.max(rowHeight + framePadding, availableSpace)
+    local maxAvailableHeight = math.max(rowHeight + framePadding, availableSpace / uiScale)
     popupHeight = math.min(popupHeight, maxAvailableHeight)
 
     if popup.Size.Y.Offset ~= popupHeight then
         popup.Size = UDim2.fromOffset(popupWidth, popupHeight)
     end
 
+    local screenWidth = popupWidth * uiScale
+    local screenHeight = popupHeight * uiScale
     local screenX = buttonPosition.X
     local screenY
 
     if placeAbove then
-        screenY = buttonPosition.Y - popupHeight - gap
+        screenY = buttonPosition.Y - screenHeight - gap
     else
         screenY = buttonPosition.Y + buttonSize.Y + gap
     end
 
     -- Keep the popup inside the horizontal viewport.
-    if screenX + popupWidth > viewport.X - edgePadding then
-        screenX = viewport.X - popupWidth - edgePadding
+    if screenX + screenWidth > viewport.X - edgePadding then
+        screenX = viewport.X - screenWidth - edgePadding
     end
 
     screenX = math.max(edgePadding, screenX)

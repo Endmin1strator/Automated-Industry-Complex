@@ -690,3 +690,15 @@
 > - วาง waypoint ไว้ที่ขอบหลุมแล้วติ๊ก Jump → เดินถึงจุดนั้นจะกระโดดแน่นอน แล้ววิ่งต่อไป waypoint ถัดไป (ควรมี waypoint อีกฝั่งหลุม)
 > - waypoint ที่ติ๊ก Jump นับว่าถึงเมื่อห่างไม่เกิน 1.5 studs (`AICConfig.JUMP_WAYPOINT_REACH`) และยืนบนพื้น ไม่ใช้ Reach Distance ปกติ เพื่อให้โดดที่ขอบพอดี
 > - ใช้ทั้ง route ปกติและ Waypoint Loop · ย้าย/ลบ waypoint ช่องติ๊กย้ายตาม · เช็คหลุมอัตโนมัติยังทำงานเหมือนเดิม
+
+### [x] UI: บั๊ก dropdown (รอบ 2)
+> แก้แล้ว (v3.16) ใน `UI/Utils.lua` (ตัว dropdown เอง):
+> - **รั่ว**: dropdown ที่สร้างใหม่ตอนรายการเปลี่ยน (รายชื่อผู้เล่น, zone, Teleport ฯลฯ) ทิ้ง RenderStepped + InputBegan ของตัวเก่าค้างไว้ทุกครั้ง สะสมไปเรื่อยๆ ยิ่งเล่นนานยิ่งหน่วง → ตอนนี้ลบ Frame แล้วตัด connection ทั้งหมดและเอาออกจากรายการ dropdown เอง (`component:Destroy()` / `Frame.Destroying`)
+> - **เปิดแล้วไม่เลื่อนไปตัวที่เลือก**: เดิมอ่าน `Position` ซึ่ง UIListLayout ไม่ได้ตั้ง เลยอยู่บนสุดเสมอ (เช่น Font, Profile ที่ยาว) → นับจากลำดับแถวแทน
+> - **ขนาด popup เพี้ยนเมื่อ UI scale ไม่ใช่ 1**: เดิมเอาขนาดบนจอ (pixel) ไปตั้งเป็น offset ที่โดน scale ซ้ำ → แยกหน่วยให้ถูก
+> - **จอสัมผัส**: แตะนอก dropdown ไม่ปิด (เดิมเช็คแค่คลิกเมาส์)
+> - Teleport: ไม่สร้าง dropdown Door / Waypoint ใหม่ระหว่างที่เปิดค้างอยู่ รอปิดก่อน
+
+### [x] Auto Start Game: บันทึกแบบ global
+> ทำแล้ว (v3.16): **Auto Start Game** ย้ายไปเก็บใน `AutoFarmProfiles/Global.json` เหมือน FPS Boost / Leave On Danger Group ใช้ค่าเดียวกันทุกโปรไฟล์และทุก PlaceId โปรไฟล์ไม่บันทึก/โหลด/export ค่านี้แล้ว
+> - ค่าเดิมที่เคยบันทึกไว้ในโปรไฟล์ไม่ถูกย้ายมา ต้องเปิด toggle ใหม่ครั้งเดียว

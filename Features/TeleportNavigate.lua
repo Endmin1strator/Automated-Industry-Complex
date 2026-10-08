@@ -233,10 +233,20 @@ return {
             task.delay(REFRESH_DEBOUNCE, function()
                 S.RefreshScheduled = false
 
-                if Context.Lifetime.Alive then
-                    RefreshDoors()
-                    RefreshWaypoints()
+                if not Context.Lifetime.Alive then
+                    return
                 end
+
+                --// Never rebuild a list the user has open; try again later.
+                if (S.DoorDropdown and S.DoorDropdown.IsOpen)
+                    or (S.WaypointDropdown and S.WaypointDropdown.IsOpen)
+                then
+                    ScheduleRefresh()
+                    return
+                end
+
+                RefreshDoors()
+                RefreshWaypoints()
             end)
         end
 

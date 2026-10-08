@@ -46,8 +46,9 @@ return {
             { Name = "JoinAlerts",        Default = false, Key = "s" },
             --// Pull a pack of mobs together, then use the skill (MobGather).
             { Name = "MobGather",         Default = false, Key = "t" },
-            --// Click through the title screen (AutoStartGame).
-            { Name = "AutoStartGame",     Default = false, Key = "u" },
+            --// Click through the title screen (AutoStartGame). Shared by every
+            --// profile: it runs before the farm's profile matters.
+            { Name = "AutoStartGame",     Default = false, Key = "u", Global = true },
             --// Block Whitelist players never make Auto Block hop (even when
             --// blocked) or Leave On Danger Group leave. Owned by AutoBlock.
             { Name = "WhitelistSkipsSafety", Default = true, Key = "v" },
