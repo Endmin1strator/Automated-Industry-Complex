@@ -156,11 +156,14 @@ return {
 
         --// A slider bound to a numeric SaveConfig.Settings entry, using its
         --// range. Whole rounds the value down to an integer.
+        --// Setting key -> its slider, so a loaded profile resyncs every one.
+        AICUI.S.SettingSliders = AICUI.S.SettingSliders or {}
+
         function AICUI.AddSettingSlider(Section, Label, Key, Whole)
             local Entry = Context.SaveConfig.GetSetting(Key)
             assert(Entry, "Setting not declared in SaveConfig.Settings: " .. tostring(Key))
 
-            return Section:AddSlider(
+            local Slider = Section:AddSlider(
                 Label,
                 Context.SaveConfig.NormalizeSetting(Entry, CONFIG[Key]),
                 Entry.Min,
@@ -176,6 +179,9 @@ return {
                     AICProfile.QueueProfileSave()
                 end
             )
+
+            AICUI.S.SettingSliders[Key] = Slider
+            return Slider
         end
         --// Target pickers. Players and mobs each get their own dropdown:
         --// the roster changes rarely and should show up at once, while mobs
@@ -437,6 +443,16 @@ return {
 
             if UIRef.CloseCombatRangeSlider then
                 UIRef.CloseCombatRangeSlider:Set(CONFIG.CLOSE_COMBAT_RANGE, false)
+            end
+
+            --// Every slider made with AddSettingSlider, so a new one does
+            --// not need its own line here.
+            for Key, Slider in pairs(AICUI.S.SettingSliders) do
+                local Entry = Context.SaveConfig.GetSetting(Key)
+
+                if Entry then
+                    Slider:Set(Context.SaveConfig.NormalizeSetting(Entry, CONFIG[Key]), false)
+                end
             end
 
             if UIRef.BlockWhitelistComponent then

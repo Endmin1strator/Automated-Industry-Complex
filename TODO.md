@@ -676,3 +676,10 @@
 > - ตัวเลือกที่กดแล้วไม่เปลี่ยนอะไร: GothamBold / GothamBlack / SourceSansItalic / BuilderSansBold ฯลฯ เป็นแค่น้ำหนัก/ตัวเอียงของ font เดิม แต่ UI คงน้ำหนักของแต่ละข้อความไว้ เลยได้ font เดียวกับตัวหลักทุกอย่าง → รวมเหลือ font ละ 1 ตัวเลือก (ค่าที่เคยเซฟเป็นตัวหนาจะโชว์เป็นตัวหลักแทน)
 > - ตอนเปิดสคริปต์ ลองโหลดทุก font เบื้องหลัง (`TextService:GetTextBoundsAsync`) ตัวไหนโหลดไม่ได้จะซ่อนจากรายการ และ warn ชื่อใน console
 > - แก้ dropdown ที่สร้างใหม่ตอนรายการเปลี่ยนแล้วไปโผล่ล่างสุดของ section: Edit Farm Zone, Edit Deadzone, Pair Waypoint, Paired Farm Zone, Add Zone Target, Set Leader, Profile, Add Player In Server (Auto Block) → ใช้ `AICUI.ReplaceDropdown` ที่วางกลับที่เดิม
+
+### [x] Waypoints: ปรับค่าการเช็คหลุม (v3.12) เองได้
+> ทำแล้ว (v3.14): Profile Settings > Waypoints มี slider 3 อัน บันทึกในโปรไฟล์
+> - **Hole Check Distance** (`ROUTE_HOLE_PROBE_DISTANCE`, ค่าเริ่ม 2, 0.5–6): เช็คหลุมไกลแค่ไหนข้างหน้า = ระยะจากขอบที่จะกระโดด
+> - **Hole Check Step** (`ROUTE_HOLE_SAMPLE_STEP`, ค่าเริ่ม 0.5, 0.25–2): ระยะห่างแต่ละจุดเช็ค ยิ่งน้อยยิ่งจับช่องแคบได้
+> - **Hole Min Depth** (`ROUTE_HOLE_MIN_DEPTH`, ค่าเริ่ม 1, 0.5–10): ลึกเท่านี้ขึ้นไปถึงนับเป็นหลุม (เพิ่มถ้ากระโดดตอนลงบันได)
+> - slider ที่สร้างด้วย `AICUI.AddSettingSlider` ทุกตัวอัปเดตเองตอนโหลดโปรไฟล์ (เดิม slider ของ Mob Gather ไม่อัปเดตตามโปรไฟล์ที่โหลด)

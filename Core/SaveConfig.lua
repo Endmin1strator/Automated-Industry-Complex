@@ -176,6 +176,16 @@ return {
             { Key = "GATHER_MAX_MOBS", Default = 5, Min = 2, Max = 10 },
             { Key = "GATHER_RADIUS", Default = 40, Min = 15, Max = 80 },
 
+            --// Route hole jump (waypoint route and Waypoint Loop): the ground
+            --// is sampled every ROUTE_HOLE_SAMPLE_STEP studs along the
+            --// character's facing, up to ROUTE_HOLE_PROBE_DISTANCE ahead;
+            --// missing ground, water or a drop of ROUTE_HOLE_MIN_DEPTH or
+            --// more is a hole and the character jumps. Non-whole bounds
+            --// give the sliders two decimals.
+            { Key = "ROUTE_HOLE_PROBE_DISTANCE", Default = 2, Min = 0.5, Max = 6 },
+            { Key = "ROUTE_HOLE_SAMPLE_STEP", Default = 0.5, Min = 0.25, Max = 2 },
+            { Key = "ROUTE_HOLE_MIN_DEPTH", Default = 1, Min = 0.5, Max = 10 },
+
             --// UserIds allowed to share the server. Auto Block ignores these.
             { Key = "BLOCK_WHITELIST", Default = {}, Normalize = NormalizeIdList },
 

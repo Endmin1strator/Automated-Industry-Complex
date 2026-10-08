@@ -207,6 +207,18 @@ UIRef.ReachDistanceBox = UIRef.WaypointSection:AddTextbox(
     end
 )
 
+--// Route hole jump: jumping gaps on the waypoint route (CombatUtils
+--// IsRouteHoleAhead reads these).
+UIRef.RouteHoleProbeSlider = AICUI.AddSettingSlider(
+    UIRef.WaypointSection, "Hole Check Distance", "ROUTE_HOLE_PROBE_DISTANCE"
+)
+UIRef.RouteHoleStepSlider = AICUI.AddSettingSlider(
+    UIRef.WaypointSection, "Hole Check Step", "ROUTE_HOLE_SAMPLE_STEP"
+)
+UIRef.RouteHoleDepthSlider = AICUI.AddSettingSlider(
+    UIRef.WaypointSection, "Hole Min Depth", "ROUTE_HOLE_MIN_DEPTH"
+)
+
         return Module
     end,
 }

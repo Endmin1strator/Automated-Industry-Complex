@@ -799,13 +799,11 @@ return {
         --// Route Hole Jump
         --// Walking a waypoint route, a gap to jump across (parkour) was
         --// walked straight into. Samples the ground along the root's
-        --// LookVector every ROUTE_HOLE_SAMPLE_STEP up to
-        --// ROUTE_HOLE_PROBE_DISTANCE; missing ground, water, or ground
-        --// ROUTE_HOLE_MIN_DEPTH or more below the feet is a hole, and the
-        --// character jumps at its edge.
-        local ROUTE_HOLE_PROBE_DISTANCE = 2
-        local ROUTE_HOLE_SAMPLE_STEP = 0.5
-        local ROUTE_HOLE_MIN_DEPTH = 1
+        --// LookVector every CONFIG.ROUTE_HOLE_SAMPLE_STEP up to
+        --// CONFIG.ROUTE_HOLE_PROBE_DISTANCE; missing ground, water, or
+        --// ground CONFIG.ROUTE_HOLE_MIN_DEPTH or more below the feet is a
+        --// hole, and the character jumps at its edge. All three are
+        --// profile settings (Profile Settings > Waypoints).
         --// Only while actually walking, not standing at a waypoint.
         local ROUTE_HOLE_MIN_MOVE = 0.1
 
@@ -846,11 +844,14 @@ return {
             end
 
             local Direction = Flat.Unit
+            local ProbeDistance = tonumber(CONFIG.ROUTE_HOLE_PROBE_DISTANCE) or 2
+            local SampleStep = math.max(tonumber(CONFIG.ROUTE_HOLE_SAMPLE_STEP) or 0.5, 0.1)
+            local MinDepth = tonumber(CONFIG.ROUTE_HOLE_MIN_DEPTH) or 1
 
-            for Distance = ROUTE_HOLE_SAMPLE_STEP, ROUTE_HOLE_PROBE_DISTANCE, ROUTE_HOLE_SAMPLE_STEP do
+            for Distance = SampleStep, ProbeDistance, SampleStep do
                 local GroundY = GetGroundHeight(RootPart.Position + Direction * Distance, Params)
 
-                if not GroundY or FeetY - GroundY >= ROUTE_HOLE_MIN_DEPTH then
+                if not GroundY or FeetY - GroundY >= MinDepth then
                     return true
                 end
             end
