@@ -126,9 +126,10 @@ return {
             },
         
             --// Saved settings (EXECUTE_CHARGE_HP_PERCENT, TARGET_HP_MODE,
-            --// BLOCK_WHITELIST, PARTY_LEADER, PINNED_STATE, SAFE_ENEMY_RANGE,
+            --// PARTY_LEADER, PINNED_STATE, SAFE_ENEMY_RANGE,
             --// RETREAT_HEALTH_PERCENT, AUTO_HEAL_HEALTH_PERCENT) take their
-            --// defaults from SaveConfig.Settings below, not from here.
+            --// defaults from SaveConfig.Settings below, not from here; global
+            --// ones (BLOCK_WHITELIST, DANGER_*, UI_*) from SaveConfig.GlobalSettings.
 
             --// Roblox disconnects an idle client after about twenty minutes. The
             --// script drives the character, not the mouse, so the idle timer keeps

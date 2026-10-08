@@ -50,8 +50,9 @@ return {
             --// profile: it runs before the farm's profile matters.
             { Name = "AutoStartGame",     Default = false, Key = "u", Global = true },
             --// Block Whitelist players never make Auto Block hop (even when
-            --// blocked) or Leave On Danger Group leave. Owned by AutoBlock.
-            { Name = "WhitelistSkipsSafety", Default = true, Key = "v" },
+            --// blocked) or Leave On Danger Group leave. Owned by AutoBlock;
+            --// shared by every profile, like the Block Whitelist.
+            { Name = "WhitelistSkipsSafety", Default = true, Key = "v", Global = true },
             --// Turns off shadows, effects and particles for frames (FpsBoost).
             --// Shared by every profile: it is about the machine, not the farm.
             { Name = "FpsBoost",          Default = false, Key = "w", Global = true },
@@ -187,9 +188,6 @@ return {
             { Key = "ROUTE_HOLE_SAMPLE_STEP", Default = 0.5, Min = 0.25, Max = 2 },
             { Key = "ROUTE_HOLE_MIN_DEPTH", Default = 1, Min = 0.5, Max = 10 },
 
-            --// UserIds allowed to share the server. Auto Block ignores these.
-            { Key = "BLOCK_WHITELIST", Default = {}, Normalize = NormalizeIdList },
-
             --// Seconds Auto Block waits after first seeing a non-whitelisted
             --// player before blocking them and leaving. 0 acts at once.
             { Key = "AUTO_BLOCK_DELAY", Default = 0, Min = 0, Max = 120 },
@@ -250,6 +248,10 @@ return {
 
                 return Theme
             end },
+
+            --// UserIds allowed to share the server. Auto Block ignores these.
+            --// Shared by every profile and PlaceId.
+            { Key = "BLOCK_WHITELIST", Default = {}, Normalize = NormalizeIdList },
 
             --// Group IDs Leave On Danger Group leaves for.
             { Key = "DANGER_GROUP_IDS", Default = { "5928691" }, Normalize = NormalizeIdList },

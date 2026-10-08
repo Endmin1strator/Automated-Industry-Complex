@@ -238,7 +238,7 @@ return {
 
                     self.WhitelistComponent:Add(Id)
                     CONFIG.BLOCK_WHITELIST = self.WhitelistComponent.Priority
-                    AICProfile.SaveActiveProfile()
+                    AICProfile.WriteGlobalStore()
                     NotifyAction("Whitelist", "Added " .. tostring(Value))
                     self:RefreshWhitelistPlayerDropdown()
                 end
@@ -282,6 +282,7 @@ return {
 
             AICUI.BindFeatureToggle("WhitelistSkipsSafety", "Whitelist Skips Safety", nil, BlockSection)
             BlockSection:AddLabel("On: whitelisted players never make Auto Block or Leave On Danger Group leave, even if blocked")
+            BlockSection:AddLabel("Whitelist and Whitelist Skips Safety are shared by every profile")
 
             self.WhitelistComponent = BlockSection:AddPriority(
                 "Block Whitelist",
@@ -310,7 +311,7 @@ return {
                 self.WhitelistComponent:Add(Id)
                 CONFIG.BLOCK_WHITELIST = self.WhitelistComponent.Priority
                 self.WhitelistBox:Set("")
-                AICProfile.SaveActiveProfile()
+                AICProfile.WriteGlobalStore()
                 NotifyAction("Whitelist", "Added " .. Id)
                 self:RefreshWhitelistPlayerDropdown()
             end)
@@ -330,7 +331,7 @@ return {
                 end
 
                 CONFIG.BLOCK_WHITELIST = self.WhitelistComponent.Priority
-                AICProfile.SaveActiveProfile()
+                AICProfile.WriteGlobalStore()
                 NotifyAction("Whitelist", "Added " .. tostring(Added) .. " player(s)")
                 self:RefreshWhitelistPlayerDropdown()
             end)
@@ -338,7 +339,7 @@ return {
             BlockSection:AddButton("Clear Whitelist", function()
                 self.WhitelistComponent:SetPriority({})
                 CONFIG.BLOCK_WHITELIST = self.WhitelistComponent.Priority
-                AICProfile.SaveActiveProfile()
+                AICProfile.WriteGlobalStore()
                 NotifyAction("Whitelist", "Cleared")
                 self:RefreshWhitelistPlayerDropdown()
             end)
@@ -352,7 +353,7 @@ return {
             function WhitelistComponent:Remove(Entry)
                 local Changed = OriginalRemove(self, Entry)
                 CONFIG.BLOCK_WHITELIST = self.Priority
-                AICProfile.SaveActiveProfile()
+                AICProfile.WriteGlobalStore()
                 AutoBlock:RefreshWhitelistPlayerDropdown()
                 return Changed
             end
@@ -360,13 +361,13 @@ return {
             function WhitelistComponent:MoveUp(Entry)
                 OriginalMoveUp(self, Entry)
                 CONFIG.BLOCK_WHITELIST = self.Priority
-                AICProfile.SaveActiveProfile()
+                AICProfile.WriteGlobalStore()
             end
 
             function WhitelistComponent:MoveDown(Entry)
                 OriginalMoveDown(self, Entry)
                 CONFIG.BLOCK_WHITELIST = self.Priority
-                AICProfile.SaveActiveProfile()
+                AICProfile.WriteGlobalStore()
             end
 
             self:RefreshWhitelistPlayerDropdown()

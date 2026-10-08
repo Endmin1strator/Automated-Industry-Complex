@@ -392,6 +392,56 @@ return {
 
         --// Puts the stored global toggles on Feature and the global
         --// settings on CONFIG. A missing entry gets its default.
+        --// Values that were saved per profile before they became global.
+        --// The first time the global file lacks one, it is seeded from this
+        --// PlaceId's profiles so nothing set before is lost: lists take
+        --// every profile's entries, a toggle the last used profile's value.
+        --// Returns whether Store was changed (and should be written).
+        local MIGRATED_GLOBAL_LISTS = { "BLOCK_WHITELIST" }
+        local MIGRATED_GLOBAL_TOGGLES = { "WhitelistSkipsSafety" }
+
+        function AICProfile.MigrateToGlobalStore(Store, ProfileStore)
+            local Profiles = type(ProfileStore) == "table" and type(ProfileStore.Profiles) == "table"
+                and ProfileStore.Profiles or {}
+
+            Store.FEATURES = type(Store.FEATURES) == "table" and Store.FEATURES or {}
+            Store.SETTINGS = type(Store.SETTINGS) == "table" and Store.SETTINGS or {}
+
+            local Changed = false
+
+            for _, Key in ipairs(MIGRATED_GLOBAL_LISTS) do
+                if Store.SETTINGS[Key] == nil then
+                    local Merged = {}
+
+                    for _, Profile in pairs(Profiles) do
+                        local Settings = type(Profile) == "table" and Profile.SETTINGS
+                        local List = type(Settings) == "table" and Settings[Key]
+
+                        for _, Value in ipairs(type(List) == "table" and List or {}) do
+                            if not table.find(Merged, tostring(Value)) then
+                                table.insert(Merged, tostring(Value))
+                            end
+                        end
+                    end
+
+                    Store.SETTINGS[Key] = Merged
+                    Changed = true
+                end
+            end
+
+            local LastUsed = ProfileStore and ProfileStore.LastUsed and Profiles[ProfileStore.LastUsed]
+            local LastFeatures = type(LastUsed) == "table" and type(LastUsed.FEATURES) == "table" and LastUsed.FEATURES or {}
+
+            for _, Name in ipairs(MIGRATED_GLOBAL_TOGGLES) do
+                if type(Store.FEATURES[Name]) ~= "boolean" and type(LastFeatures[Name]) == "boolean" then
+                    Store.FEATURES[Name] = LastFeatures[Name]
+                    Changed = true
+                end
+            end
+
+            return Changed
+        end
+
         function AICProfile.ApplyGlobalStore(Store)
             Store = type(Store) == "table" and Store or {}
 
@@ -973,7 +1023,16 @@ return {
         end
 
         AICProfile.S.ProfileStore = AICProfile.ReadProfileStore()
-        AICProfile.ApplyGlobalStore(AICProfile.ReadGlobalStore())
+        do
+            local GlobalStore = AICProfile.ReadGlobalStore() or {}
+            local Migrated = AICProfile.MigrateToGlobalStore(GlobalStore, AICProfile.S.ProfileStore)
+
+            AICProfile.ApplyGlobalStore(GlobalStore)
+
+            if Migrated then
+                AICProfile.WriteGlobalStore()
+            end
+        end
 
         Context.PROFILE_FOLDER = PROFILE_FOLDER
         Context.PROFILE_FILE = PROFILE_FILE
