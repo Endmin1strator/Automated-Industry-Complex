@@ -795,6 +795,77 @@ return {
 
             return true, false, EdgeDistance
         end
+
+        --// Route Hole Jump
+        --// Walking a waypoint route, a gap to jump across (parkour) was
+        --// walked straight into. Samples the ground along the root's
+        --// LookVector every ROUTE_HOLE_SAMPLE_STEP up to
+        --// ROUTE_HOLE_PROBE_DISTANCE; missing ground, water, or ground
+        --// ROUTE_HOLE_MIN_DEPTH or more below the feet is a hole, and the
+        --// character jumps at its edge.
+        local ROUTE_HOLE_PROBE_DISTANCE = 2
+        local ROUTE_HOLE_SAMPLE_STEP = 0.5
+        local ROUTE_HOLE_MIN_DEPTH = 1
+        --// Only while actually walking, not standing at a waypoint.
+        local ROUTE_HOLE_MIN_MOVE = 0.1
+
+        function AICCombatUtils.IsRouteHoleAhead()
+            local Character, Humanoid, RootPart = Runtime:GetCharacter()
+            if not RootPart or not Humanoid or Humanoid.MoveDirection.Magnitude < ROUTE_HOLE_MIN_MOVE then
+                return false
+            end
+
+            local Look = RootPart.CFrame.LookVector
+            local Flat = Vector3.new(Look.X, 0, Look.Z)
+
+            if Flat.Magnitude <= 0.01 then
+                return false
+            end
+
+            local Params = RaycastParams.new()
+            Params.FilterType = Enum.RaycastFilterType.Exclude
+            local Filter = { Character }
+            local MobFolder = workspace:FindFirstChild("Mobs")
+            if MobFolder then
+                table.insert(Filter, MobFolder)
+            end
+            for _, OtherPlayer in ipairs(Players:GetPlayers()) do
+                if OtherPlayer.Character and OtherPlayer.Character ~= Character then
+                    table.insert(Filter, OtherPlayer.Character)
+                end
+            end
+            if AICCombatUtils.S.DebugFolder then
+                table.insert(Filter, AICCombatUtils.S.DebugFolder)
+            end
+            Params.FilterDescendantsInstances = Filter
+
+            --// Already in the air (mid-jump): nothing to measure from.
+            local FeetY = GetGroundHeight(RootPart.Position, Params)
+            if not FeetY then
+                return false
+            end
+
+            local Direction = Flat.Unit
+
+            for Distance = ROUTE_HOLE_SAMPLE_STEP, ROUTE_HOLE_PROBE_DISTANCE, ROUTE_HOLE_SAMPLE_STEP do
+                local GroundY = GetGroundHeight(RootPart.Position + Direction * Distance, Params)
+
+                if not GroundY or FeetY - GroundY >= ROUTE_HOLE_MIN_DEPTH then
+                    return true
+                end
+            end
+
+            return false
+        end
+
+        function AICCombatUtils.DoJumpIfRouteHole()
+            if not AICCombatUtils.IsRouteHoleAhead() then
+                return false
+            end
+
+            AICCombatUtils.DoJump()
+            return true
+        end
         function AICCombatUtils.GetPatrolGroundPosition(Position)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             if not Position or not RootPart then

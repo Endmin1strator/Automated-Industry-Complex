@@ -662,3 +662,10 @@
 > - ถ้า block ล้มเหลวจนชื่อหลุดจากลิสต์ จะเปิดหน้าต่าง Block ใหม่แทนการ hop
 > - ไม่เปิดหน้าต่าง Block ซ้ำระหว่าง Auto Confirm Block ยังกดอยู่ (กันหน้าต่างเด้งทับตอนกำลังกด) ถ้ากดค้างเกิน 20 วิ (`CONFIRM_MAX_SECONDS`) ถือว่าค้างและปล่อยให้ทำงานต่อ
 > - Leave On Danger Group ใช้การเช็คเดียวกันก่อนออก (ยังออกเลยถ้ารอครบ 10 วิแล้วยัง block ไม่ได้ เพื่อความปลอดภัย)
+
+### [x] Waypoints: เดิน waypoint แล้วตกหลุมตอนต้องโดดข้าม parkour
+> สาเหตุ: เดิน waypoint ใช้แค่ `MoveTo` + เช็คสิ่งกีดขวางข้างหน้า (`DoJumpIfObstacle`) ไม่เคยเช็คว่าข้างหน้าเป็นหลุม เลยเดินตกช่องว่างระหว่าง parkour
+> แก้แล้ว (v3.12): `AICCombatUtils.IsRouteHoleAhead` ยิง raycast ลงพื้นตาม `RootPart.CFrame.LookVector` ทุก 0.5 stud ไปข้างหน้า 2 studs (`ROUTE_HOLE_PROBE_DISTANCE`)
+> - ไม่มีพื้น / เป็นน้ำ / พื้นต่ำกว่าเท้า 1 stud ขึ้นไป (`ROUTE_HOLE_MIN_DEPTH`) = หลุม → กระโดดที่ขอบ
+> - ใช้เฉพาะตอนเดิน waypoint route และ Waypoint Loop เท่านั้น ตอนสู้ / patrol / ขุดแร่เหมือนเดิม
+> - เช็คเฉพาะตอนตัวละครกำลังเดินและยืนบนพื้น (กลางอากาศไม่กระโดดซ้ำ)

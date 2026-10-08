@@ -343,7 +343,11 @@ return {
 
             Humanoid.AutoRotate = true
             Humanoid:MoveTo(Target)
-            AICCombatUtils.DoJumpIfObstacle(Target)
+
+            if not AICCombatUtils.DoJumpIfRouteHole() then
+                AICCombatUtils.DoJumpIfObstacle(Target)
+            end
+
             return false
         end
 

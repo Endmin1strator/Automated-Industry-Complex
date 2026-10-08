@@ -742,6 +742,7 @@ return {
                         end
                         Humanoid.AutoRotate = true
                         Humanoid:MoveTo(target)
+                        AICCombatUtils.DoJumpIfRouteHole()
                     end
 
                     if now - AICCombatUtils.S.LAST_STUCK_TIME >= CONFIG.STUCK_CHECK_INTERVAL then
