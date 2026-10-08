@@ -94,6 +94,7 @@ return {
             ["Assign Quest"] = "Asks the game to give you the quest typed above",
             ["Quest ESP"] = "Highlights the quest targets below and shows how far each one is",
             ["Quest Targets"] = "Names of items in QuestItems to find, comma separated (case, spaces and symbols ignored)",
+            ["Show All Quest Items"] = "Tags every item in the QuestItems folder, not just the names typed below",
             ["Rescan Quest Targets"] = "Looks through the QuestItems folder for the quest targets again",
             ["Copy Quest Info"] = "Copies what the game shows of your quest, to set targets automatically later",
             ["Clear Log"] = "Empties the Player Log",

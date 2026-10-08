@@ -3,7 +3,9 @@
 -- QuestItems folder of workspace: a Model or BasePart with that name, or a
 -- part whose ProximityPrompt shows it (ObjectText / ActionText). Names are
 -- compared by NormalizeName (letters and digits only, lower case) on both
--- sides, so "old key" finds "Old_Key" or "OldKey". Each one found gets a
+-- sides, so "old key" finds "Old_Key" or "OldKey". Show All Quest Items
+-- tags every Model / BasePart in QuestItems instead (an item's own parts
+-- are skipped once the item is tagged). Each one found gets a
 -- Highlight (the nearest MAX_HIGHLIGHTS of them; Roblox draws about 31 at
 -- once) and a label with its name and distance, seen through walls.
 --
@@ -28,7 +30,8 @@ return {
         --// visualizer uses some.
         local MAX_HIGHLIGHTS = 20
         --// Labels at once; matches past this are skipped until a Rescan.
-        local MAX_TAGS = 60
+        --// Raised so Show All Quest Items can label a whole QuestItems folder.
+        local MAX_TAGS = 200
         --// Seconds between distance / nearest updates.
         local UPDATE_INTERVAL = 0.25
         --// Labels further than this (studs) are hidden.
@@ -57,6 +60,8 @@ return {
                 StatusLabel = nil,
                 --// workspace's QuestItems folder (GetQuestItemsFolder).
                 QuestItems = nil,
+                --// Tag every item in QuestItems, typed targets or not.
+                ShowAll = false,
             },
         }
 
@@ -146,10 +151,15 @@ return {
             return false
         end
 
+        --// Something to look for: typed targets, or Show All.
+        local function HasTargets()
+            return S.ShowAll or next(S.Targets) ~= nil
+        end
+
         --// The instance to tag for this one, and the name to show, or nil.
         local function MatchTarget(Instance_)
             if Instance_:IsA("Model") or Instance_:IsA("BasePart") then
-                if S.Targets[NormalizeName(Instance_.Name)] then
+                if S.ShowAll or S.Targets[NormalizeName(Instance_.Name)] then
                     return Instance_, Instance_.Name
                 end
             elseif Instance_:IsA("ProximityPrompt") then
@@ -253,7 +263,7 @@ return {
         local function FullScan()
             ClearTags()
 
-            if not S.Enabled or not next(S.Targets) then
+            if not S.Enabled or not HasTargets() then
                 return
             end
 
@@ -318,8 +328,8 @@ return {
 
             if not S.Enabled then
                 SetStatus("QUEST ESP OFF")
-            elseif not next(S.Targets) then
-                SetStatus("TYPE A QUEST TARGET NAME")
+            elseif not HasTargets() then
+                SetStatus("TYPE A QUEST TARGET NAME OR TURN ON SHOW ALL")
             elseif Sorted[1] then
                 SetStatus(string.format("FOUND %d  ·  NEAREST %s  %d STUDS", #Sorted, Sorted[1].Name, math.floor(Sorted[1].Distance + 0.5)))
             else
@@ -449,6 +459,12 @@ return {
             end
         end)
 
+        Section:AddToggle("Show All Quest Items", false, function(Value)
+            S.ShowAll = Value
+            FullScan()
+            UpdateTags()
+        end)
+
         UIRef.QuestTargetsBox = Section:AddTextbox("Quest Targets", "", function(Value)
             S.Targets = ParseTargets(Value)
             FullScan()
@@ -464,7 +480,7 @@ return {
         Section:AddButton("Copy Quest Info", CopyQuestInfo)
 
         Context.Connect(workspace.DescendantAdded, function(Descendant)
-            if not S.Enabled or not next(S.Targets) then
+            if not S.Enabled or not HasTargets() then
                 return
             end
 
