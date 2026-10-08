@@ -39,17 +39,9 @@ return {
     function AICUI.RefreshProfileDropdown()
         local Options = AICUI.GetCurrentProfileNames()
 
-        if UIRef.ProfileDropdown then
-            if UIRef.ProfileDropdown.Popup then
-                UIRef.ProfileDropdown.Popup:Destroy()
-            end
-
-            if UIRef.ProfileDropdown.Frame then
-                UIRef.ProfileDropdown.Frame:Destroy()
-            end
-        end
-
-        UIRef.ProfileDropdown = UIRef.ProfilesSection:AddDropdown(
+        UIRef.ProfileDropdown = AICUI.ReplaceDropdown(
+            UIRef.ProfileDropdown,
+            UIRef.ProfilesSection,
             "Profile",
             Options,
             function(Value)

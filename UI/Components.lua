@@ -286,10 +286,27 @@ return {
             end
         end
 
-        --// A dropdown whose options change at runtime. Utils cannot replace
-        --// options, so it is rebuilt: only when the options differ, never
-        --// while open unless Force (a pick by the user), and in the old
-        --// one's slot. Picker = { Dropdown, Signature } is kept by the caller.
+        --// Swaps Old (or nothing) for a new dropdown with these options.
+        --// Utils cannot replace a dropdown's options, and a new one is
+        --// appended to the end of its section, so it takes Old's slot;
+        --// without this a rebuilt dropdown dropped below every control
+        --// after it.
+        function AICUI.ReplaceDropdown(Old, Section, Label, Options, Callback)
+            local Order = Old and Old.Frame and Old.Frame.LayoutOrder
+            DestroyDropdown(Old)
+
+            local Dropdown = Section:AddDropdown(Label, Options, Callback)
+
+            if Order and Dropdown.Frame then
+                Dropdown.Frame.LayoutOrder = Order
+            end
+
+            return Dropdown
+        end
+
+        --// A dropdown whose options change at runtime, rebuilt only when
+        --// the options differ and never while open unless Force (a pick by
+        --// the user). Picker = { Dropdown, Signature } is kept by the caller.
         function AICUI.RefreshDropdown(Picker, Section, Label, Options, Callback, Force)
             local Old = Picker.Dropdown
             local Signature = table.concat(Options, "\n")
@@ -298,15 +315,8 @@ return {
                 return
             end
 
-            local Order = Old and Old.Frame and Old.Frame.LayoutOrder
-            DestroyDropdown(Old)
-
-            Picker.Dropdown = Section:AddDropdown(Label, Options, Callback)
+            Picker.Dropdown = AICUI.ReplaceDropdown(Old, Section, Label, Options, Callback)
             Picker.Signature = Signature
-
-            if Order and Picker.Dropdown.Frame then
-                Picker.Dropdown.Frame.LayoutOrder = Order
-            end
         end
 
         function AICUI.RefreshTargetPicker(Kind, Force)
@@ -561,15 +571,10 @@ return {
         local PlaceConfig = Runtime:GetPlaceConfig()
             local Options = AICUI.GetZonePickerOptions(PlaceConfig.FARM_ZONES, "Farm")
         
-            if UIRef.FarmZonePicker then
-                if UIRef.FarmZonePicker.Popup then UIRef.FarmZonePicker.Popup:Destroy() end
-                if UIRef.FarmZonePicker.Frame then UIRef.FarmZonePicker.Frame:Destroy() end
-            end
-        
             AICProfile.S.SelectedFarmZoneIndex = math.clamp(AICProfile.S.SelectedFarmZoneIndex, 1, math.max(1, #PlaceConfig.FARM_ZONES))
             local SelectedOption = Options[AICProfile.S.SelectedFarmZoneIndex] or Options[1]
-        
-            UIRef.FarmZonePicker = UIRef.FarmzoneSection:AddDropdown("Edit Farm Zone", Options, function(Value)
+
+            UIRef.FarmZonePicker = AICUI.ReplaceDropdown(UIRef.FarmZonePicker, UIRef.FarmzoneSection, "Edit Farm Zone", Options, function(Value)
                 if Value == "No Farm Zones" then return end
                 local Index = table.find(Options, Value)
                 if not Index or not PlaceConfig.FARM_ZONES[Index] then return end
@@ -588,15 +593,10 @@ return {
         local PlaceConfig = Runtime:GetPlaceConfig()
             local Options = AICUI.GetZonePickerOptions(PlaceConfig.DEADZONES, "Deadzone")
         
-            if UIRef.DeadzonePicker then
-                if UIRef.DeadzonePicker.Popup then UIRef.DeadzonePicker.Popup:Destroy() end
-                if UIRef.DeadzonePicker.Frame then UIRef.DeadzonePicker.Frame:Destroy() end
-            end
-        
             AICProfile.S.SelectedDeadzoneIndex = math.clamp(AICProfile.S.SelectedDeadzoneIndex, 1, math.max(1, #PlaceConfig.DEADZONES))
             local SelectedOption = Options[AICProfile.S.SelectedDeadzoneIndex] or Options[1]
-        
-            UIRef.DeadzonePicker = UIRef.DeadzoneSection:AddDropdown("Edit Deadzone", Options, function(Value)
+
+            UIRef.DeadzonePicker = AICUI.ReplaceDropdown(UIRef.DeadzonePicker, UIRef.DeadzoneSection, "Edit Deadzone", Options, function(Value)
                 if Value == "No Deadzone Zones" then return end
                 local Index = table.find(Options, Value)
                 if not Index or not PlaceConfig.DEADZONES[Index] then return end

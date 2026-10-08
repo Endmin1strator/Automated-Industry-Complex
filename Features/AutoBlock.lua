@@ -224,17 +224,9 @@ return {
                 Options = {"No other players"}
             end
 
-            if UIRef.WhitelistPlayerDropdown then
-                if UIRef.WhitelistPlayerDropdown.Popup then
-                    UIRef.WhitelistPlayerDropdown.Popup:Destroy()
-                end
-
-                if UIRef.WhitelistPlayerDropdown.Frame then
-                    UIRef.WhitelistPlayerDropdown.Frame:Destroy()
-                end
-            end
-
-            self.WhitelistDropdown = Section:AddDropdown(
+            self.WhitelistDropdown = AICUI.ReplaceDropdown(
+                UIRef.WhitelistPlayerDropdown,
+                Section,
                 "Add Player In Server",
                 Options,
                 function(Value)

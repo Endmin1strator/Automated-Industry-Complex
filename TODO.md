@@ -669,3 +669,10 @@
 > - ไม่มีพื้น / เป็นน้ำ / พื้นต่ำกว่าเท้า 1 stud ขึ้นไป (`ROUTE_HOLE_MIN_DEPTH`) = หลุม → กระโดดที่ขอบ
 > - ใช้เฉพาะตอนเดิน waypoint route และ Waypoint Loop เท่านั้น ตอนสู้ / patrol / ขุดแร่เหมือนเดิม
 > - เช็คเฉพาะตอนตัวละครกำลังเดินและยืนบนพื้น (กลางอากาศไม่กระโดดซ้ำ)
+
+### [x] UI: Font preview + ตรวจ dropdown ที่ใช้ไม่ได้
+> ทำแล้ว (v3.13):
+> - dropdown **Font** ใน Configuration โชว์ชื่อแต่ละ font ด้วย font นั้นเอง (preview) ตัวเลือกพวกนี้ไม่เปลี่ยนตามตอนเลือก font ทั้ง UI
+> - ตัวเลือกที่กดแล้วไม่เปลี่ยนอะไร: GothamBold / GothamBlack / SourceSansItalic / BuilderSansBold ฯลฯ เป็นแค่น้ำหนัก/ตัวเอียงของ font เดิม แต่ UI คงน้ำหนักของแต่ละข้อความไว้ เลยได้ font เดียวกับตัวหลักทุกอย่าง → รวมเหลือ font ละ 1 ตัวเลือก (ค่าที่เคยเซฟเป็นตัวหนาจะโชว์เป็นตัวหลักแทน)
+> - ตอนเปิดสคริปต์ ลองโหลดทุก font เบื้องหลัง (`TextService:GetTextBoundsAsync`) ตัวไหนโหลดไม่ได้จะซ่อนจากรายการ และ warn ชื่อใน console
+> - แก้ dropdown ที่สร้างใหม่ตอนรายการเปลี่ยนแล้วไปโผล่ล่างสุดของ section: Edit Farm Zone, Edit Deadzone, Pair Waypoint, Paired Farm Zone, Add Zone Target, Set Leader, Profile, Add Player In Server (Auto Block) → ใช้ `AICUI.ReplaceDropdown` ที่วางกลับที่เดิม

@@ -300,17 +300,7 @@ return {
                 Options = { "No other players" }
             end
 
-            if UIRef.PartyLeaderDropdown then
-                if UIRef.PartyLeaderDropdown.Popup then
-                    UIRef.PartyLeaderDropdown.Popup:Destroy()
-                end
-
-                if UIRef.PartyLeaderDropdown.Frame then
-                    UIRef.PartyLeaderDropdown.Frame:Destroy()
-                end
-            end
-
-            UIRef.PartyLeaderDropdown = Section:AddDropdown("Set Leader", Options, function(Value)
+            UIRef.PartyLeaderDropdown = AICUI.ReplaceDropdown(UIRef.PartyLeaderDropdown, Section, "Set Leader", Options, function(Value)
                 local OtherPlayer = LeaderOptions[Value]
 
                 --// Only someone still in this server can be picked.

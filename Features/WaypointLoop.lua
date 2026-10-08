@@ -474,13 +474,6 @@ return {
         ------------------------------------------------------------------------
         local SelectedPairWaypoint = 1
 
-        local function DestroyDropdown(Dropdown)
-            if Dropdown then
-                if Dropdown.Popup then Dropdown.Popup:Destroy() end
-                if Dropdown.Frame then Dropdown.Frame:Destroy() end
-            end
-        end
-
         local function ZoneOptionLabel(ZoneIndex)
             return ZoneIndex > 0 and ("Farm Zone #" .. ZoneIndex) or "None"
         end
@@ -510,10 +503,7 @@ return {
 
             SelectedPairWaypoint = math.clamp(SelectedPairWaypoint, 1, math.max(1, #PlaceConfig.WAYPOINTS))
 
-            DestroyDropdown(UIRef.PairWaypointPicker)
-            DestroyDropdown(UIRef.PairZonePicker)
-
-            UIRef.PairWaypointPicker = Section:AddDropdown("Pair Waypoint", WaypointOptions, function(Value)
+            UIRef.PairWaypointPicker = AICUI.ReplaceDropdown(UIRef.PairWaypointPicker, Section, "Pair Waypoint", WaypointOptions, function(Value)
                 local Index = table.find(WaypointOptions, Value)
 
                 if Index and PlaceConfig.WAYPOINTS[Index] then
@@ -525,7 +515,7 @@ return {
                 end
             end)
 
-            UIRef.PairZonePicker = Section:AddDropdown("Paired Farm Zone", ZoneOptions, function(Value)
+            UIRef.PairZonePicker = AICUI.ReplaceDropdown(UIRef.PairZonePicker, Section, "Paired Farm Zone", ZoneOptions, function(Value)
                 local Current = Runtime:GetPlaceConfig()
 
                 if not Current.WAYPOINTS[SelectedPairWaypoint] then
@@ -599,9 +589,7 @@ return {
                 Options = { "No detected enemies" }
             end
 
-            DestroyDropdown(UIRef.ZoneTargetDropdown)
-
-            UIRef.ZoneTargetDropdown = Section:AddDropdown("Add Zone Target", Options, function(Value)
+            UIRef.ZoneTargetDropdown = AICUI.ReplaceDropdown(UIRef.ZoneTargetDropdown, Section, "Add Zone Target", Options, function(Value)
                 local Current = SelectedZone()
 
                 if not Current or Value == "No detected enemies" then

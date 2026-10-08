@@ -67,6 +67,11 @@ local BASE_TEXT_SIZE_ATTRIBUTE = "AICBaseTextSize"
 local FONT_REGULAR     = Enum.Font.GothamMedium
 local FONT_BOLD        = Enum.Font.GothamBold
 local TEXT_CLASSES     = { TextLabel = true, TextButton = true, TextBox = true }
+--// Text marked with this keeps its own font when the UI font changes (the
+--// font dropdown's options, each drawn in the font it names).
+local FONT_PREVIEW_ATTRIBUTE = "AICFontPreview"
+--// Sample text a font must lay out to count as loaded.
+local FONT_CHECK_TEXT = "Ag"
 
 Library.Fonts = {
     Regular = FONT_REGULAR,
@@ -76,6 +81,10 @@ Library.Fonts = {
 --// Moves one text object onto the chosen font family, keeping its own
 --// weight and style, so bold text stays bold.
 local function ApplyFontFamily(object: Instance, family: string)
+    if object:GetAttribute(FONT_PREVIEW_ATTRIBUTE) then
+        return true
+    end
+
     local ok = pcall(function()
         local face = (object :: any).FontFace
         ;(object :: any).FontFace = Font.new(family, face.Weight, face.Style)
@@ -757,8 +766,9 @@ function Library:_CreateSettingsPanel()
     end, "Font used by the whole UI, saved for every profile")
     fontDropdown.Frame.Size = UDim2.new(1, -4, 0, fontDropdown.Frame.Size.Y.Offset)
     fontDropdown.Frame.LayoutOrder = #THEME_KEYS + 8
-    fontDropdown:Set(self.FontName or FONT_REGULAR.Name, false)
+    fontDropdown:Set(self.FontName or self:_GetFontChoiceName(FONT_REGULAR), false)
     self._FontDropdown = fontDropdown
+    self:_PreviewFontOptions(fontDropdown)
 
     local hint=AddText(scroll,"SELECT SWATCH TO OPEN COLOR PICKER  //  HEX / RGB + LIMITS",7,UDim2.fromOffset(4,0),UDim2.new(1,-8,0,18))
     hint.TextColor3=self.Theme.TextMuted
@@ -3929,6 +3939,8 @@ function Library.SectionMethods:AddDropdown(
     end
 
     component.Popup = popup
+    --// Option name -> {Button, Label, Check}, for callers that restyle rows.
+    component.OptionRows = optionRows
 
     local function RefreshSelection()
         for option, row in pairs(optionRows) do
@@ -5950,18 +5962,114 @@ function Library:SetTheme(theme: {[string]: any})
     end
 end
 
---// Every Roblox font that can be chosen in Configuration, by name, sorted.
-function Library:GetFontNames(): {string}
-    local names = {}
+--// One Enum.Font per font family. Items such as GothamBold, GothamBlack or
+--// SourceSansItalic are only another weight or style of a family, and the
+--// UI keeps each text's own weight (ApplyFontFamily), so picking them set
+--// exactly the same font as their base and looked like they did nothing.
+--// The regular, upright item of each family stands for it, else the
+--// shortest name. Built once.
+function Library:_GetFontChoices()
+    if self._FontChoices then
+        return self._FontChoices
+    end
+
+    local best = {}
 
     for _, item in ipairs(Enum.Font:GetEnumItems()) do
-        if item.Name ~= "Unknown" and pcall(Font.fromEnum, item) then
-            table.insert(names, item.Name)
+        local ok, face = pcall(Font.fromEnum, item)
+
+        if item.Name ~= "Unknown" and ok and face then
+            local score = (face.Weight == Enum.FontWeight.Regular and 0 or 1)
+                + (face.Style == Enum.FontStyle.Normal and 0 or 2)
+            local current = best[face.Family]
+
+            if not current
+                or score < current.Score
+                or (score == current.Score and #item.Name < #current.Name)
+            then
+                best[face.Family] = { Name = item.Name, Score = score }
+            end
         end
     end
 
+    local names, byFamily = {}, {}
+
+    for family, entry in pairs(best) do
+        table.insert(names, entry.Name)
+        byFamily[family] = entry.Name
+    end
+
     table.sort(names)
-    return names
+
+    self._FontChoices = { Names = names, ByFamily = byFamily }
+    return self._FontChoices
+end
+
+--// The dropdown name that stands for this Enum.Font's family.
+function Library:_GetFontChoiceName(item: EnumItem): string
+    local ok, face = pcall(Font.fromEnum, item)
+
+    if ok and face then
+        return self:_GetFontChoices().ByFamily[face.Family] or item.Name
+    end
+
+    return item.Name
+end
+
+--// Every font family that can be chosen in Configuration, by name, sorted.
+function Library:GetFontNames(): {string}
+    return table.clone(self:_GetFontChoices().Names)
+end
+
+--// Draws each option of the font dropdown in the font it names, then,
+--// in the background, lays out sample text in every one and hides those
+--// that fail to load in this client. The failures go to the console.
+function Library:_PreviewFontOptions(dropdown)
+    local faces = {}
+
+    for name, row in pairs(dropdown.OptionRows) do
+        local ok, face = pcall(function()
+            return Font.fromEnum((Enum.Font :: any)[name])
+        end)
+
+        if ok and face then
+            faces[name] = face
+            row.Label:SetAttribute(FONT_PREVIEW_ATTRIBUTE, true)
+            row.Label.FontFace = Font.new(face.Family, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+        end
+    end
+
+    task.spawn(function()
+        local TextService = game:GetService("TextService")
+        local failed = {}
+
+        for name, row in pairs(dropdown.OptionRows) do
+            --// The window was closed for good meanwhile.
+            if not dropdown.Frame.Parent then
+                return
+            end
+
+            local face = faces[name]
+            local ok = face ~= nil and pcall(function()
+                local params = Instance.new("GetTextBoundsParams")
+                params.Text = FONT_CHECK_TEXT
+                params.Font = Font.new(face.Family)
+                params.Size = 14
+                params.Width = 1000
+                TextService:GetTextBoundsAsync(params)
+            end)
+
+            if not ok then
+                row.Button.Visible = false
+                table.insert(failed, name)
+            end
+        end
+
+        if #failed > 0 then
+            table.sort(failed)
+            warn("[UI] Fonts that failed to load, hidden from the Font list: " .. table.concat(failed, ", "))
+        end
+    end)
 end
 
 --// Text under root (now and added later) follows the chosen font. The
@@ -6014,7 +6122,10 @@ function Library:SetFont(font: any): boolean
         return false
     end
 
-    self.FontName = font.Name
+    --// A weight item (a saved "GothamBold") shows as its family's entry.
+    local name = self:_GetFontChoices().ByFamily[face.Family] or font.Name
+
+    self.FontName = name
     self.FontFamily = face.Family
 
     for _, root in ipairs(self._FontRoots) do
@@ -6026,11 +6137,11 @@ function Library:SetFont(font: any): boolean
     end
 
     if self._FontDropdown then
-        self._FontDropdown:Set(font.Name, false)
+        self._FontDropdown:Set(name, false)
     end
 
     if self.OnFontChanged then
-        task.spawn(self.OnFontChanged, font.Name)
+        task.spawn(self.OnFontChanged, name)
     end
 
     return true
