@@ -4,6 +4,22 @@
 
 ## To Do
 
+### [x] Leave On Danger Group: คนในกลุ่มเข้ามาแล้วไม่ออก / whitelist กับ AFTERHE4RTZ
+> แก้แล้ว (v3.22):
+> - Auto Block บล็อกแล้ววาร์ปเฉพาะคนที่**ไม่ได้อยู่**ใน Block Whitelist (คนใน whitelist เช่น AFTERHE4RTZ ไม่ถูก prompt / ไม่ถูก hop จาก Auto Block)
+> - **Whitelist Skips Safety** เปิด (ค่าเริ่มต้น): คนใน Block Whitelist ไม่ทำให้ Leave On Danger Group ออกด้วย
+> - รีเซ็ตงบ hop ของ Danger Group เมื่อไม่มี threat ที่ต้องออกแล้ว (เดิมครบ 3 ครั้งแล้วเงียบตลอดรอบ → คนในกลุ่มเข้ามาทีหลังไม่ออก)
+> - ตอนผู้เล่นออกจากเซิร์ฟ เคลียร์ `DangerUsers` / `CheckInFlight` ด้วย แล้วให้งบ hop กลับมาได้
+
+### [x] Pinned Items: ตัวเลขโดนเบียด
+> แก้แล้ว (v3.22): ขยายแผง Pinned Items เป็น 220px แยกคอลัมน์จำนวน (กว้าง 52px ชิดขวา) ให้ห่างจากปุ่ม ^ v x ชื่อยาวตัดด้วย `…`
+
+### [x] UI: Auto Minimize
+> ทำแล้ว (v3.22): ปุ่มย่อ (—) บนหัวหน้าต่างหลัก เหลือแค่แถบหัว · toggle **Auto Minimize** ในแท็บ Status (global) ย่อตอนโหลดเมื่อเปิด · จำสถานะย่อ/ขยายใน `UI_MINIMIZED` (Global.json)
+
+### [x] Auto Block: เช็ควงจร block แล้ว hop
+> แก้แล้ว (v3.22): หลัง Block Delay ถ้ารอ settle นานกว่า 10 วินาทีแล้วยังบล็อกไม่ติด / ไม่ settle จะวาร์ปหนีอยู่ดี (ไม่ค้างฟาร์ม) · คนใน Block Whitelist ยังไม่ถูก prompt ตามเดิม
+
 ### [x] Party System
 - Leader set จาก player ในเซิร์ฟ
 - Condition: ต้องเช็คว่ามีคนที่ไม่ได้อยู่ใน whitelist เข้ามาในเซิร์ฟแล้ว หรือ Leader Party ไม่ได้อยู่ใน server

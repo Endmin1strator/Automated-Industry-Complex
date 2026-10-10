@@ -313,6 +313,31 @@ return {
             end
         end
 
+        --// Main window minimize: Auto Minimize shrinks on load; the last
+        --// manual minimize/expand is kept in UI_MINIMIZED (global).
+        if UI.SetMinimized then
+            UI.OnMinimizedChanged = function(Minimized)
+                if CONFIG.UI_MINIMIZED == Minimized then
+                    return
+                end
+
+                CONFIG.UI_MINIMIZED = Minimized == true
+                AICProfile.WriteGlobalStore()
+            end
+
+            if UIRef.StatusSection then
+                AICUI.BindFeatureToggle("AutoMinimize", "Auto Minimize", function(Enabled)
+                    if Enabled and UI.SetMinimized then
+                        UI:SetMinimized(true)
+                    end
+                end, UIRef.StatusSection)
+            end
+
+            if Feature.AutoMinimize.Enabled or CONFIG.UI_MINIMIZED then
+                UI:SetMinimized(true)
+            end
+        end
+
         --// Pinned items
         --// Lives outside the tabs so the panel can be dragged or popped out.
         UIRef.PinPanel = UI:AddPin("Pinned Items")

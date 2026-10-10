@@ -578,11 +578,14 @@ return {
             end
 
             --// Player Check
-            --// Whitelisted players are never blocked, and a server holding only
-            --// them is left alone unless Whitelist Skips Safety is off and one of
-            --// them is already blocked. Anyone else is blocked individually and then the
-            --// server is abandoned; the whole lobby is no longer blocked one by one.
-            --// With a party Leader set, Party System deals with intruders instead.
+            --// Block Whitelist (e.g. AFTERHE4RTZ): never prompted. Hop after a
+            --// settled block only for everyone else. A server holding only
+            --// whitelisted players is left alone unless Whitelist Skips Safety
+            --// is off and one of them is already blocked. With a party Leader
+            --// set, Party System deals with intruders instead.
+            --// How long after Block Delay to wait for the block to settle
+            --// before leaving anyway (same idea as Danger Group's wait).
+            local AUTO_BLOCK_SETTLE_WAIT = 10
             local PartyHandles = AICFeature.PartyHandlesIntruders and AICFeature.PartyHandlesIntruders()
 
             if AICFeature.S.BlockEnabled and not PartyHandles then
@@ -619,9 +622,23 @@ return {
                 end
 
                 if Intruder then
+                    local Delay = math.max(tonumber(CONFIG.AUTO_BLOCK_DELAY) or 0, 0)
+                    local SeenAt = AICFeature.S.IntruderSeenAt[Intruder.UserId]
+                    --// Past Block Delay + settle wait: leave even if the block
+                    --// never stuck (dialog dismissed / Confirm unavailable).
+                    local WaitedOut = SeenAt ~= nil
+                        and (os.clock() - SeenAt) >= (Delay + AUTO_BLOCK_SETTLE_WAIT)
+
                     SetFarmState("AUTO BLOCK  @" .. Intruder.Name)
 
                     if not AICFeature.isBlocked(Intruder.UserId) then
+                        if WaitedOut then
+                            SetFarmState("AUTO BLOCK  HOP (NO BLOCK) @" .. Intruder.Name)
+                            AICFeature.S.BlockCache[Intruder.UserId] = nil
+                            AICFeature.TeleportToPlace()
+                            return
+                        end
+
                         AICFeature.promptBlockPlayer(Intruder)
                         return
                     end
@@ -630,8 +647,12 @@ return {
                     --// can cut the block request short and land us back
                     --// with them.
                     if not AICFeature.IsBlockSettled(Intruder) then
-                        SetFarmState("AUTO BLOCK  CHECKING @" .. Intruder.Name)
-                        return
+                        if not WaitedOut then
+                            SetFarmState("AUTO BLOCK  CHECKING @" .. Intruder.Name)
+                            return
+                        end
+
+                        SetFarmState("AUTO BLOCK  HOP (UNSETTLED) @" .. Intruder.Name)
                     end
 
                     AICFeature.S.BlockCache[Intruder.UserId] = nil

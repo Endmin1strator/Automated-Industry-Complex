@@ -32,6 +32,7 @@ return {
             ["Leave On Danger Group"] = "Blocks, then leaves when a Danger Group member joins",
             ["Join Alerts"] = "Notifies you when someone off the Block Whitelist joins",
             ["Show Pinned Items"] = "Shows the floating Pinned Items panel",
+            ["Auto Minimize"] = "Shrinks the main window to the header bar on load",
 
             --// Debug Visualizer
             ["Debug Waypoints"] = "Shows waypoint markers and the route",

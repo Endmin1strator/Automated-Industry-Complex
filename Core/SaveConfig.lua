@@ -56,6 +56,8 @@ return {
             --// Turns off shadows, effects and particles for frames (FpsBoost).
             --// Shared by every profile: it is about the machine, not the farm.
             { Name = "FpsBoost",          Default = false, Key = "w", Global = true },
+            --// Shrinks the main window to the header on load (Bootstrap).
+            { Name = "AutoMinimize",       Default = false, Key = "x", Global = true },
             { Name = "DebugWaypoints",    Default = true },
             { Name = "DebugFarmZones",    Default = true },
             { Name = "DebugDeadzones",    Default = true },
@@ -231,6 +233,11 @@ return {
             --// UI text scale, picked in Configuration (Utils clamps it).
             { Key = "UI_TEXT_SCALE", Default = 1, Normalize = function(Value)
                 return type(Value) == "number" and Value == Value and Value or 1
+            end },
+
+            --// Whether the main window was last left minimized (header only).
+            { Key = "UI_MINIMIZED", Default = false, Normalize = function(Value)
+                return Value == true
             end },
 
             --// Theme colours changed in Configuration, as Theme key -> hex

@@ -281,7 +281,8 @@ return {
             )
 
             AICUI.BindFeatureToggle("WhitelistSkipsSafety", "Whitelist Skips Safety", nil, BlockSection)
-            BlockSection:AddLabel("On: whitelisted players never make Auto Block or Leave On Danger Group leave, even if blocked")
+            BlockSection:AddLabel("Auto Block only prompts and hops for players off the Block Whitelist")
+            BlockSection:AddLabel("On: Block Whitelist also skips Leave On Danger Group (besides Danger Whitelist)")
             BlockSection:AddLabel("Whitelist and Whitelist Skips Safety are shared by every profile")
 
             self.WhitelistComponent = BlockSection:AddPriority(

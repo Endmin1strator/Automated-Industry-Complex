@@ -366,6 +366,24 @@ return {
                 and not IsSafetyExempt(OtherPlayer)
         end
 
+        --// True while at least one player in the server still needs a danger leave.
+        local function HasActiveDangerThreat()
+            for _, OtherPlayer in ipairs(Players:GetPlayers()) do
+                if OtherPlayer ~= Player and ShouldLeaveFor(OtherPlayer) then
+                    return true
+                end
+            end
+
+            return false
+        end
+
+        --// After a streak of failed hops (or after every threat left / became
+        --// exempt), allow Leave On Danger Group to try again for a new join.
+        local function ResetDangerHopBudget()
+            S.DangerHopAttempts = 0
+            S.DangerHopStarted = false
+        end
+
         local function IsBlocked(OtherPlayer)
             return AICFeature.isBlocked ~= nil and AICFeature.isBlocked(OtherPlayer.UserId) == true
         end
@@ -463,6 +481,9 @@ return {
                 end)
 
                 if Success then
+                    --// Teleport was accepted; the budget resets on the next
+                    --// server. If TeleportInitFailed fires, attempts stay so
+                    --// a bad streak still stops after DANGER_HOP_MAX_ATTEMPTS.
                     return
                 end
 
@@ -475,6 +496,8 @@ return {
                 else
                     SetStatus("TELEPORT FAILED")
                     Notify("DANGER", "Teleport failed after " .. DANGER_HOP_MAX_ATTEMPTS .. " attempts", 7)
+                    --// Budget stays spent until every active threat is gone;
+                    --// Update() then resets so a later join can leave again.
                 end
             end)
         end
@@ -535,8 +558,10 @@ return {
             task.spawn(function()
                 local Success, GroupId = pcall(FindDangerGroup, OtherPlayer, GroupIds)
 
-                --// The group list changed while asking: the scan asks again.
+                --// The group list changed while asking: ResetGroupChecks
+                --// already cleared in-flight flags; drop this answer.
                 if Version ~= S.GroupListVersion then
+                    S.CheckInFlight[UserId] = nil
                     return
                 end
 
@@ -690,10 +715,19 @@ return {
             end
 
             --// AlertSeen is kept, so leaving and coming straight back is not
-            --// announced twice.
+            --// announced twice. Danger / in-flight flags must clear so a
+            --// rejoin is checked again and a spent hop budget can recover.
             S.Online[UserId] = nil
             S.CheckedUsers[UserId] = nil
             S.CheckFailures[UserId] = nil
+            S.CheckInFlight[UserId] = nil
+            S.DangerUsers[UserId] = nil
+            S.LogVersion += 1
+
+            if not S.DangerHopStarted and not HasActiveDangerThreat() then
+                ResetDangerHopBudget()
+                SetStatus("IDLE")
+            end
         end)
 
         for _, OtherPlayer in ipairs(Players:GetPlayers()) do
@@ -730,6 +764,13 @@ return {
             end
 
             S.Ready = true
+
+            --// Whitelist / Skips Safety can clear every threat without a leave
+            --// event; recover the hop budget so the next danger join can leave.
+            if not S.DangerHopStarted and not HasActiveDangerThreat() and S.DangerHopAttempts > 0 then
+                ResetDangerHopBudget()
+                SetStatus("IDLE")
+            end
 
             for _, OtherPlayer in ipairs(Players:GetPlayers()) do
                 CheckDangerGroup(OtherPlayer)

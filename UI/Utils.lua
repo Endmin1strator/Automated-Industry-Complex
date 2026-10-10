@@ -941,6 +941,8 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
     self.CurrentTab        = nil
     self.Visible           = true
     self.Destroyed         = false
+    self.Minimized         = false
+    self._ExpandedWindowSize = nil
     self.NavigationCollapsed = false
     self.WindowSize        = Vector2.new(WINDOW_SIZE.X, WINDOW_SIZE.Y)
     self.MinWindowSize     = Vector2.new(MIN_WINDOW_SIZE.X, MIN_WINDOW_SIZE.Y)
@@ -1189,7 +1191,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
 
         BorderSizePixel = 0,
 
-        Position = UDim2.new(1, -108, 0, 15),
+        Position = UDim2.new(1, -150, 0, 15),
 
         Size = UDim2.fromOffset(5, 5),
 
@@ -1197,6 +1199,44 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
     })
 
     self.StatusDot = statusDot
+
+    -- Minimize (header only; body and sidebar hide)
+    local minimize = New("TextButton", {
+        Name = "Minimize",
+
+        Parent = header,
+
+        BackgroundColor3 = self.Theme.Element,
+
+        BackgroundTransparency = 0.08,
+
+        BorderSizePixel = 0,
+
+        Position = UDim2.new(1, -86, 0, 10),
+
+        Size = UDim2.fromOffset(34, 34),
+
+        Text = "—",
+
+        TextColor3 = self.Theme.Text,
+
+        TextSize = 18,
+
+        Font = FONT_BOLD,
+
+        AutoButtonColor = false,
+
+        ZIndex = 15,
+    })
+
+    self.MinimizeButton = minimize
+
+    AddCorner(minimize, 2)
+    AddStroke(minimize, self.Theme.BorderDim, 0.35, 1)
+
+    self:_Connect(minimize.MouseButton1Click, function()
+        self:ToggleMinimize()
+    end)
 
     -- Close
     local close = New("TextButton", {
@@ -2137,6 +2177,87 @@ function Library:FinishLoading()
 end
 
 --//==============================================================
+--// Minimize (header bar only)
+--//==============================================================
+
+local HEADER_HEIGHT = 58
+
+function Library:SetMinimized(value: boolean)
+    if self.Destroyed then
+        return
+    end
+
+    value = value == true
+
+    if self.Minimized == value then
+        return
+    end
+
+    self.Minimized = value
+
+    if value then
+        self._ExpandedWindowSize = Vector2.new(self.WindowSize.X, self.WindowSize.Y)
+
+        if self.Sidebar then
+            self.Sidebar.Visible = false
+        end
+
+        if self.Content then
+            self.Content.Visible = false
+        end
+
+        if self.ResizeHandle then
+            self.ResizeHandle.Visible = false
+        end
+
+        if self.SettingsPanel then
+            self.SettingsPanel.Visible = false
+            self.SettingsPanel.Active = false
+            self._SettingsOpen = false
+        end
+
+        self.Window.Size = UDim2.fromOffset(self.WindowSize.X, HEADER_HEIGHT)
+
+        if self.MinimizeButton then
+            self.MinimizeButton.Text = "□"
+        end
+    else
+        local Restored = self._ExpandedWindowSize or self.WindowSize
+        self._ExpandedWindowSize = nil
+        self.WindowSize = Vector2.new(Restored.X, Restored.Y)
+        self.Window.Size = UDim2.fromOffset(self.WindowSize.X, self.WindowSize.Y)
+
+        if self.Sidebar then
+            self.Sidebar.Visible = true
+        end
+
+        if self.Content then
+            self.Content.Visible = true
+        end
+
+        if self.ResizeHandle then
+            self.ResizeHandle.Visible = true
+        end
+
+        if self.TabContainer then
+            self.TabContainer.Visible = not self.NavigationCollapsed
+        end
+
+        if self.MinimizeButton then
+            self.MinimizeButton.Text = "—"
+        end
+    end
+
+    if self.OnMinimizedChanged then
+        task.spawn(self.OnMinimizedChanged, value)
+    end
+end
+
+function Library:ToggleMinimize()
+    self:SetMinimized(not self.Minimized)
+end
+
+--//==============================================================
 --// Set Visible
 --//==============================================================
 
@@ -2183,18 +2304,21 @@ function Library:SetVisible(value: boolean)
 
             -- Configuration temporarily hides the main UI. Restore it before
             -- the window is closed so reopening can never come back blank.
-            if self.Sidebar then
-                self.Sidebar.Visible = true
-            end
-            if self.Content then
-                self.Content.Visible = true
-            end
-            if self.TabContainer then
-                self.TabContainer.Visible = not self.NavigationCollapsed
-            end
-            if self.NavigationSearchResults then
-                self.NavigationSearchResults.Visible = (not self.NavigationCollapsed)
-                    and self.NavigationSearchText ~= ""
+            -- Leave the body hidden when the window was minimized.
+            if not self.Minimized then
+                if self.Sidebar then
+                    self.Sidebar.Visible = true
+                end
+                if self.Content then
+                    self.Content.Visible = true
+                end
+                if self.TabContainer then
+                    self.TabContainer.Visible = not self.NavigationCollapsed
+                end
+                if self.NavigationSearchResults then
+                    self.NavigationSearchResults.Visible = (not self.NavigationCollapsed)
+                        and self.NavigationSearchText ~= ""
+                end
             end
         end
 
@@ -5281,7 +5405,9 @@ function Library:AddPin(name: string?)
         Parent = self.ScreenGui,
         AnchorPoint = Vector2.new(1, 0),
         Position = UDim2.new(1, -16, 0, 130),
-        Size = UDim2.new(0, 194, 0, 0),
+        --// Wide enough for a long item name plus a multi-digit count and the
+        --// reorder / remove buttons without crowding.
+        Size = UDim2.new(0, 220, 0, 0),
         ClipsDescendants = false,
         AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundColor3 = self.Theme.Panel,
@@ -5472,11 +5598,14 @@ function Library:AddPin(name: string?)
 
             AddCorner(row, 4)
 
-            local rowName = AddText(row, entry.Name, 11, UDim2.new(0, 6, 0, 0), UDim2.new(1, -96, 1, 0))
+            --// Name | count (right-aligned) | ^ v x — count sits in its own
+            --// column so multi-digit amounts do not overlap the buttons.
+            local rowName = AddText(row, entry.Name, 11, UDim2.new(0, 6, 0, 0), UDim2.new(1, -118, 1, 0))
             rowName.TextColor3 = self.Theme.Text
+            rowName.TextTruncate = Enum.TextTruncate.AtEnd
             rowName.ZIndex = 43
 
-            local count = AddText(row, tostring(entry.Count or 0), 11, UDim2.new(1, -92, 0, 0), UDim2.new(0, 34, 1, 0))
+            local count = AddText(row, tostring(entry.Count or 0), 11, UDim2.new(1, -112, 0, 0), UDim2.new(0, 52, 1, 0))
             count.TextColor3 = (entry.Count or 0) > 0 and self.Theme.Cyan or self.Theme.TextMuted
             count.TextXAlignment = Enum.TextXAlignment.Right
             count.ZIndex = 43
@@ -5497,8 +5626,8 @@ function Library:AddPin(name: string?)
                 })
             end
 
-            local up = SmallButton("^", -38, self.Theme.TextMuted)
-            local down = SmallButton("v", -21, self.Theme.TextMuted)
+            local up = SmallButton("^", -42, self.Theme.TextMuted)
+            local down = SmallButton("v", -23, self.Theme.TextMuted)
             local remove = SmallButton("x", -4, self.Theme.Danger)
 
             self:_Connect(up.MouseButton1Click, function()
@@ -6398,7 +6527,14 @@ function Library:SetWindowSizeLimits(kind: string, value: number)
         math.clamp(self.WindowSize.X, self.MinWindowSize.X, self.MaxWindowSize.X),
         math.clamp(self.WindowSize.Y, self.MinWindowSize.Y, self.MaxWindowSize.Y)
     )
-    self.Window.Size = UDim2.fromOffset(self.WindowSize.X, self.WindowSize.Y)
+
+    if self.Minimized then
+        self._ExpandedWindowSize = Vector2.new(self.WindowSize.X, self.WindowSize.Y)
+        self.Window.Size = UDim2.fromOffset(self.WindowSize.X, HEADER_HEIGHT)
+    else
+        self.Window.Size = UDim2.fromOffset(self.WindowSize.X, self.WindowSize.Y)
+    end
+
     self:_UpdateScale()
 end
 
@@ -6406,7 +6542,14 @@ function Library:SetWindowSize(size: Vector2)
     local width = math.clamp(size.X, self.MinWindowSize.X, self.MaxWindowSize.X)
     local height = math.clamp(size.Y, self.MinWindowSize.Y, self.MaxWindowSize.Y)
     self.WindowSize = Vector2.new(width, height)
-    self.Window.Size = UDim2.fromOffset(width, height)
+
+    if self.Minimized then
+        self._ExpandedWindowSize = Vector2.new(width, height)
+        self.Window.Size = UDim2.fromOffset(width, HEADER_HEIGHT)
+    else
+        self.Window.Size = UDim2.fromOffset(width, height)
+    end
+
     self:_UpdateScale()
 end
 
