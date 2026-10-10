@@ -28,6 +28,9 @@ return {
         local NotifyAction = Context.NotifyAction
 
         local Module = Context.AICCombatUtils
+        local COMBAT_JUMP_COOLDOWN = 1
+        local COMBAT_JUMP_PROGRESS = 2
+        local COMBAT_JUMP_MAX_ATTEMPTS = 2
         function AICCombatUtils.UpdateStuckTracker(now, IsMoving)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             if not RootPart then
@@ -218,7 +221,7 @@ return {
         function AICCombatUtils.DoJump()
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             if not Humanoid then
-                return
+                return false
             end
         
             if Humanoid.FloorMaterial ~= Enum.Material.Air
@@ -226,7 +229,73 @@ return {
             then
                 Humanoid.Jump = true
                 Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                return true
             end
+            return false
+        end
+
+        function AICCombatUtils.ResetCombatJump()
+            AICCombatUtils.S.CombatJumpHumanoid = nil
+            AICCombatUtils.S.CombatJumpOrigin = nil
+            AICCombatUtils.S.CombatJumpAttempts = 0
+            AICCombatUtils.S.LastCombatJumpTime = -math.huge
+        end
+
+        function AICCombatUtils.IsCombatJumpExhausted()
+            local _, Humanoid, Root = Runtime:GetCharacter()
+            if not Humanoid or not Root then return true end
+            local S = AICCombatUtils.S
+            if S.CombatJumpHumanoid ~= Humanoid then
+                AICCombatUtils.ResetCombatJump()
+                S.CombatJumpHumanoid = Humanoid
+            end
+            if S.CombatJumpOrigin then
+                local Offset = Root.Position - S.CombatJumpOrigin
+                -- Vertical bobbing is not progress out of the same corner.
+                if Vector3.new(Offset.X, 0, Offset.Z).Magnitude >= COMBAT_JUMP_PROGRESS then
+                    S.CombatJumpOrigin = nil
+                    S.CombatJumpAttempts = 0
+                end
+            end
+            return S.CombatJumpAttempts >= COMBAT_JUMP_MAX_ATTEMPTS
+        end
+
+        -- Combat hops have a budget at each location. Route/mining jumps keep
+        -- using DoJump directly, so parkour and explicit Jump flags are intact.
+        function AICCombatUtils.DoCombatJump(Target, Destination, PathJump)
+            local _, Humanoid, Root = Runtime:GetCharacter()
+            if not Humanoid or not Root or Humanoid.Health <= 0
+                or not Destination or Humanoid.FloorMaterial == Enum.Material.Air
+                or Humanoid:GetState() == Enum.HumanoidStateType.Jumping
+                or Humanoid:GetState() == Enum.HumanoidStateType.Swimming then
+                return false
+            end
+            if AICCombatUtils.IsCombatJumpExhausted() then return false end
+            local S = AICCombatUtils.S
+            local now = os.clock()
+            if now - S.LastCombatJumpTime < COMBAT_JUMP_COOLDOWN then return false end
+
+            local TargetRoot = Target and Target:FindFirstChild("HumanoidRootPart")
+            if TargetRoot then
+                local Offset = TargetRoot.Position - Root.Position
+                if Vector3.new(Offset.X, 0, Offset.Z).Magnitude <= CONFIG.TARGET_BODY_CLEARANCE then
+                    return false
+                end
+            end
+
+            local Jumpable = AICCombatUtils.IsJumpableObstacleAhead(Destination)
+            if not Jumpable and PathJump then
+                local Hole, CanJump, Edge = AICCombatUtils.IsHoleAhead(Destination)
+                Jumpable = Hole and CanJump and Edge <= 2.5
+            end
+            if not Jumpable or not AICCombatUtils.DoJump() then return false end
+
+            S.CombatJumpOrigin = S.CombatJumpOrigin or Root.Position
+            S.CombatJumpAttempts += 1
+            S.LastCombatJumpTime = now
+            AICCombatUtils.ResetStuckTracker()
+            S.StuckSampleTime = now
+            return true
         end
         
         ------------------------------------------------------------------------
@@ -624,7 +693,7 @@ return {
         --// short ledge can sit below the low probe.
         function AICCombatUtils.IsJumpableObstacleAhead(TargetPosition)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
-            if not RootPart or not TargetPosition then
+            if not Humanoid or not RootPart or not TargetPosition then
                 return false
             end
         
@@ -632,15 +701,17 @@ return {
             local Offset = TargetPosition - Origin
             local Flat = Vector3.new(Offset.X, 0, Offset.Z)
         
-            if Flat.Magnitude <= 0.01 then
+            if Flat.Magnitude <= 0.75 then
                 return false
             end
         
-            local Direction = Flat.Unit * (tonumber(CONFIG.JUMP_PROBE_DISTANCE) or 4.5)
+            local ProbeDistance = math.min(Flat.Magnitude, tonumber(CONFIG.JUMP_PROBE_DISTANCE) or 4.5)
+            local Direction = Flat.Unit * ProbeDistance
         
             local Params = RaycastParams.new()
             Params.FilterType = Enum.RaycastFilterType.Exclude
             local Filter = { Character }
+            Params.RespectCanCollide = true
         
             --// Mobs and other players are not obstacles to jump over.
             local MobFolder = workspace:FindFirstChild("Mobs")
@@ -658,13 +729,18 @@ return {
             Params.FilterDescendantsInstances = Filter
         
             local HalfHeight = RootPart.Size.Y * 0.5
-            local Feet = Origin - Vector3.new(0, HalfHeight, 0)
+            local Feet = Origin - Vector3.new(0, HalfHeight + Humanoid.HipHeight, 0)
         
             local LowOrigin = Feet + Vector3.new(0, tonumber(CONFIG.JUMP_PROBE_LOW_OFFSET) or 0.6, 0)
             local HighOrigin = Feet + Vector3.new(0, tonumber(CONFIG.JUMP_PROBE_HIGH_OFFSET) or 3.2, 0)
         
             local LowHit = workspace:Raycast(LowOrigin, Direction, Params)
             local HighHit = workspace:Raycast(HighOrigin, Direction, Params)
+
+            -- Walkable slopes and visual effects are not jump obstacles.
+            if LowHit and LowHit.Normal.Y >= 0.6 then
+                return false
+            end
         
             if LowHit and not HighHit then
                 return true
@@ -677,7 +753,7 @@ return {
         
             --// Nothing hit either probe. Check for a step up that both probes passed
             --// over, by sampling the ground a little way ahead.
-            local AheadOrigin = Origin + Flat.Unit * (tonumber(CONFIG.JUMP_PROBE_DISTANCE) or 4.5)
+            local AheadOrigin = Origin + Flat.Unit * ProbeDistance
             local Down = workspace:Raycast(
                 AheadOrigin + Vector3.new(0, HalfHeight, 0),
                 Vector3.new(0, -(HalfHeight * 2 + 6), 0),
@@ -690,7 +766,11 @@ return {
         
             local StepUp = Down.Position.Y - Feet.Y
         
+            local JumpRise = Humanoid.UseJumpPower
+                and Humanoid.JumpPower ^ 2 / (2 * math.max(workspace.Gravity, 1))
+                or Humanoid.JumpHeight
             return StepUp >= (tonumber(CONFIG.JUMP_STEP_HEIGHT) or 1.2)
+                and StepUp <= JumpRise * 0.8
         end
 
         --// Hole Check

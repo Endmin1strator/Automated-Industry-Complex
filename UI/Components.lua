@@ -183,6 +183,23 @@ return {
             AICUI.S.SettingSliders[Key] = Slider
             return Slider
         end
+        --// Global numeric settings use the same schema, but never queue a
+        --// profile save or change when a different profile is loaded.
+        AICUI.S.GlobalSettingSliders = {}
+
+        function AICUI.AddGlobalSettingSlider(Section, Label, Key)
+            local Entry = Context.SaveConfig.GetGlobalSetting(Key)
+            assert(Entry, "Setting not declared in SaveConfig.GlobalSettings: " .. tostring(Key))
+
+            local Slider = Section:AddSlider(Label, CONFIG[Key], Entry.Min, Entry.Max, function(Value)
+                CONFIG[Key] = math.floor(Context.SaveConfig.NormalizeSetting(Entry, Value))
+                AICProfile.WriteGlobalStore()
+            end)
+
+            AICUI.S.GlobalSettingSliders[Key] = Slider
+            return Slider
+        end
+
         --// Target pickers. Players and mobs each get their own dropdown:
         --// the roster changes rarely and should show up at once, while mobs
         --// spawn and die constantly and rebuilding on every one made the
@@ -453,6 +470,12 @@ return {
                 if Entry then
                     Slider:Set(Context.SaveConfig.NormalizeSetting(Entry, CONFIG[Key]), false)
                 end
+            end
+
+            -- Global sliders reflect shared state, not the loaded profile.
+            for Key, Slider in pairs(AICUI.S.GlobalSettingSliders) do
+                local Entry = Context.SaveConfig.GetGlobalSetting(Key)
+                Slider:Set(Context.SaveConfig.NormalizeSetting(Entry, CONFIG[Key]), false)
             end
 
             if UIRef.BlockWhitelistComponent then

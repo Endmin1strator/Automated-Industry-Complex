@@ -79,10 +79,10 @@ return {
             return AICFeature.isBlocked ~= nil and AICFeature.isBlocked(OtherPlayer.UserId) == true
         end
 
-        local function WaitForBlocked(OtherPlayer, Seconds)
+        local function WaitForBlocked(OtherPlayer, Seconds, Token)
             local Deadline = os.clock() + Seconds
 
-            while os.clock() < Deadline do
+            while Context.Lifetime.Alive and Token == S.ArmToken and os.clock() < Deadline do
                 if IsBlocked(OtherPlayer) then
                     return true
                 end
@@ -90,7 +90,7 @@ return {
                 task.wait(0.1)
             end
 
-            return IsBlocked(OtherPlayer)
+            return Context.Lifetime.Alive and Token == S.ArmToken and IsBlocked(OtherPlayer)
         end
 
         local function GetButtonText(Button)
@@ -195,7 +195,7 @@ return {
         end
 
         local function WaitForConfirmButton(Token, OtherPlayer)
-            while Token == S.ArmToken and os.clock() < S.ArmedUntil do
+            while Context.Lifetime.Alive and Token == S.ArmToken and os.clock() < S.ArmedUntil do
                 local Button = FindConfirmButton(OtherPlayer)
 
                 if Button then
@@ -211,7 +211,7 @@ return {
         local function Run(Token, OtherPlayer)
             local Button = WaitForConfirmButton(Token, OtherPlayer)
 
-            if Token ~= S.ArmToken then
+            if not Context.Lifetime.Alive or Token ~= S.ArmToken then
                 return
             end
 
@@ -227,14 +227,14 @@ return {
             end
 
             for _, Method in ipairs(GuiClick.GetOrderedMethods(S.LastMethod)) do
-                if Token ~= S.ArmToken or not GuiClick.IsOnScreen(Button) then
+                if not Context.Lifetime.Alive or Token ~= S.ArmToken or not GuiClick.IsOnScreen(Button) then
                     break
                 end
 
                 local Sent = Method.Click(Button)
                 Log(Method.Name, Sent and "sent" or "unavailable")
 
-                if Sent and WaitForBlocked(OtherPlayer, VERIFY_SECONDS) then
+                if Sent and WaitForBlocked(OtherPlayer, VERIFY_SECONDS, Token) then
                     S.LastMethod = Method.Name
                     Log("Blocked", OtherPlayer.Name, "via", Method.Name)
                     Finish(Token)
@@ -244,7 +244,9 @@ return {
 
             --// A click may have closed the dialog while the block request is
             --// still in flight.
-            if Token == S.ArmToken and not WaitForBlocked(OtherPlayer, FINAL_VERIFY_SECONDS) then
+            if Context.Lifetime.Alive and Token == S.ArmToken
+                and not WaitForBlocked(OtherPlayer, FINAL_VERIFY_SECONDS, Token)
+                and Token == S.ArmToken and Context.Lifetime.Alive then
                 warn("[AutoBlockConfirm] Could not confirm Block for", OtherPlayer.Name)
                 NotifyAction("Auto Confirm Block", "Could not press Block; confirm it yourself.", 5)
             end
@@ -258,8 +260,10 @@ return {
 
         --// Starts watching for the dialog PromptBlockPlayer just opened for
         --// this player.
-        function Feature:Arm(OtherPlayer)
-            if not Available or not FeatureState.AutoBlockConfirm.Enabled then
+        function Feature:Arm(OtherPlayer, Force)
+            local NearbyConfirm = Force == true and FeatureState.BlockNearbyPlayers.Enabled
+            if not Context.Lifetime.Alive or not Available
+                or not (FeatureState.AutoBlockConfirm.Enabled or NearbyConfirm) then
                 return
             end
 
@@ -295,8 +299,8 @@ return {
         end
 
         --// AutoBlock calls this right after it opens the dialog.
-        AICFeature.ConfirmBlockPrompt = function(OtherPlayer)
-            return Feature:Arm(OtherPlayer)
+        AICFeature.ConfirmBlockPrompt = function(OtherPlayer, Force)
+            return Feature:Arm(OtherPlayer, Force)
         end
 
         --// AutoBlock waits on this before prompting again or hopping.
@@ -312,6 +316,10 @@ return {
             if not Enabled then
                 Feature:Disarm()
             end
+        end)
+
+        Context.Lifetime.OnEnd(function()
+            Feature:Disarm()
         end)
 
         return Feature

@@ -58,6 +58,7 @@ return {
             { Name = "FpsBoost",          Default = false, Key = "w", Global = true },
             --// Shrinks the main window to the header on load (Bootstrap).
             { Name = "AutoMinimize",       Default = false, Key = "x", Global = true },
+            { Name = "BlockNearbyPlayers", Default = false, Key = "y", Global = true },
             { Name = "DebugWaypoints",    Default = true },
             { Name = "DebugFarmZones",    Default = true },
             { Name = "DebugDeadzones",    Default = true },
@@ -224,6 +225,7 @@ return {
         --// profile, shared by every profile and PlaceId. Same fields as
         --// Settings, without Scope.
         SaveConfig.GlobalSettings = {
+            { Key = "NEARBY_BLOCK_DISTANCE", Default = 1000, Min = 50, Max = 5000 },
             --// Enum.Font name the UI uses, picked in Configuration; "" keeps
             --// the built-in fonts.
             { Key = "UI_FONT", Default = "", Normalize = function(Value)
@@ -298,6 +300,14 @@ return {
             return SettingByKey[Key]
         end
 
+        function SaveConfig.GetGlobalSetting(Key)
+            for _, Entry in ipairs(SaveConfig.GlobalSettings) do
+                if Entry.Key == Key then
+                    return Entry
+                end
+            end
+        end
+
         --// Fallback is used instead of Default when given, which is how a
         --// place-scoped setting falls back to that place's preset.
         function SaveConfig.NormalizeSetting(Entry, Value, Fallback)
@@ -310,7 +320,7 @@ return {
             if type(Entry.Default) == "number" then
                 local Number = tonumber(Value)
 
-                if Number == nil then
+                if Number == nil or Number ~= Number then
                     Number = tonumber(Default) or Entry.Default
                 end
 

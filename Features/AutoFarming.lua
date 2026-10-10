@@ -32,45 +32,68 @@ return {
             Name = "AutoFarming",
             IsFeature = true,
         }
+        function Feature.ClearFaceOrientation()
+            local Orientation = Runtime:GetFaceOrientation()
+            if Orientation then Orientation:Destroy() end
+            Runtime:SetFaceOrientation(nil)
+            if AICFeature.S.FaceAttachment then AICFeature.S.FaceAttachment:Destroy() end
+            AICFeature.S.FaceAttachment = nil
+        end
+
+        function Feature.EnsureFaceOrientation()
+            local _, Humanoid, RootPart = Runtime:GetCharacter()
+            if not Context.Lifetime.Alive or not Humanoid or not RootPart then return nil end
+
+            local Attachment = AICFeature.S.FaceAttachment
+            local FaceOrientation = Runtime:GetFaceOrientation()
+            -- A retained Instance can be destroyed or belong to the previous
+            -- root even though it is not nil. Rebuild the pair together.
+            if (Attachment and Attachment.Parent ~= RootPart)
+                or (FaceOrientation and FaceOrientation.Parent ~= RootPart) then
+                Feature.ClearFaceOrientation()
+                Attachment, FaceOrientation = nil, nil
+            end
+
+            if not Attachment then
+                AICFeature.S.FaceAttachment = Instance.new("Attachment")
+                AICFeature.S.FaceAttachment.Name = "FaceGoblinAttachment"
+                AICFeature.S.FaceAttachment.Parent = RootPart
+            end
+
+            if not FaceOrientation then
+                FaceOrientation = Instance.new("AlignOrientation")
+                FaceOrientation.Name = "FaceGoblin"
+                FaceOrientation.RigidityEnabled = false
+                --// Fast enough to track a mob circling at melee range; 25
+                --// trailed visibly behind it. FaceGoblin switches to rigid
+                --// for large corrections.
+                FaceOrientation.Responsiveness = CONFIG.FACE_RESPONSIVENESS
+                FaceOrientation.MaxAngularVelocity = math.huge
+                FaceOrientation.Enabled = false
+                FaceOrientation.Parent = RootPart
+                Runtime:SetFaceOrientation(FaceOrientation)
+            end
+
+            FaceOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+            FaceOrientation.Attachment0 = AICFeature.S.FaceAttachment
+            FaceOrientation.MaxTorque = math.huge
+            return FaceOrientation
+        end
+
+        AICFeature.EnsureFaceOrientation = Feature.EnsureFaceOrientation
+        AICFeature.ClearFaceOrientation = Feature.ClearFaceOrientation
+
         function Feature.updateCharacter()
             local Character = Player.Character
             local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
             local RootPart = Character and Character:FindFirstChild("HumanoidRootPart")
 
             Runtime:SetCharacter(Character, Humanoid, RootPart)
-
-            if not Character or not RootPart then
-                return
-            end
-
-            if not AICFeature.S.FaceAttachment then
-                AICFeature.S.FaceAttachment = Instance.new("Attachment")
-                AICFeature.S.FaceAttachment.Name = "FaceGoblinAttachment"
-                AICFeature.S.FaceAttachment.Parent = RootPart
-            end
-
-            local FaceOrientation = Runtime:GetFaceOrientation()
-            if not FaceOrientation then
-                FaceOrientation = Instance.new("AlignOrientation")
-                FaceOrientation.Name = "FaceGoblin"
-                FaceOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
-                FaceOrientation.Attachment0 = AICFeature.S.FaceAttachment
-                FaceOrientation.RigidityEnabled = false
-                --// Fast enough to track a mob circling at melee range; 25
-                --// trailed visibly behind it. FaceGoblin switches to rigid
-                --// for large corrections.
-                FaceOrientation.Responsiveness = CONFIG.FACE_RESPONSIVENESS
-                FaceOrientation.MaxTorque = math.huge
-                FaceOrientation.MaxAngularVelocity = math.huge
-                if FaceOrientation then
-                    FaceOrientation.Enabled = false
-                end
-                FaceOrientation.Parent = RootPart
-                Runtime:SetFaceOrientation(FaceOrientation)
-            end
+            if not Character or not Humanoid or not RootPart then return end
+            Feature.EnsureFaceOrientation()
 
             task.defer(function()
-                if not Humanoid then
+                if not Context.Lifetime.Alive or not Humanoid.Parent then
                     return
                 end
 
@@ -372,6 +395,19 @@ return {
             if now - AICCombat.S.LAST_MOB_VALIDATION_TIME >= CONFIG.MOB_VALIDATION_INTERVAL then
                 AICCombat.S.LAST_MOB_VALIDATION_TIME = now
                 AICCombat.UpdateValidMobs()
+            end
+
+            -- Nearby-player safety has its own global toggle, including when
+            -- Auto Farm / Auto Block are off. Hand over before combat can
+            -- prompt another player or interfere with the pending leave.
+            if AICFeature.NearbyBlockStep and AICFeature.NearbyBlockStep(now) then
+                SetFarmState("NEARBY BLOCK")
+                AICCombat.S.ClosestTarget = nil
+                AICFeature.CancelPatrol()
+                if FaceOrientation then FaceOrientation.Enabled = false end
+                Humanoid.AutoRotate = true
+                Humanoid:Move(Vector3.zero)
+                return
             end
 
             --// Party System is resetting or waiting to Tp to its Leader.

@@ -4,6 +4,16 @@
 
 ## To Do
 
+### [x] Block Nearby Players: บล็อกคนนอก whitelist ที่เข้าใกล้แล้วย้ายหนี
+> ทำแล้ว (v3.23): toggle **Block Nearby Players** แยกจาก Auto Block ค่าเริ่มต้นปิด ทำงานได้แม้ปิด Auto Block / Auto Farm
+> - **Nearby Block Distance** ค่าเริ่มต้น 1,000 studs ปรับได้ 50–5,000 ทั้ง toggle และระยะเก็บใน `AutoFarmProfiles/Global.json` ใช้ทุกโปรไฟล์และทุก PlaceId
+> - ตรวจทุก 0.25 วิ เลือกคนนอก Block Whitelist ที่ใกล้ที่สุดในระยะจริงแบบ 3D ต้องโหลด HumanoidRootPart ของอีกฝ่ายมาแล้ว
+> - กดยืนยัน Block ให้อัตโนมัติด้วยตัวกดเดิม (executor) โดยไม่เปลี่ยนค่า toggle Auto Confirm Block รอ block settle แล้วค่อยย้ายหนี ถ้ายังไม่สำเร็จใน 10 วิจะออกอยู่ดีเพื่อไม่ให้ค้าง
+> - ปิด toggle / เพิ่มคนนั้นเข้า whitelist / คนนั้นออกเซิร์ฟหรือออกนอกระยะก่อนเริ่ม teleport → ยกเลิกงานที่รออยู่
+> - ระหว่างทำงานพักฟาร์มและไม่ให้ Party เริ่ม reset ซ้อน ถ้ามี server hop / Party follow ทำงานอยู่แล้วจะรอ ไม่เปิดหน้าต่าง block ซ้อนของคนอื่น
+> - teleport ล้มเหลวลองใหม่ห่าง 3 วิ ครบ 3 ครั้งพัก 30 วิ รันสคริปต์ใหม่แล้วงานรอบเก่าไม่ teleport ต่อ
+> - Auto Block เดิมยังบล็อกคนนอก whitelist ทั้งเซิร์ฟเมื่อเปิด ไม่ถูกเปลี่ยนเป็นแบบจำกัดระยะ
+
 ### [x] Leave On Danger Group: คนในกลุ่มเข้ามาแล้วไม่ออก / whitelist กับ AFTERHE4RTZ
 > แก้แล้ว (v3.22):
 > - Auto Block บล็อกแล้ววาร์ปเฉพาะคนที่**ไม่ได้อยู่**ใน Block Whitelist (คนใน whitelist เช่น AFTERHE4RTZ ไม่ถูก prompt / ไม่ถูก hop จาก Auto Block)
@@ -362,6 +372,16 @@
 > - บันทึกใน `AutoFarmProfiles/MobDrops.json` (ช่อง `AwardParams`) รอบต่อไปโชว์ได้เลยไม่ต้องรอเจอมอนอีก
 
 ## To Fix
+
+### [x] Combat: กระโดดไม่หยุดและบางครั้งไม่หันหามอน ทั้งเปิดและปิด Safe Combat
+> แก้แล้ว (v3.23): แก้ส่วนเดิน/หันหน้าที่ combat ใช้ร่วมกัน ไม่ผูกกับ Gather Mobs
+> - path flag Jump / stuck อย่างเดียวไม่พอให้กระโดด ต้องมีสิ่งกีดขวางที่โดดได้หรือหลุมที่ข้ามได้จริง
+> - กระโดด combat ห่างกันอย่างน้อย 1 วิ (`COMBAT_JUMP_COOLDOWN`) ลองได้ 2 ครั้งที่จุดเดิม (`COMBAT_JUMP_MAX_ATTEMPTS`) ต้องขยับแนวราบ ≥ 2 studs (`COMBAT_JUMP_PROGRESS`) ถึงได้งบใหม่ กระโดดขึ้นลงเฉยๆ ไม่นับว่าคืบหน้า
+> - เมื่อโดดแล้วไม่คืบหน้าให้หาทาง/อ้อมแทน ไม่กระโดด stuck ซ้ำทุกครั้งที่ลงพื้น ไม่กระโดดขึ้นบนตัวเป้า
+> - ตัวเช็คสิ่งกีดขวางวัดจากระดับเท้าที่รวม HipHeight ไม่เช็คเลยปลายทาง ไม่นับทางลาดที่เดินได้/ของไม่ชน และไม่ถือว่าขั้นสูงเกินระยะโดดเป็นขั้นที่โดดได้
+> - ตรวจ Attachment / AlignOrientation ก่อนหันทุกครั้ง ถ้าถูกลบหรืออยู่บน root เก่าจะสร้างใหม่บนตัวปัจจุบัน ตอน respawn ลบชุดเดิมก่อนเคลียร์ handle ป้องกัน constraint ซ้อน
+> - Jump ของ waypoint / Waypoint Loop / การเดินขุดและตีเหล็กยังใช้ระบบเดิม ไม่ติด cooldown หรืองบกระโดดของ combat
+> - ตรวจ compile ทั้ง 64 ไฟล์และทดสอบ state ด้วย Luau จำลองแล้ว ยังต้องทดสอบในเกมจริง: Safe Combat เปิด/ปิด, มอนรุม, ติดกำแพง, waypoint parkour และหลัง respawn
 
 ### [x] Waypoints Looped & Paired Farmzone/Waypoint/Targets: เดินกลับไป WP ที่ไม่ได้ Pair
 

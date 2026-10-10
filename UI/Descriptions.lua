@@ -11,6 +11,8 @@ return {
             --// Features
             ["Auto Farm"] = "Walks the waypoint route, then fights the Enemy Priority targets",
             ["Auto Block"] = "Blocks anyone off the Block Whitelist, then leaves the server",
+            ["Block Nearby Players"] = "Automatically blocks nearby non-whitelisted players and leaves; works with Auto Block off",
+            ["Nearby Block Distance"] = "Trigger distance in studs; shared by every profile and PlaceId",
             ["Auto Confirm Block"] = "Presses Block in Roblox's block dialog for you (executor only)",
             ["Whitelist Skips Safety"] = "Block Whitelist players never make you leave a server",
             ["Safe Combat"] = "Fights from outside enemy weapon reach; off fights up close",

@@ -1343,22 +1343,15 @@ return {
                     continue
                 end
         
-                --// The pathfinder marks jumps generously, including on flat ground.
-                --// Only take them when something is actually in the way, or when the
-                --// character has stopped making progress.
-                if Waypoint.Action == Enum.PathWaypointAction.Jump
-                    and (AICCombatUtils.IsJumpableObstacleAhead(Waypoint.Position)
-                        or (AICCombatUtils.IsStuck() and not IsAgainstTargetBody(Goblin)))
-                then
-                    AICCombatUtils.DoJump()
-                end
-
-                --// Hung on a corner between two path points: the path is
-                --// fine, the body is caught on the edge. A hop frees it.
-                --// Not when the "corner" is the target itself: the hop lands
-                --// on top of it.
-                if AICCombatUtils.IsStuck() and not IsAgainstTargetBody(Goblin) then
-                    AICCombatUtils.DoJump()
+                -- A path's Jump flag or a stall alone is not an obstacle.
+                -- Verify a ledge/gap and give each hop time to make progress.
+                AICCombatUtils.DoCombatJump(Goblin, Waypoint.Position,
+                    Waypoint.Action == Enum.PathWaypointAction.Jump)
+                if AICCombatUtils.IsStuck() and AICCombatUtils.IsCombatJumpExhausted()
+                    and not IsAgainstTargetBody(Goblin) then
+                    AICCombat.ResetTargetPath()
+                    AICCombat.FaceGoblin(Goblin)
+                    return false
                 end
 
                 Humanoid.AutoRotate = false
@@ -1448,7 +1441,8 @@ return {
             local Hit = workspace:Blockcast(Origin, Size, Flat.Unit * Probe, GetChaseObstacleParams(Goblin))
 
             AICCombat.S.ChaseBlocked = Hit ~= nil
-                and not AICCombatUtils.IsJumpableObstacleAhead(Destination)
+                and (AICCombatUtils.IsCombatJumpExhausted()
+                    or not AICCombatUtils.IsJumpableObstacleAhead(Destination))
             return AICCombat.S.ChaseBlocked
         end
 
@@ -1490,7 +1484,7 @@ return {
             Humanoid.AutoRotate = false
             Humanoid:MoveTo(Destination)
             AICCombat.FaceGoblin(Goblin)
-            AICCombatUtils.DoJumpIfObstacle(Destination)
+            AICCombatUtils.DoCombatJump(Goblin, Destination)
         end
 
         --// Sidesteps are only worth repeating while they lead somewhere. Once
@@ -1580,7 +1574,7 @@ return {
                 Humanoid.AutoRotate = false
                 Humanoid:MoveTo(AICCombat.S.ChaseUnstickPosition)
                 AICCombat.FaceGoblin(Goblin)
-                AICCombatUtils.DoJumpIfObstacle(AICCombat.S.ChaseUnstickPosition)
+                AICCombatUtils.DoCombatJump(Goblin, AICCombat.S.ChaseUnstickPosition)
                 AICCombat.S.ChaseMoveStep = "UNSTICK"
                 return true
             end
@@ -1604,7 +1598,8 @@ return {
                         return AICCombat.ChaseMoveTo(Goblin, Destination)
                     end
 
-                    AICCombatUtils.DoJump()
+                    AICCombatUtils.DoCombatJump(Goblin, Destination)
+                    AICCombatUtils.ResetStuckTracker()
                 else
                     AICCombatUtils.ResetStuckTracker()
                 end

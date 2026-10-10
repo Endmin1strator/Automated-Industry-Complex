@@ -79,6 +79,7 @@ return {
             PatrolState.PatrolHeading = nil
             AICCombatUtils.S.StuckSamplePosition = nil
             AICCombatUtils.S.StuckStrikes = 0
+            AICCombatUtils.ResetCombatJump()
             AICCombat.S.LAST_ATTACK_TIME = 0
             AICCombat.S.LAST_SKILL_TIME = 0
             AICCombat.S.LAST_COMBAT_TARGET_CHECK = 0
@@ -90,8 +91,9 @@ return {
             AICFeature.S.LAST_CONSUME_TIME = 0
             AICFeature.S.LAST_INTERACTION_TIME = 0
             AICCombatUtils.S.LAST_STUCK_POSITION = nil
-            AICFeature.S.FaceAttachment = nil
-            Runtime:SetFaceOrientation(nil)
+            -- A frame before this respawn callback may have already repaired
+            -- the new root's alignment. Destroy it before dropping the handles.
+            AICFeature.ClearFaceOrientation()
         
             if AICCombatUtils.S.DebugFolder then
                 --// Keep the debug instances, but reset their state/colors for the new life.

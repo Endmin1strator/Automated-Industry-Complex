@@ -156,7 +156,7 @@ return {
             return now - SeenAt >= Delay
         end
 
-        function AutoBlock:PromptBlockPlayer(OtherPlayer)
+        function AutoBlock:PromptBlockPlayer(OtherPlayer, ForceConfirm)
             local UserId = OtherPlayer.UserId
 
             if AICFeature.S.BlockCache[UserId] or self:IsBlocked(UserId) then
@@ -166,6 +166,13 @@ return {
             --// Auto Confirm Block is still pressing the dialog already open
             --// for them; opening it again would pull it out from under it.
             if AICFeature.IsConfirmingBlock and AICFeature.IsConfirmingBlock(OtherPlayer) then
+                return
+            end
+
+            -- One Roblox dialog at a time, including nearby-player safety.
+            local Confirm = Context.AutoBlockConfirm
+            local ArmedPlayer = Confirm and Confirm.S.ArmedPlayer
+            if ArmedPlayer and Confirm:IsConfirming(ArmedPlayer) then
                 return
             end
 
@@ -183,7 +190,7 @@ return {
 
             --// Auto Confirm Block presses Block in the dialog when it is on.
             if AICFeature.ConfirmBlockPrompt then
-                AICFeature.ConfirmBlockPrompt(OtherPlayer)
+                AICFeature.ConfirmBlockPrompt(OtherPlayer, ForceConfirm)
             end
 
             task.delay(CONFIG.BLOCK_COOLDOWN, function()

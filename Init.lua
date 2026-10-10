@@ -1,7 +1,7 @@
 -- AutoFarm bootstrap.
 -- Every module returns {Name, Dependencies, Start(Context)}.
 
-local TITLE = "AUTOMATED INDUSTRY COMPLEX v3.22"
+local TITLE = "AUTOMATED INDUSTRY COMPLEX v3.23"
 local UTILS_PATH = "UI/Utils.lua"
 
 --// A failed download is retried this many times before giving up.
@@ -43,6 +43,7 @@ local MODULES = {
     "Features/AutoFarming.lua",
     "Features/AutoBlock.lua",
     "Features/AutoBlockConfirm.lua",
+    "Features/BlockNearbyPlayers.lua",
     "Features/SafeCombat.lua",
     "Features/AutoSkill.lua",
     "Features/MobGather.lua",

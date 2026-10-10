@@ -225,6 +225,10 @@ return {
                 return
             end
 
+            if AICFeature.IsNearbyBlockHolding and AICFeature.IsNearbyBlockHolding() then
+                return
+            end
+
             if not IsActive() then
                 if State.Holding then
                     Release("IDLE")

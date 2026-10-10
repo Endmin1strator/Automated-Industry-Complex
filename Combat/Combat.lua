@@ -31,6 +31,9 @@ return {
         function AICCombat.FaceGoblin(Goblin)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             local FaceOrientation = Runtime:GetFaceOrientation()
+            if AICFeature.EnsureFaceOrientation then
+                FaceOrientation = AICFeature.EnsureFaceOrientation()
+            end
             if not RootPart or not Goblin then
                 return
             end
@@ -147,6 +150,9 @@ return {
         function AICCombat.FaceWhileRetreating(Threat, RunDirection)
             local Character, Humanoid, RootPart = Runtime:GetCharacter()
             local FaceOrientation = Runtime:GetFaceOrientation()
+            if AICFeature.EnsureFaceOrientation then
+                FaceOrientation = AICFeature.EnsureFaceOrientation()
+            end
             if not RootPart or not FaceOrientation then
                 return
             end
