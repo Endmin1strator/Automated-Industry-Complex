@@ -106,6 +106,7 @@ To add a saved feature: create its spec, add the path in Init, declare its toggl
 ## UI conventions
 
 - [UI/Utils.lua](UI/Utils.lua) owns windows and widgets. [UI/Components.lua](UI/Components.lua) binds schema values and shared controls; [UI/Descriptions.lua](UI/Descriptions.lua) maps control labels to descriptions.
+- Main-window X, minimize, and Auto Minimize share the corner reopen button and global `UI_MINIMIZED` state. Reopening restores the full window at its previous size/position; preserve the visibility token that cancels stale hide callbacks.
 - Floating windows use [UI/Floating.lua](UI/Floating.lua). Mob/Asset browsers share [UI/BrowserShell.lua](UI/BrowserShell.lua) and [UI/DetailKit.lua](UI/DetailKit.lua). Reuse these before making another widget/window system.
 - Programmatic refresh must use `Set(value, false)` where supported to suppress callbacks. Triggering saves during refresh previously caused endless profile/dropdown rebuilding.
 - For dynamic dropdowns, compare option signatures and defer rebuilding while open. Use `AICUI.RefreshDropdown` where suitable, or `AICUI.ReplaceDropdown` to retain the old LayoutOrder and destroy the old component correctly.

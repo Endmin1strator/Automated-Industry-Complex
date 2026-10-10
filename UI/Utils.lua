@@ -942,7 +942,6 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
     self.Visible           = true
     self.Destroyed         = false
     self.Minimized         = false
-    self._ExpandedWindowSize = nil
     self.NavigationCollapsed = false
     self.WindowSize        = Vector2.new(WINDOW_SIZE.X, WINDOW_SIZE.Y)
     self.MinWindowSize     = Vector2.new(MIN_WINDOW_SIZE.X, MIN_WINDOW_SIZE.Y)
@@ -1200,7 +1199,7 @@ function Library.new(title: string?, options: {ManualLoading: boolean?}?)
 
     self.StatusDot = statusDot
 
-    -- Minimize (header only; body and sidebar hide)
+    -- Minimize to the reopen button at the bottom-right corner.
     local minimize = New("TextButton", {
         Name = "Minimize",
 
@@ -2177,80 +2176,11 @@ function Library:FinishLoading()
 end
 
 --//==============================================================
---// Minimize (header bar only)
+--// Minimize to the corner reopen button
 --//==============================================================
 
-local HEADER_HEIGHT = 58
-
 function Library:SetMinimized(value: boolean)
-    if self.Destroyed then
-        return
-    end
-
-    value = value == true
-
-    if self.Minimized == value then
-        return
-    end
-
-    self.Minimized = value
-
-    if value then
-        self._ExpandedWindowSize = Vector2.new(self.WindowSize.X, self.WindowSize.Y)
-
-        if self.Sidebar then
-            self.Sidebar.Visible = false
-        end
-
-        if self.Content then
-            self.Content.Visible = false
-        end
-
-        if self.ResizeHandle then
-            self.ResizeHandle.Visible = false
-        end
-
-        if self.SettingsPanel then
-            self.SettingsPanel.Visible = false
-            self.SettingsPanel.Active = false
-            self._SettingsOpen = false
-        end
-
-        self.Window.Size = UDim2.fromOffset(self.WindowSize.X, HEADER_HEIGHT)
-
-        if self.MinimizeButton then
-            self.MinimizeButton.Text = "□"
-        end
-    else
-        local Restored = self._ExpandedWindowSize or self.WindowSize
-        self._ExpandedWindowSize = nil
-        self.WindowSize = Vector2.new(Restored.X, Restored.Y)
-        self.Window.Size = UDim2.fromOffset(self.WindowSize.X, self.WindowSize.Y)
-
-        if self.Sidebar then
-            self.Sidebar.Visible = true
-        end
-
-        if self.Content then
-            self.Content.Visible = true
-        end
-
-        if self.ResizeHandle then
-            self.ResizeHandle.Visible = true
-        end
-
-        if self.TabContainer then
-            self.TabContainer.Visible = not self.NavigationCollapsed
-        end
-
-        if self.MinimizeButton then
-            self.MinimizeButton.Text = "—"
-        end
-    end
-
-    if self.OnMinimizedChanged then
-        task.spawn(self.OnMinimizedChanged, value)
-    end
+    self:SetVisible(value ~= true)
 end
 
 function Library:ToggleMinimize()
@@ -2266,6 +2196,8 @@ function Library:SetVisible(value: boolean)
         return
     end
 
+    value = value == true
+
     if self.Visible == value then
         return
     end
@@ -2273,6 +2205,13 @@ function Library:SetVisible(value: boolean)
     self._VisibilityToken = (self._VisibilityToken or 0) + 1
     local visibilityToken = self._VisibilityToken
     self.Visible = value
+    self.Minimized = not value
+
+    -- X, the minimize control, keyboard toggles and Auto Minimize share
+    -- the same saved state, so reopening always restores the whole window.
+    if self.OnMinimizedChanged then
+        task.spawn(self.OnMinimizedChanged, self.Minimized)
+    end
 
     local windowScale = self.WindowUIScale
 
@@ -2304,21 +2243,18 @@ function Library:SetVisible(value: boolean)
 
             -- Configuration temporarily hides the main UI. Restore it before
             -- the window is closed so reopening can never come back blank.
-            -- Leave the body hidden when the window was minimized.
-            if not self.Minimized then
-                if self.Sidebar then
-                    self.Sidebar.Visible = true
-                end
-                if self.Content then
-                    self.Content.Visible = true
-                end
-                if self.TabContainer then
-                    self.TabContainer.Visible = not self.NavigationCollapsed
-                end
-                if self.NavigationSearchResults then
-                    self.NavigationSearchResults.Visible = (not self.NavigationCollapsed)
-                        and self.NavigationSearchText ~= ""
-                end
+            if self.Sidebar then
+                self.Sidebar.Visible = true
+            end
+            if self.Content then
+                self.Content.Visible = true
+            end
+            if self.TabContainer then
+                self.TabContainer.Visible = not self.NavigationCollapsed
+            end
+            if self.NavigationSearchResults then
+                self.NavigationSearchResults.Visible = (not self.NavigationCollapsed)
+                    and self.NavigationSearchText ~= ""
             end
         end
 
@@ -6528,12 +6464,7 @@ function Library:SetWindowSizeLimits(kind: string, value: number)
         math.clamp(self.WindowSize.Y, self.MinWindowSize.Y, self.MaxWindowSize.Y)
     )
 
-    if self.Minimized then
-        self._ExpandedWindowSize = Vector2.new(self.WindowSize.X, self.WindowSize.Y)
-        self.Window.Size = UDim2.fromOffset(self.WindowSize.X, HEADER_HEIGHT)
-    else
-        self.Window.Size = UDim2.fromOffset(self.WindowSize.X, self.WindowSize.Y)
-    end
+    self.Window.Size = UDim2.fromOffset(self.WindowSize.X, self.WindowSize.Y)
 
     self:_UpdateScale()
 end
@@ -6543,12 +6474,7 @@ function Library:SetWindowSize(size: Vector2)
     local height = math.clamp(size.Y, self.MinWindowSize.Y, self.MaxWindowSize.Y)
     self.WindowSize = Vector2.new(width, height)
 
-    if self.Minimized then
-        self._ExpandedWindowSize = Vector2.new(width, height)
-        self.Window.Size = UDim2.fromOffset(width, HEADER_HEIGHT)
-    else
-        self.Window.Size = UDim2.fromOffset(width, height)
-    end
+    self.Window.Size = UDim2.fromOffset(width, height)
 
     self:_UpdateScale()
 end

@@ -315,7 +315,7 @@ return {
             end
         end
 
-        --// Main window minimize: Auto Minimize shrinks on load; the last
+        --// Main window minimize: Auto Minimize docks to the corner on load; the last
         --// manual minimize/expand is kept in UI_MINIMIZED (global).
         if UI.SetMinimized then
             UI.OnMinimizedChanged = function(Minimized)
